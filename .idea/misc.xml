@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ExternalStorageConfigurationManager" enabled="true" />
+  <component name="JUnitGeneratorProjectSettings">
+    <option name="outputFilePattern" value="${SOURCEPATH}/../../test/java/${PACKAGE}/${FILENAME}" />
+    <option name="selectedTemplateKey" value="JUnit 4" />
+    <option name="vmTemplates">
+      <map>
+        <entry key="JUnit 3" value="######################################################################################## &#10;## &#10;## Available variables: &#10;##         $entryList.methodList - List of method composites &#10;##         $entryList.privateMethodList - List of private method composites &#10;##         $entryList.fieldList - ArrayList of class scope field names &#10;##         $entryList.className - class name &#10;##         $entryList.packageName - package name &#10;##         $today - Todays date in MM/dd/yyyy format &#10;## &#10;##            MethodComposite variables: &#10;##                $method.name - Method Name &#10;##                $method.signature - Full method signature in String form &#10;##                $method.reflectionCode - list of strings representing commented out reflection code to access method (Private Methods) &#10;##                $method.paramNames - List of Strings representing the method's parameters' names &#10;##                $method.paramClasses - List of Strings representing the method's parameters' classes &#10;## &#10;## You can configure the output class name using &quot;testClass&quot; variable below. &#10;## Here are some examples: &#10;## Test${entry.ClassName} - will produce TestSomeClass &#10;## ${entry.className}Test - will produce SomeClassTest &#10;## &#10;######################################################################################## &#10;## &#10;#macro (cap $strIn)$strIn.valueOf($strIn.charAt(0)).toUpperCase()$strIn.substring(1)#end &#10;## Iterate through the list and generate testcase for every entry. &#10;#foreach ($entry in $entryList) &#10;#set( $testClass=&quot;${entry.className}Test&quot;) &#10;## &#10;package test.$entry.packageName; &#10;&#10;import junit.framework.Test; &#10;import junit.framework.TestSuite; &#10;import junit.framework.TestCase; &#10;&#10;/** &#10;* ${entry.className} Tester. &#10;* &#10;* @author &lt;Authors name&gt; &#10;* @since &lt;pre&gt;$today&lt;/pre&gt; &#10;* @version 1.0 &#10;*/ &#10;public class $testClass extends TestCase { &#10;public $testClass(String name) { &#10;super(name); &#10;} &#10;&#10;public void setUp() throws Exception { &#10;super.setUp(); &#10;} &#10;&#10;public void tearDown() throws Exception { &#10;super.tearDown(); &#10;} &#10;&#10;#foreach($method in $entry.methodList) &#10;/** &#10;* &#10;* Method: $method.signature &#10;* &#10;*/ &#10;public void test#cap(${method.name})() throws Exception { &#10;//TODO: Test goes here... &#10;} &#10;&#10;#end &#10;&#10;#foreach($method in $entry.privateMethodList) &#10;/** &#10;* &#10;* Method: $method.signature &#10;* &#10;*/ &#10;public void test#cap(${method.name})() throws Exception { &#10;//TODO: Test goes here... &#10;#foreach($string in $method.reflectionCode) &#10;$string &#10;#end &#10;} &#10;&#10;#end &#10;&#10;public static Test suite() { &#10;return new TestSuite(${testClass}.class); &#10;} &#10;} &#10;#end" />
+        <entry key="JUnit 4" value="######################################################################################## &#10;## &#10;## Available variables: &#10;##         $entryList.methodList - List of method composites &#10;##         $entryList.privateMethodList - List of private method composites &#10;##         $entryList.fieldList - ArrayList of class scope field names &#10;##         $entryList.className - class name &#10;##         $entryList.packageName - package name &#10;##         $today - Todays date in MM/dd/yyyy format &#10;## &#10;##            MethodComposite variables: &#10;##                $method.name - Method Name &#10;##                $method.signature - Full method signature in String form &#10;##                $method.reflectionCode - list of strings representing commented out reflection code to access method (Private Methods) &#10;##                $method.paramNames - List of Strings representing the method's parameters' names &#10;##                $method.paramClasses - List of Strings representing the method's parameters' classes &#10;## &#10;## You can configure the output class name using &quot;testClass&quot; variable below. &#10;## Here are some examples: &#10;## Test${entry.ClassName} - will produce TestSomeClass &#10;## ${entry.className}Test - will produce SomeClassTest &#10;## &#10;######################################################################################## &#10;## &#10;#macro (cap $strIn)$strIn.valueOf($strIn.charAt(0)).toUpperCase()$strIn.substring(1)#end &#10;## Iterate through the list and generate testcase for every entry. &#10;#foreach ($entry in $entryList) &#10;#set( $testClass=&quot;${entry.className}Test&quot;) &#10;## &#10;package $entry.packageName; &#10;&#10;import org.junit.Test; &#10;import org.junit.Before; &#10;import org.junit.After; &#10;&#10;/** &#10;* ${entry.className} Tester. &#10;* &#10;* @author &lt;Authors name&gt; &#10;* @since &lt;pre&gt;$date&lt;/pre&gt; &#10;* @version 1.0 &#10;*/ &#10;public class $testClass { &#10;&#10;@Before&#10;public void before() throws Exception { &#10;} &#10;&#10;@After&#10;public void after() throws Exception { &#10;} &#10;&#10;#foreach($method in $entry.methodList) &#10;/** &#10;* &#10;* Method: $method.signature &#10;* &#10;*/ &#10;@Test&#10;public void test#cap(${method.name})() throws Exception { &#10;//TODO: Test goes here... &#10;} &#10;&#10;#end &#10;&#10;#foreach($method in $entry.privateMethodList) &#10;/** &#10;* &#10;* Method: $method.signature &#10;* &#10;*/ &#10;@Test&#10;public void test#cap(${method.name})() throws Exception { &#10;//TODO: Test goes here... &#10;#foreach($string in $method.reflectionCode) &#10;$string &#10;#end &#10;} &#10;&#10;#end &#10;} &#10;#end" />
+      </map>
+    </option>
+  </component>
+  <component name="MavenProjectsManager">
+    <option name="originalFiles">
+      <list>
+        <option value="$PROJECT_DIR$/pom.xml" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectInspectionProfilesVisibleTreeState">
+    <entry key="Project Default">
+      <profile-state>
+        <expanded-state>
+          <State>
+            <id>AccessibilityLintAndroid</id>
+          </State>
+          <State>
+            <id>Android</id>
+          </State>
+          <State>
+            <id>Bean 验证</id>
+          </State>
+          <State>
+            <id>Bukkit</id>
+          </State>
+          <State>
+            <id>BungeeCord</id>
+          </State>
+          <State>
+            <id>CDI (上下文和依赖项注入)</id>
+          </State>
+          <State>
+            <id>CSS</id>
+          </State>
+          <State>
+            <id>ComplianceLintAndroid</id>
+          </State>
+          <State>
+            <id>CorrectnessLintAndroid</id>
+          </State>
+          <State>
+            <id>DOM 问题JavaScript 和 TypeScript</id>
+          </State>
+          <State>
+            <id>GPathGroovy</id>
+          </State>
+          <State>
+            <id>Gradle</id>
+          </State>
+          <State>
+            <id>Groovy</id>
+          </State>
+          <State>
+            <id>Hibernate</id>
+          </State>
+          <State>
+            <id>InternationalizationLintAndroid</id>
+          </State>
+          <State>
+            <id>InteroperabilityLintAndroid</id>
+          </State>
+          <State>
+            <id>JSON 和 JSON5</id>
+          </State>
+          <State>
+            <id>JSP检查</id>
+          </State>
+          <State>
+            <id>JVM 语言</id>
+          </State>
+          <State>
+            <id>Java</id>
+          </State>
+          <State>
+            <id>Java 21Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 5Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 7Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 8Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 9Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 互操作问题Kotlin</id>
+          </State>
+          <State>
+            <id>Java 语言级别迁移帮助Java</id>
+          </State>
+          <State>
+            <id>Java 语言级迁移帮助Java</id>
+          </State>
+          <State>
+            <id>JavaScript 和 TypeScript</id>
+          </State>
+          <State>
+            <id>JavadocJava</id>
+          </State>
+          <State>
+            <id>Kotlin</id>
+          </State>
+          <State>
+            <id>LintAndroid</id>
+          </State>
+          <State>
+            <id>Markdown</id>
+          </State>
+          <State>
+            <id>Micronaut</id>
+          </State>
+          <State>
+            <id>Micronaut DataMicronaut</id>
+          </State>
+          <State>
+            <id>MySQL</id>
+          </State>
+          <State>
+            <id>PerformanceLintAndroid</id>
+          </State>
+          <State>
+            <id>ProductivityLintAndroid</id>
+          </State>
+          <State>
+            <id>RESTful Web 服务(JAX-RS)</id>
+          </State>
+          <State>
+            <id>ReactJavaScript 和 TypeScript</id>
+          </State>
+          <State>
+            <id>RoomAndroid</id>
+          </State>
+          <State>
+            <id>SQL</id>
+          </State>
+          <State>
+            <id>SecurityLintAndroid</id>
+          </State>
+          <State>
+            <id>Sponge</id>
+          </State>
+          <State>
+            <id>Spring</id>
+          </State>
+          <State>
+            <id>Spring AOPSpring</id>
+          </State>
+          <State>
+            <id>Spring CoreSpring</id>
+          </State>
+          <State>
+            <id>Spring DataSpring</id>
+          </State>
+          <State>
+            <id>TestNGJava</id>
+          </State>
+          <State>
+            <id>TestingLintAndroid</id>
+          </State>
+          <State>
+            <id>TypeScriptJavaScript 和 TypeScript</id>
+          </State>
+          <State>
+            <id>UsabilityLintAndroid</id>
+          </State>
+          <State>
+            <id>XMLSpring CoreSpring</id>
+          </State>
+          <State>
+            <id>为 null 性问题可能的 bugJava</id>
+          </State>
+          <State>
+            <id>代码Spring CoreSpring</id>
+          </State>
+          <State>
+            <id>代码成熟度Java</id>
+          </State>
+          <State>
+            <id>代码样式问题Java</id>
+          </State>
+          <State>
+            <id>代码质量工具CSS</id>
+          </State>
+          <State>
+            <id>代码质量工具JavaScript 和 TypeScript</id>
+          </State>
+          <State>
+            <id>其他问题Kotlin</id>
+          </State>
+          <State>
+            <id>内存Java</id>
+          </State>
+          <State>
+            <id>冗余结构Kotlin</id>
+          </State>
+          <State>
+            <id>初始化Java</id>
+          </State>
+          <State>
+            <id>可能的 bugGradle</id>
+          </State>
+          <State>
+            <id>可能的 bugGroovy</id>
+          </State>
+          <State>
+            <id>可能的 bugJava</id>
+          </State>
+          <State>
+            <id>可能的 bugKotlin</id>
+          </State>
+          <State>
+            <id>可见性Java</id>
+          </State>
+          <State>
+            <id>命名约定Java</id>
+          </State>
+          <State>
+            <id>声明冗余Java</id>
+          </State>
+          <State>
+            <id>安全性Java</id>
+          </State>
+          <State>
+            <id>导入Java</id>
+          </State>
+          <State>
+            <id>序列化问题Java</id>
+          </State>
+          <State>
+            <id>性能Java</id>
+          </State>
+          <State>
+            <id>抽象问题Java</id>
+          </State>
+          <State>
+            <id>控制流问题Java</id>
+          </State>
+          <State>
+            <id>数据流Groovy</id>
+          </State>
+          <State>
+            <id>数据流Java</id>
+          </State>
+          <State>
+            <id>方法命名约定Java</id>
+          </State>
+          <State>
+            <id>样式Gradle</id>
+          </State>
+          <State>
+            <id>样式问题Kotlin</id>
+          </State>
+          <State>
+            <id>类结构Java</id>
+          </State>
+          <State>
+            <id>继承问题Java</id>
+          </State>
+          <State>
+            <id>编译器问题Java</id>
+          </State>
+          <State>
+            <id>详细或冗余的代码结构Java</id>
+          </State>
+          <State>
+            <id>资源管理Java</id>
+          </State>
+          <State>
+            <id>赋值问题Groovy</id>
+          </State>
+          <State>
+            <id>赋值问题Java</id>
+          </State>
+        </expanded-state>
+      </profile-state>
+    </entry>
+  </component>
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_21" default="true" project-jdk-name="21" project-jdk-type="JavaSDK">
+    <output url="file://$PROJECT_DIR$/out" />
+  </component>
+</project>
