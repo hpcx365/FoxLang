@@ -8,10 +8,158 @@ class Parser(source: String) {
     
     }
     
-    private fun parseExpression(): NodeRightExpression {
-        val first = parseUnaryExpression()
+    fun parseStatement(): NodeStatement {
+        return parseAlsoStatementAfter(parsePrimeStatement())
+    }
+    
+    fun parsePrimeStatement(): NodeStatement {
+        tryParseLabel()?.let { label ->
+            tryParseBlock(label)?.let { return it }
+            tryParseIf(label)?.let { return it }
+            tryParseWhile(label)?.let { return it }
+            tryParseDoWhile(label)?.let { return it }
+            tryParseWhen(label)?.let { return it }
+            error("Expected block / if / while / do-while / when")
+        }
+        tryParseBlock()?.let { return it }
+        tryParseIf()?.let { return it }
+        tryParseWhile()?.let { return it }
+        tryParseDoWhile()?.let { return it }
+        tryParseWhen()?.let { return it }
+        tryParseBreak()?.let { return it }
+        tryParseContinue()?.let { return it }
+        tryParseYield()?.let { return it }
+        tryParseReturn()?.let { return it }
+        tryParseExpressionStatement()?.let { return it }
+        error("Expected statement")
+    }
+    
+    fun tryParseLabel(): String? {
+        return if (scanner.tryConsume("#")) parseWord() else null
+    }
+    
+    fun tryParseBreak(): NodeBreak? {
+        if (!scanner.tryConsume("break")) return null
+        val label = tryParseLabel()
+        return NodeBreak(label)
+    }
+    
+    fun tryParseContinue(): NodeContinue? {
+        if (!scanner.tryConsume("continue")) return null
+        val label = tryParseLabel()
+        return NodeContinue(label)
+    }
+    
+    fun tryParseYield(): NodeYield? {
+        if (!scanner.tryConsume("yield")) return null
+        val label = tryParseLabel()
+        val value = parseExpression()
+        return NodeYield(label, value)
+    }
+    
+    fun tryParseReturn(): NodeReturn? {
+        if (!scanner.tryConsume("return")) return null
+        val value = parseExpression()
+        return NodeReturn(value)
+    }
+    
+    fun tryParseBlock(label: String? = null): NodeBlock? {
+        if (!scanner.tryConsume("{")) return null
+        val statements = buildList {
+            while (!scanner.tryConsume("}")) {
+                add(parseStatement())
+            }
+        }
+        return NodeBlock(label, statements)
+    }
+    
+    fun tryParseIf(label: String? = null): NodeIf? {
+        if (!scanner.tryConsume("if")) return null
+        scanner.consume("(")
+        val condition = parseExpression()
+        scanner.consume(")")
+        val thenBody = parseStatement()
+        val elseBody = if (scanner.tryConsume("else")) parseStatement() else null
+        return NodeIf(label, condition, thenBody, elseBody)
+    }
+    
+    fun tryParseWhile(label: String? = null): NodeWhile? {
+        if (!scanner.tryConsume("while")) return null
+        scanner.consume("(")
+        val condition = parseExpression()
+        scanner.consume(")")
+        val body = parseStatement()
+        return NodeWhile(label, condition, body)
+    }
+    
+    fun tryParseDoWhile(label: String? = null): NodeDoWhile? {
+        if (!scanner.tryConsume("do")) return null
+        val body = parseStatement()
+        scanner.consume("while")
+        scanner.consume("(")
+        val condition = parseExpression()
+        scanner.consume(")")
+        return NodeDoWhile(label, body, condition)
+    }
+    
+    fun tryParseWhen(label: String? = null): NodeWhen? {
+        if (!scanner.tryConsume("when")) return null
         
-        parseOptionalAssignOperator()?.let { operator ->
+        scanner.consume("(")
+        val value = parseExpression()
+        scanner.consume(")")
+        
+        val cases = mutableListOf<NodeCase>()
+        var elseBody: NodeStatement? = null
+        scanner.consume("{")
+        while (true) {
+            if (scanner.tryConsume("}")) {
+                break
+            }
+            if (scanner.tryConsume("else")) {
+                scanner.consume("->")
+                elseBody = parseStatement()
+                scanner.consume("}")
+                break
+            }
+            val conditions = mutableListOf<NodeRightExpression>()
+            while (true) {
+                conditions += parseExpression()
+                if (scanner.tryConsume("->")) break
+                if (scanner.tryConsume(",")) {
+                    if (scanner.tryConsume("->")) break
+                } else {
+                    error("Expected ',' or '->'")
+                }
+            }
+            val body = parseStatement()
+            cases += NodeCase(conditions, body)
+        }
+        
+        return NodeWhen(label, value, cases, elseBody)
+    }
+    
+    fun tryParseExpressionStatement(): NodeStatement? {
+        val expression = tryParseExpression() ?: return null
+        return if (expression is NodeStatement) expression else error("Expected expression statement")
+    }
+    
+    fun parseAlsoStatementAfter(body: NodeStatement): NodeStatement {
+        if (scanner.tryConsume("also")) {
+            val also = parseStatement()
+            return parseAlsoStatementAfter(NodeAlso(body, also))
+        }
+        return body
+    }
+    
+    fun parseExpression(): NodeRightExpression {
+        return tryParseExpression() ?: error("Expected expression")
+    }
+    
+    fun tryParseExpression(): NodeRightExpression? {
+        val first = tryParseUnaryExpression() ?: return null
+        
+        tryParseAssignOperator()?.let { operator ->
             if (first !is NodeLeftExpression) {
                 error("Left side of assignment must be left expression")
             }
@@ -23,7 +171,7 @@ class Parser(source: String) {
         val operators = mutableListOf<NodeBinaryOperator>()
         
         while (true) {
-            val operator = parseOptionalBinaryOperator() ?: break
+            val operator = tryParseBinaryOperator() ?: break
             val right = parseUnaryExpression()
             
             while (
@@ -51,7 +199,15 @@ class Parser(source: String) {
     }
     
     fun parseUnaryExpression(): NodeRightExpression {
-        parseOptionalNumber()?.let {
+        return tryParseUnaryExpression() ?: error("Expected unary expression")
+    }
+    
+    fun tryParseUnaryExpression(): NodeRightExpression? {
+        tryParseNumber()?.let {
+            return parseChainAfter(it)
+        }
+        
+        tryParseString()?.let {
             return parseChainAfter(it)
         }
         
@@ -77,14 +233,13 @@ class Parser(source: String) {
             return NodeAssign(right, NodeSubAssignOperator, NodeEntity(FoxInt(1)), beforeEvaluation = true)
         }
         
-        parseOptionalUnaryOperator()?.let { operator ->
+        tryParseUnaryOperator()?.let { operator ->
             val right = parseUnaryExpression()
             return NodeUnary(operator, right)
         }
         
-        parseOptionalWord()?.let { name ->
-            if (scanner.match("(")) {
-                val parameters = parseActualParameterList()
+        tryParseWord()?.let { name ->
+            tryParseActualParameterList()?.let { parameters ->
                 return parseChainAfter(
                     NodeCall(
                         target = NodeEntity(FoxUnit),
@@ -95,8 +250,7 @@ class Parser(source: String) {
                 )
             }
             
-            if (scanner.match("<")) {
-                val generics = parseActualGenericParameterList()
+            tryParseActualGenericParameterList()?.let { generics ->
                 val parameters = parseActualParameterList()
                 return parseChainAfter(
                     NodeCall(
@@ -111,27 +265,40 @@ class Parser(source: String) {
             return parseChainAfter(NodeSymbol(name))
         }
         
-        error("Expected unary expression")
+        return null
     }
     
     fun parseChainAfter(left: NodeRightExpression): NodeRightExpression {
         if (!scanner.tryConsume(".")) {
-            if (left !is NodeLeftExpression) {
-                return left
-            }
             if (scanner.tryConsume("++")) {
+                if (left !is NodeLeftExpression) {
+                    error("Left side of assignment must be left expression")
+                }
                 return NodeAssign(left, NodeAddAssignOperator, NodeEntity(FoxInt(1)), beforeEvaluation = false)
             }
+            
             if (scanner.tryConsume("--")) {
+                if (left !is NodeLeftExpression) {
+                    error("Left side of assignment must be left expression")
+                }
                 return NodeAssign(left, NodeSubAssignOperator, NodeEntity(FoxInt(1)), beforeEvaluation = false)
             }
+            
             return left
+        }
+        
+        tryParseInteger()?.let { index ->
+            return parseChainAfter(
+                NodeComponentAccess(
+                    target = left,
+                    index = index,
+                ),
+            )
         }
         
         val right = parseWord()
         
-        if (scanner.match("(")) {
-            val parameters = parseActualParameterList()
+        tryParseActualParameterList()?.let { parameters ->
             return parseChainAfter(
                 NodeCall(
                     target = left,
@@ -142,8 +309,7 @@ class Parser(source: String) {
             )
         }
         
-        if (scanner.match("<")) {
-            val generics = parseActualGenericParameterList()
+        tryParseActualGenericParameterList()?.let { generics ->
             val parameters = parseActualParameterList()
             return parseChainAfter(
                 NodeCall(
@@ -164,11 +330,15 @@ class Parser(source: String) {
     }
     
     fun parseActualParameterList(): List<Pair<String?, NodeRightExpression>> {
-        scanner.consume("(")
+        return tryParseActualParameterList() ?: error("Expected actual parameter list")
+    }
+    
+    fun tryParseActualParameterList(): List<Pair<String?, NodeRightExpression>>? {
+        if (!scanner.tryConsume("(")) return null
         if (scanner.tryConsume(")")) return emptyList()
         val result = mutableListOf<Pair<String?, NodeRightExpression>>()
         while (true) {
-            result += parseOptionalWordAndEqual() to parseExpression()
+            result += tryParseWordAndEqual() to parseExpression()
             if (scanner.tryConsume(")")) break
             if (scanner.tryConsume(",")) {
                 if (scanner.tryConsume(")")) break
@@ -180,11 +350,15 @@ class Parser(source: String) {
     }
     
     fun parseActualGenericParameterList(): List<Pair<String?, NodeType>> {
-        if (!scanner.tryConsume("<")) return emptyList()
+        return tryParseActualGenericParameterList() ?: error("Expected actual generic parameter list")
+    }
+    
+    fun tryParseActualGenericParameterList(): List<Pair<String?, NodeType>>? {
+        if (!scanner.tryConsume("<")) return null
         if (scanner.tryConsume(">")) return emptyList()
         val result = mutableListOf<Pair<String?, NodeType>>()
         while (true) {
-            result += parseOptionalWordAndEqual() to parseType()
+            result += tryParseWordAndEqual() to parseType()
             if (scanner.tryConsume(">")) break
             if (scanner.tryConsume(",")) {
                 if (scanner.tryConsume(">")) break
@@ -243,11 +417,11 @@ class Parser(source: String) {
                 if (name != null) error("Expected anonymous generic")
                 NodeRefType(elementType)
             }
-            else -> NodeNamedType(prefix, parseActualGenericParameterList())
+            else -> NodeNamedType(prefix, tryParseActualGenericParameterList() ?: emptyList())
         }
     }
     
-    fun parseOptionalUnaryOperator(): NodeUnaryOperator? {
+    fun tryParseUnaryOperator(): NodeUnaryOperator? {
         return when {
             scanner.tryConsume("-") -> NodeNegOperator
             scanner.tryConsume("!") -> NodeNotOperator
@@ -255,8 +429,17 @@ class Parser(source: String) {
         }
     }
     
-    fun parseOptionalBinaryOperator(): NodeBinaryOperator? {
+    fun tryParseBinaryOperator(): NodeBinaryOperator? {
         return when {
+            scanner.tryConsume(">>>") -> NodeShrUnsignedOperator
+            scanner.tryConsume("&&") -> NodeShortCircuitAndOperator
+            scanner.tryConsume("||") -> NodeShortCircuitOrOperator
+            scanner.tryConsume("<<") -> NodeShlOperator
+            scanner.tryConsume(">>") -> NodeShrOperator
+            scanner.tryConsume("==") -> NodeEqualOperator
+            scanner.tryConsume("!=") -> NodeNotEqualOperator
+            scanner.tryConsume("<=") -> NodeLessOrEqualOperator
+            scanner.tryConsume(">=") -> NodeGreaterOrEqualOperator
             scanner.tryConsume("+") -> NodeAddOperator
             scanner.tryConsume("-") -> NodeSubOperator
             scanner.tryConsume("*") -> NodeMulOperator
@@ -265,24 +448,19 @@ class Parser(source: String) {
             scanner.tryConsume("&") -> NodeAndOperator
             scanner.tryConsume("|") -> NodeOrOperator
             scanner.tryConsume("^") -> NodeXorOperator
-            scanner.tryConsume("&&") -> NodeShortCircuitAndOperator
-            scanner.tryConsume("||") -> NodeShortCircuitOrOperator
-            scanner.tryConsume("<<") -> NodeShlOperator
-            scanner.tryConsume(">>") -> NodeShrOperator
-            scanner.tryConsume(">>>") -> NodeShrUnsignedOperator
-            scanner.tryConsume("==") -> NodeEqualOperator
-            scanner.tryConsume("!=") -> NodeNotEqualOperator
             scanner.tryConsume("<") -> NodeLessOperator
             scanner.tryConsume(">") -> NodeGreaterOperator
-            scanner.tryConsume("<=") -> NodeLessOrEqualOperator
-            scanner.tryConsume(">=") -> NodeGreaterOrEqualOperator
             else -> null
         }
     }
     
-    fun parseOptionalAssignOperator(): NodeAssignOperator? {
+    fun tryParseAssignOperator(): NodeAssignOperator? {
         return when {
-            scanner.tryConsume("=") -> NodePlainAssignOperator
+            scanner.tryConsume(">>>=") -> NodeShrUnsignedAssignOperator
+            scanner.tryConsume("&&=") -> NodeShortCircuitAndAssignOperator
+            scanner.tryConsume("||=") -> NodeShortCircuitOrAssignOperator
+            scanner.tryConsume("<<=") -> NodeShlAssignOperator
+            scanner.tryConsume(">>=") -> NodeShrAssignOperator
             scanner.tryConsume("+=") -> NodeAddAssignOperator
             scanner.tryConsume("-=") -> NodeSubAssignOperator
             scanner.tryConsume("*=") -> NodeMulAssignOperator
@@ -291,76 +469,98 @@ class Parser(source: String) {
             scanner.tryConsume("&=") -> NodeAndAssignOperator
             scanner.tryConsume("|=") -> NodeOrAssignOperator
             scanner.tryConsume("^=") -> NodeXorAssignOperator
-            scanner.tryConsume("&&=") -> NodeShortCircuitAndAssignOperator
-            scanner.tryConsume("||=") -> NodeShortCircuitOrAssignOperator
-            scanner.tryConsume("<<=") -> NodeShlAssignOperator
-            scanner.tryConsume(">>=") -> NodeShrAssignOperator
-            scanner.tryConsume(">>>=") -> NodeShrUnsignedAssignOperator
+            scanner.tryConsume("=") -> NodePlainAssignOperator
             else -> null
         }
-    }
-    
-    fun parseSymbol(): NodeSymbol {
-        return NodeSymbol(parseWord())
-    }
-    
-    fun parseOptionalSymbol(): NodeSymbol? {
-        return parseOptionalWord()?.let { NodeSymbol(it) }
     }
     
     fun parseWord(): String {
         return scanner.consumeRegex("[a-zA-Z_][a-zA-Z0-9_]*")
     }
     
-    fun parseOptionalWord(): String? {
+    fun tryParseWord(): String? {
         return scanner.tryConsumeRegex("[a-zA-Z_][a-zA-Z0-9_]*")
     }
     
-    fun parseOptionalWordAndEqual(): String? {
+    fun tryParseWordAndEqual(): String? {
         return scanner.tryConsumeRegex("[a-zA-Z_][a-zA-Z0-9_]*", "=")?.first()
     }
     
-    fun parseOptionalNumber(): NodeEntity? {
-        val hexMatch = scanner.tryConsumeRegex("0x([0-9a-fA-F]+|[0-9a-fA-F]+\\.[0-9a-fA-F]+)(p[+-]?[0-9]+)?f?")
-        if (hexMatch != null) {
-            val hasFloatSuffix = hexMatch.endsWith("f")
-            val hasExponent = hexMatch.contains('p')
-            val hasDot = hexMatch.contains('.')
-            
-            if (hasFloatSuffix || hasExponent || hasDot) {
-                val numberStr = if (hasFloatSuffix) hexMatch.dropLast(1) else hexMatch
-                return NodeEntity(FoxDouble(numberStr.toDouble()))
+    fun tryParseNumber(): NodeEntity? {
+        scanner.tryConsumeRegex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f?")?.let { match ->
+            return if (match.endsWith('f')) {
+                NodeEntity(FoxFloat(match.dropLast(1).replace("_", "").toFloat()))
             } else {
-                return NodeEntity(FoxLong(hexMatch.toLong(16)))
+                NodeEntity(FoxDouble(match.replace("_", "").toDouble()))
             }
         }
         
-        val binMatch = scanner.tryConsumeRegex("0b[01]+L?")
-        if (binMatch != null) {
-            val hasLongSuffix = binMatch.endsWith("L")
-            val numberStr = if (hasLongSuffix) binMatch.dropLast(1) else binMatch
-            val value = numberStr.drop(2).toLong(2)
-            return if (hasLongSuffix) NodeEntity(FoxLong(value)) else NodeEntity(FoxInt(value.toInt()))
+        scanner.tryConsumeRegex("(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f?")?.let { match ->
+            return if (match.endsWith('f')) {
+                NodeEntity(FoxFloat(match.dropLast(1).replace("_", "").toFloat()))
+            } else {
+                NodeEntity(FoxDouble(match.replace("_", "").toDouble()))
+            }
         }
         
-        val decMatch = scanner.tryConsumeRegex("([0-9]+|[0-9]+\\.[0-9]+)(e[+-]?[0-9]+)?[fL]?")
-        if (decMatch != null) {
-            val hasLongSuffix = decMatch.endsWith("L")
-            val hasFloatSuffix = decMatch.endsWith("f")
-            val hasExponent = decMatch.contains('e')
-            val hasDot = decMatch.contains('.')
-            
-            if (hasFloatSuffix || hasExponent || hasDot) {
-                val numberStr = if (hasFloatSuffix) decMatch.dropLast(1) else decMatch
-                return NodeEntity(FoxDouble(numberStr.toDouble()))
+        return tryParseInteger()
+    }
+    
+    fun tryParseInteger(): NodeEntity? {
+        scanner.tryConsumeRegex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L?")?.let { match ->
+            return if (match.endsWith('L')) {
+                NodeEntity(FoxLong(match.drop(2).dropLast(1).replace("_", "").toLong(16)))
             } else {
-                val numberStr = if (hasLongSuffix) decMatch.dropLast(1) else decMatch
-                val value = numberStr.toLong()
-                return if (hasLongSuffix) NodeEntity(FoxLong(value)) else NodeEntity(FoxInt(value.toInt()))
+                NodeEntity(FoxInt(match.drop(2).replace("_", "").toInt(16)))
+            }
+        }
+        
+        scanner.tryConsumeRegex("0b[01]+(_[01]+)*L?")?.let { match ->
+            return if (match.endsWith('L')) {
+                NodeEntity(FoxLong(match.drop(2).dropLast(1).replace("_", "").toLong(2)))
+            } else {
+                NodeEntity(FoxInt(match.drop(2).replace("_", "").toInt(2)))
+            }
+        }
+        
+        scanner.tryConsumeRegex("(0|[1-9][0-9]*(_[0-9]+)*)L?")?.let { match ->
+            return if (match.endsWith('L')) {
+                NodeEntity(FoxLong(match.dropLast(1).replace("_", "").toLong()))
+            } else {
+                NodeEntity(FoxInt(match.replace("_", "").toInt()))
             }
         }
         
         return null
+    }
+    
+    fun tryParseString(): NodeEntity? {
+        val match = scanner.tryConsumeRegex(""""([^"\\]|\\.)*"""") ?: return null
+        val result = StringBuilder()
+        var index = 1
+        while (index < match.lastIndex) {
+            val char = match[index++]
+            if (char != '\\') {
+                result.append(char)
+                continue
+            }
+            
+            if (index >= match.lastIndex) {
+                error("Unclosed escape sequence")
+            }
+            
+            when (val escaped = match[index++]) {
+                'b' -> result.append('\b')
+                't' -> result.append('\t')
+                'n' -> result.append('\n')
+                'r' -> result.append('\r')
+                '"' -> result.append('"')
+                '\'' -> result.append('\'')
+                '\\' -> result.append('\\')
+                else -> error("Unknown escape sequence '\\$escaped'")
+            }
+        }
+        return NodeEntity(FoxString(result.toString()))
     }
     
     private fun error(message: String): Nothing {
@@ -386,7 +586,7 @@ class SourceScanner(source: String) {
     private val regexCache = mutableMapOf<String, Regex>()
     
     private fun internalMove(numChars: Int) {
-        check(numChars > 0)
+        check(numChars >= 0)
         check(pos.row < lines.size)
         val line = lines[pos.row]
         val col = pos.col + numChars
@@ -407,9 +607,13 @@ class SourceScanner(source: String) {
     }
     
     private fun skipBlanksAndComments() {
-        while (true) {
-            if (internalMatch(" ") || internalMatch("\t")) {
-                internalMove(1)
+        while (pos.row < lines.size) {
+            if (pos.col >= lines[pos.row].length) {
+                internalMove(0)
+                continue
+            }
+            internalMatchRegex("\\s+")?.let {
+                internalMove(it.length)
                 continue
             }
             if (internalMatch("//")) {
@@ -417,16 +621,18 @@ class SourceScanner(source: String) {
                 continue
             }
             if (internalMatch("/*")) {
+                val commentStart = pos
                 internalMove(2)
                 while (true) {
                     if (pos.row >= lines.size) {
-                        throw ParserException(pos, "Unclosed block comment")
+                        throw ParserException(commentStart, "Unclosed block comment")
                     }
-                    if (internalMatch("*/")) {
-                        internalMove(2)
+                    val index = lines[pos.row].indexOf("*/", pos.col)
+                    if (index >= 0) {
+                        internalMove(index - pos.col + 2)
                         break
                     }
-                    internalMove(1)
+                    internalMove(lines[pos.row].length - pos.col)
                 }
                 continue
             }
@@ -434,47 +640,23 @@ class SourceScanner(source: String) {
         }
     }
     
-    fun match(string: String): Boolean {
-        skipBlanksAndComments()
-        return internalMatch(string)
-    }
-    
-    fun matchRegex(regexString: String): String? {
-        skipBlanksAndComments()
-        return internalMatchRegex(regexString)
-    }
-    
-    fun match(vararg strings: String): Boolean {
-        skipBlanksAndComments()
-        val startPos = pos
-        val result = strings.all { tryConsume(it) }
-        pos = startPos
-        return result
-    }
-    
-    fun matchRegex(vararg regexStrings: String): List<String>? {
-        skipBlanksAndComments()
-        val startPos = pos
-        try {
-            val result = buildList {
-                regexStrings.forEach {
-                    val match = tryConsumeRegex(it)
-                    if (match != null) add(match)
-                    else return null
-                }
-            }
-            return result
-        } finally {
-            pos = startPos
-        }
-    }
-    
     fun tryConsume(string: String): Boolean {
-        if (match(string)) {
+        skipBlanksAndComments()
+        if (internalMatch(string)) {
             internalMove(string.length)
             return true
         }
         return false
+    }
+    
+    fun tryConsumeRegex(regexString: String): String? {
+        skipBlanksAndComments()
+        val match = internalMatchRegex(regexString)
+        if (match != null) {
+            internalMove(match.length)
+            return match
+        }
+        return null
     }
     
     fun tryConsume(vararg strings: String): Boolean {
@@ -485,23 +667,11 @@ class SourceScanner(source: String) {
         return result
     }
     
-    fun consume(string: String) {
-        if (!tryConsume(string)) throw ParserException(pos, "Expected '$string'")
-    }
-    
-    fun consume(vararg strings: String) {
-        strings.forEach { consume(it) }
-    }
-    
-    fun tryConsumeRegex(regexString: String): String? {
-        return matchRegex(regexString)?.also { internalMove(it.length) }
-    }
-    
-    fun tryConsumeRegex(vararg regexString: String): List<String>? {
+    fun tryConsumeRegex(vararg regexStrings: String): List<String>? {
         skipBlanksAndComments()
         val startPos = pos
         val result = buildList {
-            regexString.forEach {
+            regexStrings.forEach {
                 val match = tryConsumeRegex(it)
                 if (match != null) add(match)
                 else {
@@ -511,6 +681,10 @@ class SourceScanner(source: String) {
             }
         }
         return result
+    }
+    
+    fun consume(string: String) {
+        if (!tryConsume(string)) throw ParserException(pos, "Expected '$string'")
     }
     
     fun consumeRegex(regexString: String): String {

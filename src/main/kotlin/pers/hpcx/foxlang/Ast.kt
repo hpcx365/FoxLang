@@ -103,6 +103,11 @@ data class NodeFieldAccess(
     val name: String,
 ) : NodeLeftExpression, NodeRightExpression
 
+data class NodeComponentAccess(
+    val target: NodeRightExpression,
+    val index: NodeRightExpression,
+) : NodeLeftExpression, NodeRightExpression
+
 data class NodeCall(
     val target: NodeRightExpression,
     val name: String,
