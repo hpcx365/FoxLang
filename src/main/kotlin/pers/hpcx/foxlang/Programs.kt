@@ -46,6 +46,7 @@ fun FoxMethodSignature.replaceGenerics(replacements: Map<String, FoxConcreteType
     thisType = thisType.replaceGenerics(replacements),
     parameters = parameters.mapValues { it.value.replaceGenerics(replacements) },
     returnType = returnType.replaceGenerics(replacements),
+    isInline = isInline,
 )
 
 fun FoxMethodImplementation.replaceGenerics(replacements: Map<String, FoxConcreteType>) = when (this) {
@@ -63,20 +64,22 @@ fun FoxMethodImplementation.replaceGenerics(replacements: Map<String, FoxConcret
 }
 
 fun FoxInst.replaceGenerics(replacements: Map<String, FoxConcreteType>) = when (this) {
-    is FoxLoad -> this
-    is FoxCopy -> this
-    is FoxCall -> FoxCall(
+    is InstLoad -> this
+    is InstCopy -> this
+    is InstCall -> InstCall(
         target = target,
         params = params,
-        result = result,
-        method = FoxMethodIdentifier(
-            name = method.name,
-            generics = method.generics.mapValues { it.value.replaceGenerics(replacements) },
-            thisType = method.thisType.replaceGenerics(replacements),
-            parameters = method.parameters.mapValues { it.value.replaceGenerics(replacements) },
-        ),
+        method = method.replaceGenerics(replacements),
     )
+    is InstLambdaCall -> this
 }
+
+fun FoxMethodIdentifier.replaceGenerics(replacements: Map<String, FoxConcreteType>) = FoxMethodIdentifier(
+    name = name,
+    generics = generics.mapValues { it.value.replaceGenerics(replacements) },
+    thisType = thisType.replaceGenerics(replacements),
+    parameters = parameters.mapValues { it.value.replaceGenerics(replacements) },
+)
 
 fun FoxMethodImplementation.dependencies(result: MutableSet<FoxMethodIdentifier> = mutableSetOf()): Set<FoxMethodIdentifier> {
     when (this) {
@@ -86,9 +89,10 @@ fun FoxMethodImplementation.dependencies(result: MutableSet<FoxMethodIdentifier>
             blocks.values.forEach { block ->
                 block.instructions.forEach { inst ->
                     when (inst) {
-                        is FoxLoad -> {}
-                        is FoxCopy -> {}
-                        is FoxCall -> result += inst.method
+                        is InstLoad -> {}
+                        is InstCopy -> {}
+                        is InstCall -> result += inst.method
+                        is InstLambdaCall -> {}
                     }
                 }
             }

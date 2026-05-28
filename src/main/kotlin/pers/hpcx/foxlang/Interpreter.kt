@@ -1,80 +1,33 @@
-package pers.hpcx.foxlang.emu
+package pers.hpcx.foxlang
 
-import pers.hpcx.foxlang.*
 import pers.hpcx.foxlang.FoxBuiltInMethodImplementation.*
 
-class Emulator {
+class Interpreter {
     
     val heap = Heap()
     val stack = mutableListOf<StackFrame>()
     val globals = mutableMapOf<String, FoxEntity>()
-    val methods = mutableMapOf<FoxMethodIdentifier, Pair<FoxMethodSignature, FoxMethodImplementation>>()
+    val methods = mutableMapOf<FoxMethodIdentifier, FoxMethodImplementation>()
     
     fun run(arguments: Array<String>) {
         stack += StackFrame(
-            method = methods.getValue(mainMethodIdentifier).second as FoxCustomizedMethodImplementation,
+            method = methods.getValue(mainMethodIdentifier) as FoxCustomizedMethodImplementation,
             thisEntity = FoxUnit,
             parameters = mapOf("args" to FoxArray(arguments.map { FoxString(it) })),
         )
         
         while (true) {
             val frame = stack.last()
-            
-            fun FoxFetchSlot.fetch() = when (this) {
-                FoxThis -> frame.thisEntity
-                FoxReturnValue -> frame.returnEntity
-                is FoxGlobal -> globals.getValue(name)
-                is FoxLocal -> frame.locals.getValue(name)
-            }
-            
-            fun FoxStoreSlot.store(value: FoxEntity) = when (this) {
-                FoxIgnore -> {}
-                is FoxGlobal -> globals[name] = value
-                is FoxLocal -> frame.locals[name] = value
-            }
-            
             val block = frame.currentBlock
             if (frame.nextInst < block.instructions.size) {
-                when (val inst = block.instructions[frame.nextInst++]) {
-                    is FoxLoad -> inst.target.store(inst.entity)
-                    is FoxCopy -> inst.target.store(inst.source.fetch())
-                    is FoxCall -> {
-                        val target = inst.target.fetch()
-                        val parameters = buildMap {
-                            inst.params.forEach { (name, slot) -> put(name, slot.fetch()) }
-                        }
-                        when (val method = methods.getValue(inst.method).second) {
-                            is FoxBuiltInMethodImplementation -> {
-                                inst.result.store(method.invoke(target, parameters))
-                            }
-                            is FoxCustomizedMethodImplementation -> {
-                                stack += StackFrame(
-                                    method = method,
-                                    thisEntity = target,
-                                    parameters = parameters,
-                                )
-                            }
-                        }
-                    }
-                }
+                frame.execute(block.instructions[frame.nextInst++])
             } else {
-                when (val jump = block.jump) {
-                    is FoxGoto -> frame.switchBlock(jump.block)
-                    is FoxBranch -> {
-                        val condition = jump.condition.fetch() as FoxBool
-                        frame.switchBlock(if (condition.value) jump.thenBlock else jump.elseBlock)
-                    }
-                    is FoxReturn -> {
-                        stack.removeLast()
-                        val top = stack.lastOrNull() ?: return
-                        top.returnEntity = jump.value.fetch()
-                    }
-                }
+                frame.execute(block.jump)
             }
         }
     }
     
-    class StackFrame(
+    inner class StackFrame(
         val method: FoxCustomizedMethodImplementation,
         val thisEntity: FoxEntity,
         parameters: Map<String, FoxEntity>,
@@ -87,6 +40,83 @@ class Emulator {
         fun switchBlock(block: String) {
             currentBlock = method.blocks.getValue(block)
             nextInst = 0
+        }
+        
+        fun FoxFetchSlot.fetch() = when (this) {
+            is SlotConst -> value
+            SlotThis -> thisEntity
+            SlotReturnValue -> returnEntity
+            is SlotGlobal -> globals.getValue(name)
+            is SlotLocal -> locals.getValue(name)
+        }
+        
+        fun FoxStoreSlot.store(value: FoxEntity) = when (this) {
+            SlotVoid -> {}
+            is SlotGlobal -> globals[name] = value
+            is SlotLocal -> locals[name] = value
+        }
+        
+        fun panic(message: String) {
+            execute(
+                InstCall(
+                    SlotConst(FoxUnit),
+                    mapOf("message" to SlotConst(FoxString(message))),
+                    panicMethodIdentifier,
+                ),
+            )
+        }
+        
+        fun execute(inst: FoxInst) {
+            when (inst) {
+                is InstLoad -> inst.target.store(inst.entity)
+                is InstCopy -> inst.target.store(inst.source.fetch())
+                is InstCall -> {
+                    val callee = methods.getValue(inst.method)
+                    val target = inst.target.fetch()
+                    val parameters = buildMap {
+                        inst.params.forEach { (name, slot) -> put(name, slot.fetch()) }
+                    }
+                    call(callee, target, parameters)
+                }
+                is InstLambdaCall -> {
+                    val lambda = inst.method.fetch() as FoxLambda
+                    val callee = methods.getValue(lambda.implementation)
+                    val target = inst.target.fetch()
+                    val parameters = mapOf(
+                        "captured" to lambda.captured,
+                        "params" to FoxTuple(inst.params.map { it.fetch() }),
+                    )
+                    call(callee, target, parameters)
+                }
+            }
+        }
+        
+        private fun call(callee: FoxMethodImplementation, target: FoxEntity, parameters: Map<String, FoxEntity>) {
+            when (callee) {
+                is FoxBuiltInMethodImplementation -> callee.invoke(this, target, parameters)
+                is FoxCustomizedMethodImplementation -> {
+                    stack += StackFrame(
+                        method = callee,
+                        thisEntity = target,
+                        parameters = parameters,
+                    )
+                }
+            }
+        }
+        
+        fun execute(jump: FoxJump) {
+            when (jump) {
+                is JumpGoto -> switchBlock(jump.block)
+                is JumpBranch -> {
+                    val condition = jump.condition.fetch() as FoxBool
+                    switchBlock(if (condition.value) jump.thenBlock else jump.elseBlock)
+                }
+                is JumpReturn -> {
+                    stack.removeLast()
+                    val top = stack.lastOrNull() ?: return
+                    top.returnEntity = jump.value.fetch()
+                }
+            }
         }
     }
     
@@ -123,16 +153,17 @@ class Emulator {
         private fun MutableSet<Int>.collectReferences(value: FoxEntity) {
             when (value) {
                 is FoxPrimitive -> {}
-                is FoxTuple -> value.components.forEach { collectReferences(it) }
                 is FoxArray -> value.elements.forEach { collectReferences(it) }
+                is FoxTuple -> value.components.forEach { collectReferences(it) }
                 is FoxStruct -> value.fields.values.forEach { collectReferences(it) }
                 is FoxEnum -> collectReferences(value.value)
                 is FoxRef -> if (add(value.referent)) collectReferences(values[value.referent] ?: error("Invalid reference"))
+                is FoxLambda -> collectReferences(value.captured)
             }
         }
     }
     
-    private fun FoxBuiltInMethodImplementation.invoke(target: FoxEntity, params: Map<String, FoxEntity>): FoxEntity = when (this) {
+    private fun FoxBuiltInMethodImplementation.invoke(frame: StackFrame, target: FoxEntity, params: Map<String, FoxEntity>): FoxEntity = when (this) {
         ByteToByte -> target
         ShortToByte -> FoxByte((target as FoxShort).value.toByte())
         IntToByte -> FoxByte((target as FoxInt).value.toByte())
@@ -298,22 +329,34 @@ class Emulator {
         
         ByteDiv -> {
             val divisor = (params["that"] as FoxByte).value
-            if (divisor == 0.toByte()) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0.toByte()) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxByte(((target as FoxByte).value / divisor).toByte()))
         }
         ShortDiv -> {
             val divisor = (params["that"] as FoxShort).value
-            if (divisor == 0.toShort()) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0.toShort()) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxShort(((target as FoxShort).value / divisor).toShort()))
         }
         IntDiv -> {
             val divisor = (params["that"] as FoxInt).value
-            if (divisor == 0) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxInt((target as FoxInt).value / divisor))
         }
         LongDiv -> {
             val divisor = (params["that"] as FoxLong).value
-            if (divisor == 0L) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0L) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxLong((target as FoxLong).value / divisor))
         }
         FloatDiv -> FoxFloat((target as FoxFloat).value / (params["that"] as FoxFloat).value)
@@ -321,22 +364,34 @@ class Emulator {
         
         ByteRem -> {
             val divisor = (params["that"] as FoxByte).value
-            if (divisor == 0.toByte()) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0.toByte()) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxByte(((target as FoxByte).value % divisor).toByte()))
         }
         ShortRem -> {
             val divisor = (params["that"] as FoxShort).value
-            if (divisor == 0.toShort()) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0.toShort()) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxShort(((target as FoxShort).value % divisor).toShort()))
         }
         IntRem -> {
             val divisor = (params["that"] as FoxInt).value
-            if (divisor == 0) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxInt((target as FoxInt).value % divisor))
         }
         LongRem -> {
             val divisor = (params["that"] as FoxLong).value
-            if (divisor == 0L) FoxEnum("Exception", divideByZeroExceptionEntity)
+            if (divisor == 0L) {
+                frame.panic("Division by zero")
+                FoxUnit
+            }
             else FoxEnum("Result", FoxLong((target as FoxLong).value % divisor))
         }
         FloatRem -> FoxFloat((target as FoxFloat).value % (params["that"] as FoxFloat).value)

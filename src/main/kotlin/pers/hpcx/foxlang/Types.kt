@@ -20,9 +20,9 @@ data class FoxTupleType(val componentTypes: List<FoxConcreteType>) : FoxConcrete
 data class FoxStructType(val fields: Map<String, FoxConcreteType>) : FoxConcreteType
 data class FoxEnumType(val items: Map<String, FoxConcreteType>) : FoxConcreteType
 data class FoxRefType(val referentType: FoxConcreteType) : FoxConcreteType
-data class FoxMethodType(
+data class FoxLambdaType(
     val thisType: FoxConcreteType,
-    val parameters: Map<String, FoxConcreteType>,
+    val parameters: List<FoxConcreteType>,
     val returnType: FoxConcreteType,
 ) : FoxConcreteType
 
@@ -32,9 +32,9 @@ data class FoxGenericTupleType(val componentTypes: List<FoxType>) : FoxType
 data class FoxGenericStructType(val fields: Map<String, FoxType>) : FoxType
 data class FoxGenericEnumType(val items: Map<String, FoxType>) : FoxType
 data class FoxGenericRefType(val referentType: FoxType) : FoxType
-data class FoxGenericMethodType(
+data class FoxGenericLambdaType(
     val thisType: FoxType,
-    val parameters: Map<String, FoxType>,
+    val parameters: List<FoxType>,
     val returnType: FoxType,
 ) : FoxType
 
@@ -51,9 +51,9 @@ fun FoxType.collectGenerics(result: MutableSet<String> = mutableSetOf()): Set<St
         is FoxGenericStructType -> fields.values.forEach { it.collectGenerics(result) }
         is FoxGenericEnumType -> items.values.forEach { it.collectGenerics(result) }
         is FoxGenericRefType -> referentType.collectGenerics(result)
-        is FoxGenericMethodType -> {
+        is FoxGenericLambdaType -> {
             thisType.collectGenerics(result)
-            parameters.values.forEach { it.collectGenerics(result) }
+            parameters.forEach { it.collectGenerics(result) }
             returnType.collectGenerics(result)
         }
     }
@@ -106,21 +106,20 @@ fun FoxType.replaceGenerics(replacements: Map<String, FoxConcreteType>): FoxType
             if (newReferentType is FoxConcreteType) return FoxRefType(newReferentType)
             return FoxGenericRefType(newReferentType)
         }
-        is FoxGenericMethodType -> {
+        is FoxGenericLambdaType -> {
             val newThisType = thisType.replaceGenerics(replacements)
-            val newParameters = parameters.mapValues { it.value.replaceGenerics(replacements) }
+            val newParameters = parameters.map { it.replaceGenerics(replacements) }
             val newReturnType = returnType.replaceGenerics(replacements)
-            val newParameters2 = buildMap {
+            val newParameters2 = buildList {
                 newParameters.forEach {
-                    val value = it.value
-                    if (value is FoxConcreteType) put(it.key, value)
-                    else return FoxGenericMethodType(newThisType, newParameters, newReturnType)
+                    if (it is FoxConcreteType) add(it)
+                    else return FoxGenericLambdaType(newThisType, newParameters, newReturnType)
                 }
             }
             if (newThisType is FoxConcreteType && newReturnType is FoxConcreteType) {
-                return FoxMethodType(newThisType, newParameters2, newReturnType)
+                return FoxLambdaType(newThisType, newParameters2, newReturnType)
             }
-            return FoxGenericMethodType(newThisType, newParameters2, newReturnType)
+            return FoxGenericLambdaType(newThisType, newParameters2, newReturnType)
         }
     }
 }

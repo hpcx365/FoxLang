@@ -37,46 +37,55 @@ sealed interface FoxSlot
 sealed interface FoxFetchSlot : FoxSlot
 sealed interface FoxStoreSlot : FoxSlot
 
-data class FoxLocal(
+data class SlotConst(
+    val value: FoxEntity,
+) : FoxFetchSlot
+
+data class SlotLocal(
     val name: String,
 ) : FoxFetchSlot, FoxStoreSlot
 
-data class FoxGlobal(
+data class SlotGlobal(
     val name: String,
 ) : FoxFetchSlot, FoxStoreSlot
 
-object FoxThis : FoxFetchSlot
-object FoxIgnore : FoxStoreSlot
-object FoxReturnValue : FoxFetchSlot
+object SlotThis : FoxFetchSlot
+object SlotVoid : FoxStoreSlot
+object SlotReturnValue : FoxFetchSlot
 
-data class FoxLoad(
+data class InstLoad(
     val target: FoxStoreSlot,
     val entity: FoxEntity,
 ) : FoxInst
 
-data class FoxCopy(
+data class InstCopy(
     val target: FoxStoreSlot,
     val source: FoxFetchSlot,
 ) : FoxInst
 
-data class FoxCall(
+data class InstCall(
     val target: FoxFetchSlot,
     val params: Map<String, FoxFetchSlot>,
-    val result: FoxStoreSlot,
     val method: FoxMethodIdentifier,
 ) : FoxInst
 
-data class FoxGoto(
+data class InstLambdaCall(
+    val target: FoxFetchSlot,
+    val params: List<FoxFetchSlot>,
+    val method: FoxFetchSlot,
+) : FoxInst
+
+data class JumpGoto(
     val block: String,
 ) : FoxJump
 
-data class FoxBranch(
+data class JumpBranch(
     val condition: FoxFetchSlot,
     val thenBlock: String,
     val elseBlock: String,
 ) : FoxJump
 
-data class FoxReturn(
+data class JumpReturn(
     val value: FoxFetchSlot,
 ) : FoxJump
 
@@ -87,10 +96,12 @@ val mainMethodIdentifier = FoxMethodIdentifier(
     parameters = mapOf("args" to FoxArrayType(FoxStringType)),
 )
 
-val divideByZeroExceptionType = FoxStructType(mapOf("divideByZeroException" to FoxUnitType))
-val divideByZeroExceptionEntity = FoxStruct(mapOf("divideByZeroException" to FoxUnit))
-
-fun FoxConcreteType.mayFail(exceptionType: FoxConcreteType) = FoxEnumType(mapOf("Result" to this, "Exception" to exceptionType))
+val panicMethodIdentifier = FoxMethodIdentifier(
+    name = "panic",
+    generics = emptyMap(),
+    thisType = FoxUnitType,
+    parameters = mapOf("message" to FoxStringType),
+)
 
 enum class FoxBuiltInMethodImplementation(
     name: String,
@@ -271,17 +282,17 @@ enum class FoxBuiltInMethodImplementation(
     FloatMul("mul", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxFloatType),
     DoubleMul("mul", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxDoubleType),
     
-    ByteDiv("div", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxByteType.mayFail(divideByZeroExceptionType)),
-    ShortDiv("div", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxShortType.mayFail(divideByZeroExceptionType)),
-    IntDiv("div", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType.mayFail(divideByZeroExceptionType)),
-    LongDiv("div", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxLongType.mayFail(divideByZeroExceptionType)),
+    ByteDiv("div", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxByteType),
+    ShortDiv("div", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxShortType),
+    IntDiv("div", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType),
+    LongDiv("div", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxLongType),
     FloatDiv("div", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxFloatType),
     DoubleDiv("div", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxDoubleType),
     
-    ByteRem("rem", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxByteType.mayFail(divideByZeroExceptionType)),
-    ShortRem("rem", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxShortType.mayFail(divideByZeroExceptionType)),
-    IntRem("rem", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType.mayFail(divideByZeroExceptionType)),
-    LongRem("rem", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxLongType.mayFail(divideByZeroExceptionType)),
+    ByteRem("rem", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxByteType),
+    ShortRem("rem", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxShortType),
+    IntRem("rem", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType),
+    LongRem("rem", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxLongType),
     FloatRem("rem", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxFloatType),
     DoubleRem("rem", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxDoubleType),
     

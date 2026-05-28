@@ -2,28 +2,29 @@ package pers.hpcx.foxlang
 
 import java.util.*
 
-data class NodeProgram(
-    val usingAs: List<NodeUsingAs>,
-    val methods: List<NodeMethod>,
+data class NodeFile(
+    val elements: List<NodeFileElement>,
 )
 
-data class NodeUsingAs(
+sealed interface NodeFileElement
+
+data class NodeTypeAlias(
     val name: String,
-    val generics: SequencedSet<String>,
+    val generics: SequencedSet<String>?,
     val alias: NodeType,
-)
+) : NodeFileElement
 
-data class NodeMethod(
-    val signature: NodeMethodSignature,
-    val body: NodeStatement?,
-)
-
-data class NodeMethodSignature(
-    val generics: SequencedMap<String, FoxGenericConstraint>,
-    val thisType: NodeType,
+data class NodeMethodDefinition(
+    val generics: SequencedMap<String, NodeGenericConstraint>?,
+    val thisType: NodeType?,
     val name: String,
     val parameters: SequencedMap<String, NodeType>,
-    val returnType: NodeType,
+    val returnType: NodeType?,
+    val body: NodeStatement,
+) : NodeFileElement
+
+data class NodeGenericConstraint(
+    val match: NodeType?,
 )
 
 sealed interface NodeStatement
@@ -69,9 +70,9 @@ data class NodeRefType(
     val referentType: NodeType,
 ) : NodeType
 
-data class NodeMethodType(
+data class NodeLambdaType(
     val thisType: NodeType,
-    val parameters: SequencedMap<String, NodeType>,
+    val parameters: List<NodeType>,
     val returnType: NodeType,
 ) : NodeType
 
@@ -109,17 +110,27 @@ data class NodeComponentAccess(
 ) : NodeLeftExpression, NodeRightExpression
 
 data class NodeCall(
-    val target: NodeRightExpression,
+    val target: NodeRightExpression?,
     val name: String,
-    val generics: List<Pair<String?, NodeType>>,
+    val generics: List<Pair<String?, NodeType>>?,
     val parameters: List<Pair<String?, NodeRightExpression>>,
 ) : NodeRightExpression, NodeStatement
 
-data class NodeIndirectCall(
-    val target: NodeRightExpression,
-    val method: NodeRightExpression,
+data class NodeConstruct(
+    val type: NodeType,
     val parameters: List<Pair<String?, NodeRightExpression>>,
-)
+) : NodeRightExpression, NodeStatement
+
+data class NodeLambda(
+    val parameters: List<Pair<String, NodeType?>>,
+    val body: NodeStatement,
+) : NodeRightExpression
+
+data class NodeLambdaCall(
+    val target: NodeRightExpression?,
+    val method: NodeRightExpression,
+    val parameters: List<NodeRightExpression>,
+) : NodeRightExpression, NodeStatement
 
 data class NodeIf(
     val label: String?,
@@ -127,6 +138,17 @@ data class NodeIf(
     val thenBody: NodeStatement,
     val elseBody: NodeStatement?,
 ) : NodeRightExpression, NodeStatement
+
+data class NodeWhen(
+    val label: String?,
+    val value: NodeRightExpression,
+    val cases: List<NodeCase>,
+) : NodeRightExpression, NodeStatement
+
+data class NodeCase(
+    val conditions: List<NodeRightExpression>,
+    val body: NodeStatement,
+)
 
 data class NodeWhile(
     val label: String?,
@@ -140,29 +162,12 @@ data class NodeDoWhile(
     val condition: NodeRightExpression,
 ) : NodeStatement
 
-data class NodeWhen(
-    val label: String?,
-    val value: NodeRightExpression,
-    val cases: List<NodeCase>,
-    val elseBody: NodeStatement?,
-) : NodeStatement
-
-data class NodeCase(
-    val conditions: List<NodeRightExpression>,
-    val body: NodeStatement,
-)
-
 data class NodeBreak(
     val label: String?,
 ) : NodeStatement
 
 data class NodeContinue(
     val label: String?,
-) : NodeStatement
-
-data class NodeAlso(
-    val body: NodeStatement,
-    val also: NodeStatement,
 ) : NodeStatement
 
 data class NodeYield(
@@ -191,15 +196,15 @@ object NodeOrOperator : NodeBinaryOperator
 object NodeXorOperator : NodeBinaryOperator
 object NodeShlOperator : NodeBinaryOperator
 object NodeShrOperator : NodeBinaryOperator
-object NodeShrUnsignedOperator : NodeBinaryOperator
-object NodeEqualOperator : NodeBinaryOperator
-object NodeNotEqualOperator : NodeBinaryOperator
-object NodeLessOperator : NodeBinaryOperator
-object NodeGreaterOperator : NodeBinaryOperator
-object NodeLessOrEqualOperator : NodeBinaryOperator
-object NodeGreaterOrEqualOperator : NodeBinaryOperator
-object NodeShortCircuitAndOperator : NodeBinaryOperator
-object NodeShortCircuitOrOperator : NodeBinaryOperator
+object NodeUshrOperator : NodeBinaryOperator
+object NodeEqOperator : NodeBinaryOperator
+object NodeNeqOperator : NodeBinaryOperator
+object NodeLtOperator : NodeBinaryOperator
+object NodeGtOperator : NodeBinaryOperator
+object NodeLeOperator : NodeBinaryOperator
+object NodeGeOperator : NodeBinaryOperator
+object NodeAndAndOperator : NodeBinaryOperator
+object NodeOrOrOperator : NodeBinaryOperator
 
 object NodePlainAssignOperator : NodeAssignOperator
 object NodeAddAssignOperator : NodeAssignOperator
@@ -210,31 +215,8 @@ object NodeRemAssignOperator : NodeAssignOperator
 object NodeAndAssignOperator : NodeAssignOperator
 object NodeOrAssignOperator : NodeAssignOperator
 object NodeXorAssignOperator : NodeAssignOperator
-object NodeShortCircuitAndAssignOperator : NodeAssignOperator
-object NodeShortCircuitOrAssignOperator : NodeAssignOperator
+object NodeAndAndAssignOperator : NodeAssignOperator
+object NodeOrOrAssignOperator : NodeAssignOperator
 object NodeShlAssignOperator : NodeAssignOperator
 object NodeShrAssignOperator : NodeAssignOperator
-object NodeShrUnsignedAssignOperator : NodeAssignOperator
-
-val NodeBinaryOperator.priority: Int
-    get() = when (this) {
-        NodeMulOperator -> 0
-        NodeDivOperator -> 0
-        NodeRemOperator -> 0
-        NodeAddOperator -> 1
-        NodeSubOperator -> 1
-        NodeShlOperator -> 2
-        NodeShrOperator -> 2
-        NodeShrUnsignedOperator -> 2
-        NodeGreaterOperator -> 3
-        NodeGreaterOrEqualOperator -> 3
-        NodeLessOperator -> 3
-        NodeLessOrEqualOperator -> 3
-        NodeEqualOperator -> 4
-        NodeNotEqualOperator -> 4
-        NodeAndOperator -> 5
-        NodeXorOperator -> 6
-        NodeOrOperator -> 7
-        NodeShortCircuitAndOperator -> 8
-        NodeShortCircuitOrOperator -> 9
-    }
+object NodeUshrAssignOperator : NodeAssignOperator
