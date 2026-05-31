@@ -4,6 +4,7 @@ sealed interface FoxType
 sealed interface FoxConcreteType : FoxType
 sealed interface FoxPrimitiveType : FoxConcreteType
 
+object FoxVoidType : FoxPrimitiveType
 object FoxUnitType : FoxPrimitiveType
 object FoxBoolType : FoxPrimitiveType
 object FoxByteType : FoxPrimitiveType

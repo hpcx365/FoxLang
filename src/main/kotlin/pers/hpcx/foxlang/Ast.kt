@@ -27,19 +27,7 @@ data class NodeGenericConstraint(
     val match: NodeType?,
 )
 
-sealed interface NodeStatement
-
 sealed interface NodeType
-sealed interface NodeLeftExpression
-sealed interface NodeRightExpression
-
-data class NodeEntity(
-    val value: FoxEntity,
-) : NodeRightExpression
-
-data class NodeSymbol(
-    val name: String,
-) : NodeLeftExpression, NodeRightExpression
 
 data class NodePrimitiveType(
     val type: FoxPrimitiveType,
@@ -76,90 +64,120 @@ data class NodeLambdaType(
     val returnType: NodeType,
 ) : NodeType
 
+sealed interface NodeStatement
+
+data class NodeEntity(
+    val value: FoxEntity,
+) : NodeStatement
+
+data class NodeFormattedString(
+    val parts: List<NodeFormattedStringPart>,
+    val isRaw: Boolean = false,
+) : NodeStatement
+
+sealed interface NodeFormattedStringPart
+
+data class NodeFormattedText(
+    val text: String,
+) : NodeFormattedStringPart
+
+data class NodeFormattedExpression(
+    val expression: NodeStatement,
+) : NodeFormattedStringPart
+
+data class NodeSymbol(
+    val name: String,
+) : NodeStatement
+
 data class NodeBlock(
     val label: String?,
     val statements: List<NodeStatement>,
-) : NodeRightExpression, NodeStatement
+) : NodeStatement
 
 data class NodeUnary(
     val operator: NodeUnaryOperator,
-    val right: NodeRightExpression,
-) : NodeRightExpression
+    val right: NodeStatement,
+) : NodeStatement
 
 data class NodeBinary(
-    val left: NodeRightExpression,
+    val left: NodeStatement,
     val operator: NodeBinaryOperator,
-    val right: NodeRightExpression,
-) : NodeRightExpression
+    val right: NodeStatement,
+) : NodeStatement
 
 data class NodeAssign(
-    val left: NodeLeftExpression,
+    val left: NodeStatement,
     val operator: NodeAssignOperator,
-    val right: NodeRightExpression,
+    val right: NodeStatement,
     val beforeEvaluation: Boolean,
-) : NodeRightExpression, NodeStatement
+) : NodeStatement
+
+data class NodeTypeBinding(
+    val name: String,
+    val type: NodeType,
+) : NodeStatement
 
 data class NodeFieldAccess(
-    val target: NodeRightExpression,
+    val target: NodeStatement,
     val name: String,
-) : NodeLeftExpression, NodeRightExpression
+) : NodeStatement
 
 data class NodeComponentAccess(
-    val target: NodeRightExpression,
-    val index: NodeRightExpression,
-) : NodeLeftExpression, NodeRightExpression
+    val target: NodeStatement,
+    val index: Int,
+) : NodeStatement
 
 data class NodeCall(
-    val target: NodeRightExpression?,
+    val target: NodeStatement?,
     val name: String,
     val generics: List<Pair<String?, NodeType>>?,
-    val parameters: List<Pair<String?, NodeRightExpression>>,
-) : NodeRightExpression, NodeStatement
+    val parameters: List<Pair<String?, NodeStatement>>,
+) : NodeStatement
 
 data class NodeConstruct(
     val type: NodeType,
-    val parameters: List<Pair<String?, NodeRightExpression>>,
-) : NodeRightExpression, NodeStatement
+    val parameters: List<Pair<String?, NodeStatement>>,
+) : NodeStatement
 
 data class NodeLambda(
     val parameters: List<Pair<String, NodeType?>>,
     val body: NodeStatement,
-) : NodeRightExpression
+) : NodeStatement
 
 data class NodeLambdaCall(
-    val target: NodeRightExpression?,
-    val method: NodeRightExpression,
-    val parameters: List<NodeRightExpression>,
-) : NodeRightExpression, NodeStatement
+    val target: NodeStatement?,
+    val method: NodeStatement,
+    val parameters: List<NodeStatement>,
+) : NodeStatement
 
 data class NodeIf(
     val label: String?,
-    val condition: NodeRightExpression,
+    val condition: NodeStatement,
     val thenBody: NodeStatement,
     val elseBody: NodeStatement?,
-) : NodeRightExpression, NodeStatement
+) : NodeStatement
 
 data class NodeWhen(
     val label: String?,
-    val value: NodeRightExpression,
+    val value: NodeStatement?,
     val cases: List<NodeCase>,
-) : NodeRightExpression, NodeStatement
+) : NodeStatement
 
 data class NodeCase(
-    val conditions: List<NodeRightExpression>,
+    val conditions: List<NodeStatement>,
     val body: NodeStatement,
 )
 
 data class NodeWhile(
     val label: String?,
-    val condition: NodeRightExpression,
+    val condition: NodeStatement,
     val body: NodeStatement,
 ) : NodeStatement
 
 data class NodeDoWhile(
     val label: String?,
     val body: NodeStatement,
-    val condition: NodeRightExpression,
+    val condition: NodeStatement,
 ) : NodeStatement
 
 data class NodeBreak(
@@ -172,11 +190,11 @@ data class NodeContinue(
 
 data class NodeYield(
     val label: String?,
-    val value: NodeRightExpression,
+    val value: NodeStatement,
 ) : NodeStatement
 
 data class NodeReturn(
-    val value: NodeRightExpression?,
+    val value: NodeStatement?,
 ) : NodeStatement
 
 sealed interface NodeUnaryOperator
@@ -207,6 +225,7 @@ object NodeAndAndOperator : NodeBinaryOperator
 object NodeOrOrOperator : NodeBinaryOperator
 
 object NodePlainAssignOperator : NodeAssignOperator
+object NodeTypeBindingAssignOperator : NodeAssignOperator
 object NodeAddAssignOperator : NodeAssignOperator
 object NodeSubAssignOperator : NodeAssignOperator
 object NodeMulAssignOperator : NodeAssignOperator
