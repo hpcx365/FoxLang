@@ -1,6 +1,8 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.utils.*
+import pers.hpcx.foxlang.frontend.parser.*
+import pers.hpcx.foxlang.runtime.*
+import pers.hpcx.foxlang.types.*
 import java.util.*
 
 private val Word = node<String>().name("Word")
@@ -24,9 +26,9 @@ private val DecDouble = node<String>().name("DecDouble")
 private val HexDouble = node<String>().name("HexDouble")
 private val FormattedStringTemplateLiteral = node<FormattedStringTemplate>().name("FormattedStringTemplateLiteral")
 
-private val FormalParameter = node<String>().pair(node<NodeType>()).name("FormalParameter")
-private val RawFormalParameterList = node<String>().pair(node<NodeType>()).list().name("RawFormalParameterList")
-private val FormalParameterList = node<String>().seqMap(node<NodeType>()).name("FormalParameterList")
+private val FormalParameter = node<NodeFormalParameter>().name("FormalParameter")
+private val RawFormalParameterList = node<NodeFormalParameter>().list().name("RawFormalParameterList")
+private val FormalParameterList = node<NodeFormalParameter>().list().name("FormalParameterList")
 
 private val ActualParameter = node<Pair<String?, NodeStatement>>().name("ActualParameter")
 private val ActualParameterList = ActualParameter.list().name("ActualParameterList")
@@ -49,9 +51,13 @@ private val NamedActualGenericParameterList = node<String>().map(node<NodeType>(
 
 private val AnonymousActualGenericParameterList = node<NodeType>().list().name("AnonymousActualGenericParameterList")
 
-private val StructFieldTypeParameter = node<String>().pair(node<NodeType>()).name("StructFieldTypeParameter")
-private val RawStructFieldTypeParameterList = node<String>().pair(node<NodeType>()).list().name("RawStructFieldTypeParameterList")
-private val StructFieldTypeParameterList = node<String>().seqMap(node<NodeType>()).name("StructFieldTypeParameterList")
+private val TupleTypeItem = node<NodeTupleItem>().name("TupleTypeItem")
+private val RawTupleTypeItemList = node<NodeTupleItem>().list().name("RawTupleTypeItemList")
+private val TupleTypeItemList = node<NodeTupleItem>().list().name("TupleTypeItemList")
+
+private val StructTypeItem = node<NodeStructItem>().name("StructTypeItem")
+private val RawStructTypeItemList = node<NodeStructItem>().list().name("RawStructTypeItemList")
+private val StructTypeItemList = node<NodeStructItem>().list().name("StructTypeItemList")
 
 private val EnumItemTypeParameter = node<String>().pair(node<NodeType>()).name("EnumItemTypeParameter")
 private val RawEnumItemTypeParameterList = node<String>().pair(node<NodeType>()).list().name("RawEnumItemTypeParameterList")
@@ -96,6 +102,8 @@ private val IfCore = node<ParsedIfCore>().name("IfCore")
 private val WhileCore = node<ParsedWhileCore>().name("WhileCore")
 private val DoWhileCore = node<ParsedDoWhileCore>().name("DoWhileCore")
 private val WhenCore = node<ParsedWhenCore>().name("WhenCore")
+private val GenForHead = node<ParsedGenForHead>().name("GenForHead")
+private val GenForCore = node<NodeGenFor>().name("GenForCore")
 
 private val ThisTypeQualifier = node<NodeType>().name("ThisTypeQualifier")
 private val ReturnTypeClause = node<NodeType>().name("ReturnTypeClause")
@@ -103,14 +111,14 @@ private val MethodHead = node<ParsedMethodHead>().name("MethodHead")
 private val FileElementList = node<NodeFileElement>().list().name("FileElementList")
 
 private val ReservedKeywords = setOf(
-    "const", "type", "def", "if", "else", "when", "new", "yield", "return", "for",
+    "const", "type", "def", "if", "else", "when", "new", "yield", "return", "for", "genfor", "in",
     "do", "while", "break", "continue", "try", "finally", "import", "unit", "true", "false",
     
     "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char",
-    "String", "Array", "Tuple", "Struct", "Enum", "Ref", "Lambda",
+    "String", "Array", "Tuple", "Named", "Struct", "Denamed", "Enum", "Ref", "Lambda",
 )
 
-val FoxProductions = buildList {
+private val FoxProductions = buildList {
     addAll(fixedTokens(*ReservedKeywords.toTypedArray()))
     
     addAll(
@@ -271,11 +279,22 @@ val FoxProductions = buildList {
                 if (it.size != 1) throw ParseException("Array type must have exactly one generic parameter")
                 NodeArrayType(it.first())
             },
-            serial(BuiltInTypeExpression, token("Tuple"), AnonymousActualGenericParameterList) { _, it ->
+            serial(BuiltInTypeExpression, token("Tuple"), TupleTypeItemList) { _, it ->
                 NodeTupleType(it)
             },
-            serial(BuiltInTypeExpression, token("Struct"), StructFieldTypeParameterList) { _, it ->
+            serial(BuiltInTypeExpression, token("Named"), AnonymousActualGenericParameterList) { _, it ->
+                if (it.size != 1) throw ParseException("Named type must have exactly one generic parameter")
+                NodeNamedProjectionType(it.first())
+            },
+            serial(BuiltInTypeExpression, token("Struct"), token("<"), token("*"), token(">")) { _, _, _, _ ->
+                NodeStructWildcardType()
+            },
+            serial(BuiltInTypeExpression, token("Struct"), StructTypeItemList) { _, it ->
                 NodeStructType(it)
+            },
+            serial(BuiltInTypeExpression, token("Denamed"), AnonymousActualGenericParameterList) { _, it ->
+                if (it.size != 1) throw ParseException("Denamed type must have exactly one generic parameter")
+                NodeDenamedProjectionType(it.first())
             },
             serial(BuiltInTypeExpression, token("Enum"), EnumItemTypeParameterList) { _, it ->
                 NodeEnumType(it)
@@ -297,11 +316,14 @@ val FoxProductions = buildList {
             },
             serial(node<NodeType>(), NamedTypeExpression) { it },
             
-            serial(FormalParameter, IdentifierColon, node<NodeType>()) { name, type -> name to type },
+            serial(TupleTypeItem, node<NodeType>()) { type -> NodeTupleTypeItem(type) },
+            serial(TupleTypeItem, token("*"), node<NodeType>()) { _, type -> NodeTupleSpreadItem(type) },
+            listLike(TupleTypeItemList, token("<"), TupleTypeItem, token(","), token(">")),
+            
+            serial(FormalParameter, IdentifierColon, node<NodeType>()) { name, type -> NodeNamedFormalParameter(name, type) },
+            serial(FormalParameter, token("*"), node<NodeType>()) { _, type -> NodeSplatFormalParameter(type) },
             listLike(RawFormalParameterList, token("("), FormalParameter, token(","), token(")")),
-            serial(FormalParameterList, RawFormalParameterList) {
-                linkedSequencedMap(it, "parameter")
-            },
+            serial(FormalParameterList, RawFormalParameterList) { it },
             
             serial(ActualParameter, node<NodeStatement>()) { null to it },
             serial(ActualParameter, IdentifierEqual, node<NodeStatement>()) { name, value -> name to value },
@@ -327,9 +349,9 @@ val FoxProductions = buildList {
             
             listLike(AnonymousActualGenericParameterList, token("<"), node<NodeType>(), token(","), token(">")),
             
-            serial(StructFieldTypeParameter, IdentifierColon, node<NodeType>()) { name, type -> name to type },
-            listLike(RawStructFieldTypeParameterList, token("<"), StructFieldTypeParameter, token(","), token(">")),
-            serial(StructFieldTypeParameterList, RawStructFieldTypeParameterList) { linkedSequencedMap(it, "struct field type parameter") },
+            serial(StructTypeItem, IdentifierColon, node<NodeType>()) { name, type -> NodeStructFieldItem(name, type) },
+            serial(StructTypeItem, token("*"), node<NodeType>()) { _, type -> NodeStructSpreadItem(type) },
+            listLike(StructTypeItemList, token("<"), StructTypeItem, token(","), token(">")),
             
             serial(EnumItemTypeParameter, TypeNameEqual, node<NodeType>()) { name, type -> name to type },
             listLike(RawEnumItemTypeParameterList, token("<"), EnumItemTypeParameter, token(","), token(">")),
@@ -499,6 +521,24 @@ val FoxProductions = buildList {
                 NodeDoWhile(label, core.body, core.condition)
             },
             
+            serial(
+                GenForHead,
+                token("genfor"),
+                token("("),
+                Identifier,
+                token(":"),
+                TypeName,
+                token("in"),
+                node<NodeType>(),
+                token(")"),
+            ) { _, _, valueName, _, typeName, _, targetType, _ ->
+                ParsedGenForHead(valueName, typeName, targetType)
+            },
+            serial(GenForCore, GenForHead, node<NodeStatement>()) { head, body ->
+                NodeGenFor(head.valueName, head.typeName, head.targetType, body)
+            },
+            serial(node<NodeStatement>(), GenForCore) { it },
+            
             listLike(
                 WhenCaseConditionList,
                 null,
@@ -628,6 +668,98 @@ val FoxProductions = buildList {
     )
 }
 
+val FoxGrammar = Grammar(FoxProductions)
+
+private val PrimitiveTypeKeywords = setOf(
+    "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char", "String",
+)
+
+private val BuiltInTypeKeywords = setOf(
+    "Array", "Tuple", "Named", "Struct", "Denamed", "Enum", "Ref", "Lambda",
+)
+
+private fun SourceScanner.plainTextAt(cursor: Cursor): String? = (this[cursor] as? PlainFragment)?.text
+
+private fun SourceScanner.isIdentifierStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor) ?: return false
+    return text.firstOrNull() in 'a'..'z' && text !in ReservedKeywords
+}
+
+private fun SourceScanner.isValueWordStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor) ?: return false
+    return text == "unit" || text == "true" || text == "false" || text.firstOrNull() in '0'..'9'
+}
+
+private fun SourceScanner.isTypeNameStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor) ?: return false
+    return text.firstOrNull() in 'A'..'Z' && text !in ReservedKeywords
+}
+
+private fun SourceScanner.isPrimaryExpressionStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor)
+    return isIdentifierStart(cursor) ||
+        isValueWordStart(cursor) ||
+        isTypeNameStart(cursor) ||
+        text == "(" ||
+        this[cursor] is CharFragment ||
+        this[cursor] is StringFragment ||
+        this[cursor] is FormattedStringFragment
+}
+
+private fun SourceScanner.isPostfixExpressionStart(cursor: Cursor): Boolean {
+    return isPrimaryExpressionStart(cursor) || isNodeTypeStart(cursor)
+}
+
+private fun SourceScanner.isUnaryExpressionStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor)
+    return isPostfixExpressionStart(cursor) || text == "!" || text == "-"
+}
+
+private fun SourceScanner.isNodeTypeStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor) ?: return false
+    return text in PrimitiveTypeKeywords || text in BuiltInTypeKeywords || isTypeNameStart(cursor)
+}
+
+private fun SourceScanner.isNodeStatementStart(cursor: Cursor): Boolean {
+    val text = plainTextAt(cursor)
+    return isUnaryExpressionStart(cursor) ||
+        isTypeNameStart(cursor) ||
+        text in setOf("{", "if", "while", "do", "when", "break", "continue", "return", "yield", "#")
+        || text == "genfor"
+}
+
+val FoxStarters = StarterSpec(
+    firstSets = FoxGrammar.starterFirstSets,
+    refinements = mapOf(
+        Word to { cursor, _ -> plainTextAt(cursor)?.all { it.isWordChar() } == true },
+        Identifier to { cursor, _ -> isIdentifierStart(cursor) },
+        TypeName to { cursor, _ -> isTypeNameStart(cursor) },
+        Label to { cursor, _ -> plainTextAt(cursor) == "#" },
+        PrimaryExpression to { cursor, _ -> isPrimaryExpressionStart(cursor) },
+        PostfixExpression to { cursor, _ -> isPostfixExpressionStart(cursor) },
+        UnaryExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        MultiplicativeExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        AdditiveExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        ShiftExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        ComparisonExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        EqualityExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        BitAndExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        BitXorExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        BitOrExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        LogicalAndExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        LogicalOrExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        AssignableExpression to { cursor, _ -> isPostfixExpressionStart(cursor) },
+        AssignmentExpression to { cursor, _ -> isUnaryExpressionStart(cursor) },
+        node<NodeType>() to { cursor, _ -> isNodeTypeStart(cursor) },
+        PrimitiveTypeExpression to { cursor, _ -> plainTextAt(cursor) in PrimitiveTypeKeywords },
+        BuiltInTypeExpression to { cursor, _ -> plainTextAt(cursor) in BuiltInTypeKeywords },
+        NamedTypeExpression to { cursor, _ -> isTypeNameStart(cursor) },
+        node<NodeStatement>() to { cursor, _ -> isNodeStatementStart(cursor) },
+        ParenthesizedStatement to { cursor, _ -> plainTextAt(cursor) == "(" },
+        StatementBlock to { cursor, _ -> plainTextAt(cursor) == "{" },
+    ),
+)
+
 private data class ParsedIfCore(
     val condition: NodeStatement,
     val thenBody: NodeStatement,
@@ -653,7 +785,13 @@ private data class ParsedMethodHead(
     val generics: SequencedMap<String, NodeGenericConstraint>?,
     val thisType: NodeType?,
     val name: String,
-    val parameters: SequencedMap<String, NodeType>,
+    val parameters: List<NodeFormalParameter>,
+)
+
+private data class ParsedGenForHead(
+    val valueName: String,
+    val typeName: String,
+    val targetType: NodeType,
 )
 
 private fun fixedTokens(vararg texts: String): List<Production<*>> = texts.map { fixed(token(it), it) }
@@ -707,20 +845,22 @@ private val formattedExpressionCache = Collections.synchronizedMap(HashMap<Strin
 
 private fun parseFormattedExpression(source: String): NodeStatement {
     formattedExpressionCache[source]?.let { return it }
-    parseFully(
+    val report = FoxGrammar.parse(
         source = source,
-        productions = FoxProductions,
         root = AssignmentExpression,
         cursor = Cursor(0),
-    )?.let {
-        formattedExpressionCache[source] = it.node
-        return it.node
+        starters = FoxStarters,
+    )
+    val success = report.result as? Success<NodeStatement>
+    if (success != null && success.interval.end.fragIndex == report.scanner.fragments.size) {
+        formattedExpressionCache[source] = success.node
+        return success.node
     }
-    val run = parseWithDiagnostics(
+    val run = FoxGrammar.parseWithDiagnostics(
         source = source,
-        productions = FoxProductions,
         root = AssignmentExpression,
         cursor = Cursor(0),
+        starters = FoxStarters,
     )
     throw ParseException("Invalid formatted string expression '$source': ${run.stop.render().trim()}")
 }

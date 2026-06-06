@@ -1,4 +1,6 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.runtime
+
+import pers.hpcx.foxlang.types.*
 
 fun generateMethods(
     methods: Map<FoxMethodSignature, FoxMethodImplementation>,
@@ -14,8 +16,8 @@ fun generateMethods(
     }
     
     val thisType = identifier.thisType as FoxConcreteType
-    val generics = identifier.generics.mapValues { it.value as FoxConcreteType }
-    val parameters = identifier.parameters.mapValues { it.value as FoxConcreteType }
+    val generics = identifier.generics.mapValuesTo(LinkedHashMap()) { (_, value) -> value as FoxConcreteType }
+    val parameters = identifier.parameters.mapValuesTo(LinkedHashMap()) { (_, value) -> value as FoxConcreteType }
     
     val filteredMethods2 = filteredMethods.filterKeys {
         it.generics.all { (name, constraint) -> constraint.isSatisfiedBy(generics.getValue(name)) } &&
@@ -38,13 +40,14 @@ fun generateMethods(
 fun FoxGenericConstraint.isSatisfiedBy(type: FoxConcreteType): Boolean = when (this) {
     is FoxAnyConstraint -> true
     is FoxExactMatchConstraint -> type == this.type
+    is FoxStructWildcardConstraint -> type is FoxStructType
 }
 
 fun FoxMethodSignature.replaceGenerics(replacements: Map<String, FoxConcreteType>) = FoxMethodSignature(
     name = name,
-    generics = generics.mapValues { FoxExactMatchConstraint(replacements.getValue(it.key)) },
+    generics = generics.mapValuesTo(LinkedHashMap()) { (name, _) -> FoxExactMatchConstraint(replacements.getValue(name)) },
     thisType = thisType.replaceGenerics(replacements),
-    parameters = parameters.mapValues { it.value.replaceGenerics(replacements) },
+    parameters = parameters.mapValuesTo(LinkedHashMap()) { (_, value) -> value.replaceGenerics(replacements) },
     returnType = returnType.replaceGenerics(replacements),
     isInline = isInline,
 )
@@ -76,9 +79,9 @@ fun FoxInst.replaceGenerics(replacements: Map<String, FoxConcreteType>) = when (
 
 fun FoxMethodIdentifier.replaceGenerics(replacements: Map<String, FoxConcreteType>) = FoxMethodIdentifier(
     name = name,
-    generics = generics.mapValues { it.value.replaceGenerics(replacements) },
+    generics = generics.mapValuesTo(LinkedHashMap()) { (_, value) -> value.replaceGenerics(replacements) },
     thisType = thisType.replaceGenerics(replacements),
-    parameters = parameters.mapValues { it.value.replaceGenerics(replacements) },
+    parameters = parameters.mapValuesTo(LinkedHashMap()) { (_, value) -> value.replaceGenerics(replacements) },
 )
 
 fun FoxMethodImplementation.dependencies(result: MutableSet<FoxMethodIdentifier> = mutableSetOf()): Set<FoxMethodIdentifier> {

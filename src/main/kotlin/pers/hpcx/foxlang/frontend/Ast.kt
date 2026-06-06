@@ -1,5 +1,7 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.frontend
 
+import pers.hpcx.foxlang.runtime.FoxEntity
+import pers.hpcx.foxlang.types.FoxPrimitiveType
 import java.util.*
 
 data class NodeFile(
@@ -18,7 +20,7 @@ data class NodeMethodDefinition(
     val generics: SequencedMap<String, NodeGenericConstraint>?,
     val thisType: NodeType?,
     val name: String,
-    val parameters: SequencedMap<String, NodeType>,
+    val parameters: List<NodeFormalParameter>,
     val returnType: NodeType?,
     val body: NodeStatement,
 ) : NodeFileElement
@@ -26,6 +28,17 @@ data class NodeMethodDefinition(
 data class NodeGenericConstraint(
     val match: NodeType?,
 )
+
+sealed interface NodeFormalParameter
+
+data class NodeNamedFormalParameter(
+    val name: String,
+    val type: NodeType,
+) : NodeFormalParameter
+
+data class NodeSplatFormalParameter(
+    val type: NodeType,
+) : NodeFormalParameter
 
 sealed interface NodeType
 
@@ -42,12 +55,45 @@ data class NodeArrayType(
     val elementType: NodeType,
 ) : NodeType
 
+sealed interface NodeTupleItem
+
+data class NodeTupleTypeItem(
+    val type: NodeType,
+) : NodeTupleItem
+
+data class NodeTupleSpreadItem(
+    val type: NodeType,
+) : NodeTupleItem
+
 data class NodeTupleType(
-    val componentTypes: List<NodeType>,
+    val items: List<NodeTupleItem>,
 ) : NodeType
 
+data class NodeNamedProjectionType(
+    val baseType: NodeType,
+) : NodeType
+
+data class NodeStructWildcardType(
+    val wildcardToken: String = "*",
+) : NodeType
+
+sealed interface NodeStructItem
+
+data class NodeStructFieldItem(
+    val name: String,
+    val type: NodeType,
+) : NodeStructItem
+
+data class NodeStructSpreadItem(
+    val type: NodeType,
+) : NodeStructItem
+
 data class NodeStructType(
-    val fields: Map<String, NodeType>,
+    val items: List<NodeStructItem>,
+) : NodeType
+
+data class NodeDenamedProjectionType(
+    val baseType: NodeType,
 ) : NodeType
 
 data class NodeEnumType(
@@ -180,6 +226,13 @@ data class NodeDoWhile(
     val condition: NodeStatement,
 ) : NodeStatement
 
+data class NodeGenFor(
+    val valueName: String,
+    val typeName: String,
+    val targetType: NodeType,
+    val body: NodeStatement,
+) : NodeStatement
+
 data class NodeBreak(
     val label: String?,
 ) : NodeStatement
@@ -239,3 +292,4 @@ object NodeOrOrAssignOperator : NodeAssignOperator
 object NodeShlAssignOperator : NodeAssignOperator
 object NodeShrAssignOperator : NodeAssignOperator
 object NodeUshrAssignOperator : NodeAssignOperator
+

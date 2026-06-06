@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.utils
+package pers.hpcx.foxlang.frontend.parser
 
 import java.util.*
 import kotlin.reflect.KClass
@@ -143,6 +143,21 @@ fun <N> listLike(
     separator: NonTerminal<*>?,
     end: NonTerminal<*>?,
 ) = ListProduction(result, begin, element, separator, end)
+
+sealed interface StarterShape
+data class ExactToken(val text: String) : StarterShape
+data object WordToken : StarterShape
+data object CharLiteralToken : StarterShape
+data object StringLiteralToken : StarterShape
+data object FormattedStringLiteralToken : StarterShape
+data object EofToken : StarterShape
+
+typealias StarterRefinement = SourceScanner.(Cursor, NonTerminal<*>) -> Boolean
+
+data class StarterSpec(
+    val firstSets: Map<NonTerminal<*>, Set<StarterShape>>,
+    val refinements: Map<NonTerminal<*>, StarterRefinement> = emptyMap(),
+)
 
 sealed interface NonTerminal<N>
 data class ClassNonTerminal<N : Any>(val clazz: KClass<N>) : NonTerminal<N>
@@ -429,13 +444,13 @@ class FormattedStringLiteralProduction(
 
 class SerialProduction<N>(
     override val result: NonTerminal<N>,
-    val comps: List<NonTerminal<*>>,
+    val components: List<NonTerminal<*>>,
     val factory: (List<*>) -> N,
 ) : Production<N> {
     override fun update(scanner: SourceScanner, cursor: Cursor) {
         var current = cursor
         val results = mutableListOf<Any?>()
-        comps.forEach { comp ->
+        components.forEach { comp ->
             val result = scanner.parse(current, comp) ?: return
             results += result.node
             current = result.interval.end
@@ -464,7 +479,7 @@ class SerialProduction<N>(
     override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
         var current = cursor
         val details = mutableListOf<String>()
-        comps.forEachIndexed { index, comp ->
+        components.forEachIndexed { index, comp ->
             val begin = current
             when (val result = scanner.memoized(current, comp)) {
                 is Success<*> -> {
@@ -498,8 +513,8 @@ class SerialProduction<N>(
                 nonTerminal = this.result,
                 interval = result.interval,
                 message = "all components matched but factory/result failed: ${result.message}",
-                matchedParts = comps.size,
-                confidence = comps.size,
+                matchedParts = components.size,
+                confidence = components.size,
                 details = details,
             )
             else -> null
@@ -627,3 +642,25 @@ fun NonTerminal<*>.displayName(): String = when (this) {
     is MapNonTerminal<*, *> -> "Map<${key.displayName()}, ${value.displayName()}>"
     is SeqMapNonTerminal<*, *> -> "SeqMap<${key.displayName()}, ${value.displayName()}>"
 }
+
+fun Production<*>.displayName(): String = when (this) {
+    is FixedProduction -> "${result.displayName()} ::= '$string'"
+    is RegexProduction -> "${result.displayName()} ::= /${regex.pattern}/"
+    is CharLiteralProduction -> "${result.displayName()} ::= <char>"
+    is StringLiteralProduction -> "${result.displayName()} ::= <string>"
+    is FormattedStringLiteralProduction -> "${result.displayName()} ::= <formatted-string>"
+    is SerialProduction<*> -> "${result.displayName()} ::= ${components.joinToString(" ") { it.displayName() }}"
+    is ListProduction<*> -> buildString {
+        append(result.displayName())
+        append(" ::= list(")
+        append(begin?.displayName() ?: "null")
+        append(", ")
+        append(element.displayName())
+        append(", ")
+        append(separator?.displayName() ?: "null")
+        append(", ")
+        append(end?.displayName() ?: "null")
+        append(")")
+    }
+}
+

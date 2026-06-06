@@ -1,17 +1,20 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.runtime
+
+import pers.hpcx.foxlang.types.*
+import java.util.*
 
 data class FoxMethodIdentifier(
     val name: String,
-    val generics: Map<String, FoxType>,
+    val generics: SequencedMap<String, FoxType>,
     val thisType: FoxType,
-    val parameters: Map<String, FoxType>,
+    val parameters: SequencedMap<String, FoxType>,
 )
 
 data class FoxMethodSignature(
     val name: String,
-    val generics: Map<String, FoxGenericConstraint>,
+    val generics: SequencedMap<String, FoxGenericConstraint>,
     val thisType: FoxType,
-    val parameters: Map<String, FoxType>,
+    val parameters: SequencedMap<String, FoxType>,
     val returnType: FoxType,
     val isInline: Boolean,
 )
@@ -19,6 +22,11 @@ data class FoxMethodSignature(
 sealed interface FoxMethodImplementation
 
 sealed interface FoxNativeMethodImplementation : FoxMethodImplementation
+
+data class FoxSimpleNativeMethodImplementation(
+    val signature: FoxMethodSignature,
+    val invoke: (target: FoxEntity, params: SequencedMap<String, FoxEntity>) -> FoxEntity,
+) : FoxNativeMethodImplementation
 
 data class FoxCustomizedMethodImplementation(
     val startBlock: String,
@@ -65,7 +73,7 @@ data class InstCopy(
 
 data class InstCall(
     val target: FoxFetchSlot,
-    val params: Map<String, FoxFetchSlot>,
+    val params: SequencedMap<String, FoxFetchSlot>,
     val method: FoxMethodIdentifier,
 ) : FoxInst
 
@@ -91,16 +99,16 @@ data class JumpReturn(
 
 val mainMethodIdentifier = FoxMethodIdentifier(
     name = "main",
-    generics = emptyMap(),
+    generics = linkedMapOf(),
     thisType = FoxUnitType,
-    parameters = mapOf("args" to FoxArrayType(FoxStringType)),
+    parameters = linkedMapOf("args" to FoxArrayType(FoxStringType)),
 )
 
 val panicMethodIdentifier = FoxMethodIdentifier(
     name = "panic",
-    generics = emptyMap(),
+    generics = linkedMapOf(),
     thisType = FoxUnitType,
-    parameters = mapOf("message" to FoxStringType),
+    parameters = linkedMapOf("message" to FoxStringType),
 )
 
 enum class FoxBuiltInMethodImplementation(
@@ -111,9 +119,9 @@ enum class FoxBuiltInMethodImplementation(
     returnType: FoxConcreteType,
     val signature: FoxMethodSignature = FoxMethodSignature(
         name = name,
-        generics = generics.mapValues { FoxExactMatchConstraint(it.value) },
+        generics = generics.mapValuesTo(LinkedHashMap()) { (_, value) -> FoxExactMatchConstraint(value) },
         thisType = thisType,
-        parameters = parameters,
+        parameters = LinkedHashMap(parameters),
         returnType = returnType,
         isInline = true,
     ),
@@ -260,6 +268,14 @@ enum class FoxBuiltInMethodImplementation(
     FloatLte("lte", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxBoolType),
     DoubleLte("lte", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxBoolType),
     
+    ByteCompareTo("cmp", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxIntType),
+    ShortCompareTo("cmp", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxIntType),
+    IntCompareTo("cmp", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType),
+    LongCompareTo("cmp", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxIntType),
+    FloatCompareTo("cmp", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxIntType),
+    DoubleCompareTo("cmp", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxIntType),
+    StringCompareTo("cmp", emptyMap(), FoxStringType, mapOf("that" to FoxStringType), FoxIntType),
+    
     ByteAdd("add", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxByteType),
     ShortAdd("add", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxShortType),
     IntAdd("add", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType),
@@ -295,12 +311,5 @@ enum class FoxBuiltInMethodImplementation(
     LongRem("rem", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxLongType),
     FloatRem("rem", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxFloatType),
     DoubleRem("rem", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxDoubleType),
-    
-    ByteCompareTo("compareTo", emptyMap(), FoxByteType, mapOf("that" to FoxByteType), FoxIntType),
-    ShortCompareTo("compareTo", emptyMap(), FoxShortType, mapOf("that" to FoxShortType), FoxIntType),
-    IntCompareTo("compareTo", emptyMap(), FoxIntType, mapOf("that" to FoxIntType), FoxIntType),
-    LongCompareTo("compareTo", emptyMap(), FoxLongType, mapOf("that" to FoxLongType), FoxIntType),
-    FloatCompareTo("compareTo", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxIntType),
-    DoubleCompareTo("compareTo", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxIntType),
-    StringCompareTo("compareTo", emptyMap(), FoxStringType, mapOf("that" to FoxStringType), FoxIntType),
 }
+

@@ -1,6 +1,7 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.runtime
 
-import pers.hpcx.foxlang.FoxBuiltInMethodImplementation.*
+import pers.hpcx.foxlang.runtime.FoxBuiltInMethodImplementation.*
+import java.util.*
 
 class Interpreter {
     
@@ -8,15 +9,47 @@ class Interpreter {
     val stack = mutableListOf<StackFrame>()
     val globals = mutableMapOf<String, FoxEntity>()
     val methods = mutableMapOf<FoxMethodIdentifier, FoxMethodImplementation>()
+    var completedReturn: FoxEntity = FoxUnit
     
     fun run(arguments: Array<String>) {
         stack += StackFrame(
             method = methods.getValue(mainMethodIdentifier) as FoxCustomizedMethodImplementation,
             thisEntity = FoxUnit,
-            parameters = mapOf("args" to FoxArray(arguments.map { FoxString(it) })),
+            parameters = linkedMapOf("args" to FoxArray(arguments.map { FoxString(it) })),
         )
-        
+        runLoop()
+    }
+    
+    fun invoke(
+        identifier: FoxMethodIdentifier,
+        thisEntity: FoxEntity = FoxUnit,
+        parameters: SequencedMap<String, FoxEntity> = linkedMapOf(),
+    ): FoxEntity {
+        completedReturn = FoxUnit
+        when (val method = methods.getValue(identifier)) {
+            is FoxSimpleNativeMethodImplementation -> return method.invoke(thisEntity, parameters)
+            is FoxBuiltInMethodImplementation -> {
+                val frame = StackFrame(
+                    method = FoxCustomizedMethodImplementation(
+                        startBlock = "entry",
+                        blocks = linkedMapOf("entry" to FoxInstBlock(emptyList(), JumpReturn(SlotConst(FoxUnit)))),
+                    ),
+                    thisEntity = thisEntity,
+                    parameters = linkedMapOf(),
+                )
+                return method.invoke(frame, thisEntity, parameters)
+            }
+            is FoxCustomizedMethodImplementation -> {
+                stack += StackFrame(method, thisEntity, parameters)
+                runLoop()
+                return completedReturn
+            }
+        }
+    }
+    
+    private fun runLoop() {
         while (true) {
+            if (stack.isEmpty()) return
             val frame = stack.last()
             val block = frame.currentBlock
             if (frame.nextInst < block.instructions.size) {
@@ -60,7 +93,7 @@ class Interpreter {
             execute(
                 InstCall(
                     SlotConst(FoxUnit),
-                    mapOf("message" to SlotConst(FoxString(message))),
+                    linkedMapOf("message" to SlotConst(FoxString(message))),
                     panicMethodIdentifier,
                 ),
             )
@@ -73,7 +106,7 @@ class Interpreter {
                 is InstCall -> {
                     val callee = methods.getValue(inst.method)
                     val target = inst.target.fetch()
-                    val parameters = buildMap {
+                    val parameters = LinkedHashMap<String, FoxEntity>().apply {
                         inst.params.forEach { (name, slot) -> put(name, slot.fetch()) }
                     }
                     call(callee, target, parameters)
@@ -82,18 +115,21 @@ class Interpreter {
                     val lambda = inst.method.fetch() as FoxLambda
                     val callee = methods.getValue(lambda.implementation)
                     val target = inst.target.fetch()
-                    val parameters = mapOf(
-                        "captured" to lambda.captured,
-                        "params" to FoxTuple(inst.params.map { it.fetch() }),
-                    )
+                    val parameters = LinkedHashMap<String, FoxEntity>().apply {
+                        put("captured", lambda.captured)
+                        put("params", FoxTuple(inst.params.map { it.fetch() }))
+                    }
                     call(callee, target, parameters)
                 }
             }
         }
         
-        private fun call(callee: FoxMethodImplementation, target: FoxEntity, parameters: Map<String, FoxEntity>) {
+        private fun call(callee: FoxMethodImplementation, target: FoxEntity, parameters: SequencedMap<String, FoxEntity>) {
             when (callee) {
                 is FoxBuiltInMethodImplementation -> callee.invoke(this, target, parameters)
+                is FoxSimpleNativeMethodImplementation -> {
+                    returnEntity = callee.invoke(target, parameters)
+                }
                 is FoxCustomizedMethodImplementation -> {
                     stack += StackFrame(
                         method = callee,
@@ -112,9 +148,11 @@ class Interpreter {
                     switchBlock(if (condition.value) jump.thenBlock else jump.elseBlock)
                 }
                 is JumpReturn -> {
+                    val value = jump.value.fetch()
+                    completedReturn = value
                     stack.removeLast()
                     val top = stack.lastOrNull() ?: return
-                    top.returnEntity = jump.value.fetch()
+                    top.returnEntity = value
                 }
             }
         }
@@ -163,7 +201,7 @@ class Interpreter {
         }
     }
     
-    private fun FoxBuiltInMethodImplementation.invoke(frame: StackFrame, target: FoxEntity, params: Map<String, FoxEntity>): FoxEntity = when (this) {
+    private fun FoxBuiltInMethodImplementation.invoke(frame: StackFrame, target: FoxEntity, params: SequencedMap<String, FoxEntity>): FoxEntity = when (this) {
         ByteToByte -> target
         ShortToByte -> FoxByte((target as FoxShort).value.toByte())
         IntToByte -> FoxByte((target as FoxInt).value.toByte())
@@ -332,32 +370,28 @@ class Interpreter {
             if (divisor == 0.toByte()) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxByte(((target as FoxByte).value / divisor).toByte()))
+            } else FoxEnum("Result", FoxByte(((target as FoxByte).value / divisor).toByte()))
         }
         ShortDiv -> {
             val divisor = (params["that"] as FoxShort).value
             if (divisor == 0.toShort()) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxShort(((target as FoxShort).value / divisor).toShort()))
+            } else FoxEnum("Result", FoxShort(((target as FoxShort).value / divisor).toShort()))
         }
         IntDiv -> {
             val divisor = (params["that"] as FoxInt).value
             if (divisor == 0) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxInt((target as FoxInt).value / divisor))
+            } else FoxEnum("Result", FoxInt((target as FoxInt).value / divisor))
         }
         LongDiv -> {
             val divisor = (params["that"] as FoxLong).value
             if (divisor == 0L) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxLong((target as FoxLong).value / divisor))
+            } else FoxEnum("Result", FoxLong((target as FoxLong).value / divisor))
         }
         FloatDiv -> FoxFloat((target as FoxFloat).value / (params["that"] as FoxFloat).value)
         DoubleDiv -> FoxDouble((target as FoxDouble).value / (params["that"] as FoxDouble).value)
@@ -367,32 +401,28 @@ class Interpreter {
             if (divisor == 0.toByte()) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxByte(((target as FoxByte).value % divisor).toByte()))
+            } else FoxEnum("Result", FoxByte(((target as FoxByte).value % divisor).toByte()))
         }
         ShortRem -> {
             val divisor = (params["that"] as FoxShort).value
             if (divisor == 0.toShort()) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxShort(((target as FoxShort).value % divisor).toShort()))
+            } else FoxEnum("Result", FoxShort(((target as FoxShort).value % divisor).toShort()))
         }
         IntRem -> {
             val divisor = (params["that"] as FoxInt).value
             if (divisor == 0) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxInt((target as FoxInt).value % divisor))
+            } else FoxEnum("Result", FoxInt((target as FoxInt).value % divisor))
         }
         LongRem -> {
             val divisor = (params["that"] as FoxLong).value
             if (divisor == 0L) {
                 frame.panic("Division by zero")
                 FoxUnit
-            }
-            else FoxEnum("Result", FoxLong((target as FoxLong).value % divisor))
+            } else FoxEnum("Result", FoxLong((target as FoxLong).value % divisor))
         }
         FloatRem -> FoxFloat((target as FoxFloat).value % (params["that"] as FoxFloat).value)
         DoubleRem -> FoxDouble((target as FoxDouble).value % (params["that"] as FoxDouble).value)

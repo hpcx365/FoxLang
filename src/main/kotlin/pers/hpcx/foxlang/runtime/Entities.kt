@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.runtime
 
 sealed interface FoxEntity
 sealed interface FoxPrimitive : FoxEntity
@@ -20,3 +20,4 @@ data class FoxStruct(val fields: Map<String, FoxEntity>) : FoxEntity
 data class FoxEnum(val name: String, val value: FoxEntity) : FoxEntity
 data class FoxRef(val referent: Int) : FoxEntity
 data class FoxLambda(val captured: FoxTuple, val implementation: FoxMethodIdentifier) : FoxEntity
+

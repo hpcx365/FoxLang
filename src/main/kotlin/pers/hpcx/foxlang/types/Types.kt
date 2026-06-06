@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang
+package pers.hpcx.foxlang.types
 
 sealed interface FoxType
 sealed interface FoxConcreteType : FoxType
@@ -18,7 +18,17 @@ object FoxStringType : FoxPrimitiveType
 
 data class FoxArrayType(val elementType: FoxConcreteType) : FoxConcreteType
 data class FoxTupleType(val componentTypes: List<FoxConcreteType>) : FoxConcreteType
+sealed interface FoxTupleTemplateItem
+data class FoxTupleTypeTemplateItem(val type: FoxType) : FoxTupleTemplateItem
+data class FoxTupleSpreadTemplateItem(val type: FoxType) : FoxTupleTemplateItem
+data class FoxTupleTemplateType(val items: List<FoxTupleTemplateItem>) : FoxType
+data class FoxNamedProjectionType(val baseType: FoxType) : FoxType
 data class FoxStructType(val fields: Map<String, FoxConcreteType>) : FoxConcreteType
+sealed interface FoxStructTemplateItem
+data class FoxStructFieldTemplateItem(val name: String, val type: FoxType) : FoxStructTemplateItem
+data class FoxStructSpreadTemplateItem(val type: FoxType) : FoxStructTemplateItem
+data class FoxStructTemplateType(val items: List<FoxStructTemplateItem>) : FoxType
+data class FoxDenamedProjectionType(val baseType: FoxType) : FoxType
 data class FoxEnumType(val items: Map<String, FoxConcreteType>) : FoxConcreteType
 data class FoxRefType(val referentType: FoxConcreteType) : FoxConcreteType
 data class FoxLambdaType(
@@ -42,6 +52,19 @@ data class FoxGenericLambdaType(
 sealed interface FoxGenericConstraint
 object FoxAnyConstraint : FoxGenericConstraint
 data class FoxExactMatchConstraint(val type: FoxConcreteType) : FoxGenericConstraint
+object FoxStructWildcardConstraint : FoxGenericConstraint
+
+sealed interface FoxSemanticPlaceholder
+
+data class FoxSplatParameterPlaceholder(
+    val type: FoxType,
+) : FoxSemanticPlaceholder
+
+data class FoxGenForPlaceholder(
+    val valueName: String,
+    val typeName: String,
+    val targetType: FoxType,
+) : FoxSemanticPlaceholder
 
 fun FoxType.collectGenerics(result: MutableSet<String> = mutableSetOf()): Set<String> {
     when (this) {
@@ -49,7 +72,21 @@ fun FoxType.collectGenerics(result: MutableSet<String> = mutableSetOf()): Set<St
         is FoxGenericType -> result.add(name)
         is FoxGenericArrayType -> elementType.collectGenerics(result)
         is FoxGenericTupleType -> componentTypes.forEach { it.collectGenerics(result) }
+        is FoxTupleTemplateType -> items.forEach { item ->
+            when (item) {
+                is FoxTupleTypeTemplateItem -> item.type.collectGenerics(result)
+                is FoxTupleSpreadTemplateItem -> item.type.collectGenerics(result)
+            }
+        }
+        is FoxNamedProjectionType -> baseType.collectGenerics(result)
         is FoxGenericStructType -> fields.values.forEach { it.collectGenerics(result) }
+        is FoxStructTemplateType -> items.forEach { item ->
+            when (item) {
+                is FoxStructFieldTemplateItem -> item.type.collectGenerics(result)
+                is FoxStructSpreadTemplateItem -> item.type.collectGenerics(result)
+            }
+        }
+        is FoxDenamedProjectionType -> baseType.collectGenerics(result)
         is FoxGenericEnumType -> items.values.forEach { it.collectGenerics(result) }
         is FoxGenericRefType -> referentType.collectGenerics(result)
         is FoxGenericLambdaType -> {
@@ -80,6 +117,19 @@ fun FoxType.replaceGenerics(replacements: Map<String, FoxConcreteType>): FoxType
             }
             return FoxTupleType(newElementTypes2)
         }
+        is FoxTupleTemplateType -> {
+            return FoxTupleTemplateType(
+                items.map { item ->
+                    when (item) {
+                        is FoxTupleTypeTemplateItem -> FoxTupleTypeTemplateItem(item.type.replaceGenerics(replacements))
+                        is FoxTupleSpreadTemplateItem -> FoxTupleSpreadTemplateItem(item.type.replaceGenerics(replacements))
+                    }
+                },
+            )
+        }
+        is FoxNamedProjectionType -> {
+            return FoxNamedProjectionType(baseType.replaceGenerics(replacements))
+        }
         is FoxGenericStructType -> {
             val newFields = fields.mapValues { it.value.replaceGenerics(replacements) }
             val newFields2 = buildMap {
@@ -90,6 +140,19 @@ fun FoxType.replaceGenerics(replacements: Map<String, FoxConcreteType>): FoxType
                 }
             }
             return FoxStructType(newFields2)
+        }
+        is FoxStructTemplateType -> {
+            return FoxStructTemplateType(
+                items.map { item ->
+                    when (item) {
+                        is FoxStructFieldTemplateItem -> FoxStructFieldTemplateItem(item.name, item.type.replaceGenerics(replacements))
+                        is FoxStructSpreadTemplateItem -> FoxStructSpreadTemplateItem(item.type.replaceGenerics(replacements))
+                    }
+                },
+            )
+        }
+        is FoxDenamedProjectionType -> {
+            return FoxDenamedProjectionType(baseType.replaceGenerics(replacements))
         }
         is FoxGenericEnumType -> {
             val newFields = items.mapValues { it.value.replaceGenerics(replacements) }
@@ -123,4 +186,11 @@ fun FoxType.replaceGenerics(replacements: Map<String, FoxConcreteType>): FoxType
             return FoxGenericLambdaType(newThisType, newParameters2, newReturnType)
         }
     }
+}
+
+fun FoxType.resolveStructuralProjections(
+    allocateNamedField: ((index: Int) -> String)? = null,
+): FoxType = when (val normalized = normalizeType(allocateNamedField)) {
+    is Normalized -> normalized.value
+    is NormalizationError -> this
 }
