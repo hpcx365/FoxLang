@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.frontend.parser
+package pers.hpcx.foxlang.parser
 
 @JvmInline
 value class Cursor(val fragIndex: Int) : Comparable<Cursor> {
@@ -90,173 +90,12 @@ data class FormattedStringFragment(
 }
 
 sealed interface FormattedStringPart
+data class FormattedTextPart(val text: String) : FormattedStringPart
+data class FormattedExpressionPart(val source: String) : FormattedStringPart
+data class FormattedStringTemplate(val isRaw: Boolean, val parts: List<FormattedStringPart>)
 
-data class FormattedTextPart(
-    val text: String,
-) : FormattedStringPart
-
-data class FormattedExpressionPart(
-    val source: String,
-) : FormattedStringPart
-
-data class FormattedStringTemplate(
-    val isRaw: Boolean,
-    val parts: List<FormattedStringPart>,
-)
-
-private data class ParseStateKey(
-    val cursor: Cursor,
-    val nonTerminal: NonTerminal<*>,
-)
-
-class SourceScanner(
-    source: String,
-    private val starters: StarterSpec? = null,
-) {
-    val fragments = compact(source)
-    val parseQueue = ArrayDeque<Pair<Cursor, NonTerminal<*>>>()
-    val parseQueueVisited = mutableSetOf<Pair<Cursor, NonTerminal<*>>>()
-    val memoization = mutableMapOf<Cursor, MutableMap<NonTerminal<*>, ParseResult<*>>>()
-    private val discoveredStates = mutableSetOf<ParseStateKey>()
-    private val queuedStates = mutableSetOf<ParseStateKey>()
-    private val dependentStates = mutableMapOf<ParseStateKey, MutableSet<ParseStateKey>>()
-    private var currentState: ParseStateKey? = null
-    
-    operator fun get(cursor: Cursor): SourceFragment? {
-        return fragments.getOrNull(cursor.fragIndex)
-    }
-    
-    fun memoize(result: ParseResult<*>) {
-        memoization.getOrPut(result.interval.begin) { mutableMapOf() }.compute(result.nonTerminal) { _, oldResult ->
-            if (oldResult == null || result > oldResult) {
-                result.also {
-                    enqueueDependents(ParseStateKey(result.interval.begin, result.nonTerminal))
-                }
-            } else {
-                oldResult
-            }
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N> parse(cursor: Cursor, nonTerminal: NonTerminal<N>): Success<N>? {
-        val next = ParseStateKey(cursor, nonTerminal)
-        parseQueueVisited += cursor to nonTerminal
-        recordDependency(next)
-        if (!starterPredicate(cursor, nonTerminal)) {
-            return null
-        }
-        val raw = memoization[cursor]?.get(nonTerminal)
-        if (raw == null) {
-            enqueueDiscoveredState(next)
-        }
-        return raw as? Success<N>?
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N> memoized(cursor: Cursor, nonTerminal: NonTerminal<N>): ParseResult<N>? {
-        return memoization[cursor]?.get(nonTerminal) as ParseResult<N>?
-    }
-    
-    fun memoizedAt(cursor: Cursor): Map<NonTerminal<*>, ParseResult<*>> {
-        return memoization[cursor]?.toMap() ?: emptyMap()
-    }
-    
-    fun seedRoot(root: Pair<Cursor, NonTerminal<*>>) {
-        parseQueueVisited += root
-        enqueueInitialState(ParseStateKey(root.first, root.second))
-    }
-    
-    fun dequeue(cursor: Cursor, nonTerminal: NonTerminal<*>) {
-        queuedStates.remove(ParseStateKey(cursor, nonTerminal))
-    }
-    
-    fun <T> recordStateUpdate(cursor: Cursor, nonTerminal: NonTerminal<*>, block: () -> T): T {
-        val previous = currentState
-        currentState = ParseStateKey(cursor, nonTerminal)
-        return try {
-            block()
-        } finally {
-            currentState = previous
-        }
-    }
-    
-    private fun enqueueInitialState(state: ParseStateKey) {
-        if (discoveredStates.add(state)) {
-            enqueueState(state)
-        }
-    }
-    
-    private fun enqueueDiscoveredState(state: ParseStateKey) {
-        if (discoveredStates.add(state)) {
-            enqueueState(state)
-        }
-    }
-    
-    private fun enqueueDependents(state: ParseStateKey) {
-        dependentStates[state].orEmpty().forEach { dependent ->
-            if (queuedStates.add(dependent)) {
-                parseQueue.addLast(dependent.cursor to dependent.nonTerminal)
-            }
-        }
-    }
-    
-    private fun enqueueState(state: ParseStateKey) {
-        if (queuedStates.add(state)) {
-            parseQueue.addLast(state.cursor to state.nonTerminal)
-        }
-    }
-    
-    private fun recordDependency(child: ParseStateKey) {
-        val parent = currentState ?: return
-        dependentStates.getOrPut(child) { mutableSetOf() }.add(parent)
-    }
-    
-    private fun starterPredicate(cursor: Cursor, nonTerminal: NonTerminal<*>): Boolean {
-        val spec = starters ?: return true
-        val firstSet = spec.firstSets[nonTerminal]
-        if (!firstSet.isNullOrEmpty()) {
-            if (!matchesAnyStarterShape(cursor, firstSet)) {
-                return false
-            }
-        }
-        return spec.refinements[nonTerminal]?.invoke(this, cursor, nonTerminal) ?: true
-    }
-    
-    private fun matchesAnyStarterShape(cursor: Cursor, shapes: Set<StarterShape>): Boolean {
-        return shapes.any { matchesStarterShape(cursor, it) }
-    }
-    
-    private fun matchesStarterShape(cursor: Cursor, shape: StarterShape): Boolean = when (shape) {
-        is ExactToken -> exactTokenStartsAt(cursor, shape.text)
-        WordToken -> (this[cursor] as? PlainFragment)?.text?.all { it.isWordChar() } == true
-        CharLiteralToken -> this[cursor] is CharFragment
-        StringLiteralToken -> this[cursor] is StringFragment
-        FormattedStringLiteralToken -> this[cursor] is FormattedStringFragment
-        EofToken -> this[cursor] == null
-    }
-    
-    private fun exactTokenStartsAt(cursor: Cursor, token: String): Boolean {
-        var current = cursor
-        var previous: PlainFragment? = null
-        var candidate = ""
-        while (candidate.length < token.length) {
-            val next = this[current]
-            if (next !is PlainFragment) break
-            if (previous != null) {
-                if (next.line != previous.line || next.column != previous.column + previous.text.length) break
-            }
-            candidate += next.text
-            if (!token.startsWith(candidate)) return false
-            current += 1
-            previous = next
-        }
-        return candidate == token
-    }
-}
-
-fun compact(source: String): List<SourceFragment> {
-    val lines = source.lines()
+fun String.toFragments(): List<SourceFragment> {
+    val lines = lines()
     var line = 0
     var column = 0
     
@@ -522,10 +361,10 @@ fun compact(source: String): List<SourceFragment> {
             continue
         }
         
-        if (lines[line].startsWith("rf\"", column) || lines[line].startsWith("fr\"", column)) {
+        if (lines[line].startsWith("rf\"", column)) {
             val begin = column
             val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 3)
+            val index = findClosingQuote(lineText, begin + 3, '"')
                 ?: throw ParseException("Unterminated raw formatted string at line ${line + 1}, column ${begin + 1}")
             result += fragmentFormattedString(line, begin, index + 1, prefixLength = 3, isRaw = true)
             move(index - column + 1)
@@ -535,7 +374,7 @@ fun compact(source: String): List<SourceFragment> {
         if (lines[line].startsWith("r\"", column)) {
             val begin = column
             val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 2)
+            val index = findClosingQuote(lineText, begin + 2, '"')
                 ?: throw ParseException("Unterminated raw string at line ${line + 1}, column ${begin + 1}")
             result += fragmentRawString(line, begin, index + 1)
             move(index - column + 1)
@@ -545,7 +384,7 @@ fun compact(source: String): List<SourceFragment> {
         if (lines[line].startsWith("f\"", column)) {
             val begin = column
             val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 2)
+            val index = findClosingQuote(lineText, begin + 2, '"')
                 ?: throw ParseException("Unterminated formatted string at line ${line + 1}, column ${begin + 1}")
             result += fragmentFormattedString(line, begin, index + 1, prefixLength = 2, isRaw = false)
             move(index - column + 1)
@@ -565,7 +404,7 @@ fun compact(source: String): List<SourceFragment> {
         if (lines[line][column] == '"') {
             val begin = column
             val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 1)
+            val index = findClosingQuote(lineText, begin + 1, '"')
                 ?: throw ParseException("Unterminated string at line ${line + 1}, column ${begin + 1}")
             result += fragmentString(line, begin, index + 1)
             move(index - column + 1)
@@ -642,7 +481,7 @@ private fun skipQuoted(
 private fun findClosingQuote(
     text: String,
     start: Int,
-    quote: Char = '"',
+    quote: Char,
 ): Int? {
     var index = start
     while (index < text.length) {

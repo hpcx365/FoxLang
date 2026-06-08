@@ -1,109 +1,47 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.frontend.parser.Cursor
-import pers.hpcx.foxlang.frontend.parser.Success
-import pers.hpcx.foxlang.frontend.parser.node
-import pers.hpcx.foxlang.frontend.parser.render
+import pers.hpcx.foxlang.ast.FoxFile
+import pers.hpcx.foxlang.ast.FoxGrammar
+import pers.hpcx.foxlang.ast.FoxTypeAlias
+import pers.hpcx.foxlang.ast.toSource
+import pers.hpcx.foxlang.parser.Parser
+import pers.hpcx.foxlang.parser.Success
+import pers.hpcx.foxlang.parser.node
 import kotlin.test.*
 
 class ParseTest {
     
     @Test
     fun test() {
-        val grammar = FoxGrammar.check(setOf(node<NodeFile>()))
-        assertTrue(grammar.undefinedNonTerminals.isEmpty(), grammar.render())
-        assertTrue(grammar.duplicateProductions.isEmpty(), grammar.render())
-        val run = FoxGrammar.parseWithDiagnostics(
-            source = source,
-            root = node<NodeFile>(),
-            cursor = Cursor(0),
-            starters = FoxStarters,
-        )
-        val context = grammar.render() + run.stop.render()
-        val file = assertIs<Success<NodeFile>>(run.result, context)
+        val grammar = FoxGrammar.check(setOf(node<FoxFile>()))
+        assertTrue(grammar.undefinedNonTerminals.isEmpty(), grammar.toString())
+        val file = parseFile(source, grammar.toString())
+        val printed = file.node.toSource()
+        val reparsed = parseFile(printed, "Rendered source should stay parseable:\n$printed\n")
+        assertEquals(file.node, reparsed.node)
+        file.node.elements.filterIsInstance<FoxTypeAlias>().forEach { alias ->
+            val reparsedAlias = parseTypeAlias(alias.toSource())
+            assertEquals(alias, reparsedAlias.node, alias.toSource())
+        }
+    }
+    
+    private fun parseFile(source: String, prefix: String): Success<FoxFile> {
+        val parser = Parser(FoxGrammar, node<FoxFile>())
+        val report = parser.parse(source)
+        val context = prefix + report.stop.toString()
+        val file = assertIs<Success<FoxFile>>(report.result, context)
         assertNotNull(file.node)
-        assertEquals(run.scanner.fragments.size, file.interval.end.fragIndex, context)
+        assertEquals(report.context.fragments.size, file.interval.end.fragIndex, context)
+        return file
     }
     
-    @Test
-    fun structuralProjectionTypesParseAsBuiltIns() {
-        val file = parse(
-            """
-            type UserFields = Denamed<Struct<name: String, age: Int>>
-            type UserTuple = Named<Tuple<String, Int>>
-            """.trimIndent(),
-        )
-        val denamed = assertIs<NodeTypeAlias>(file.elements[0]).alias
-        val named = assertIs<NodeTypeAlias>(file.elements[1]).alias
-        assertIs<NodeDenamedProjectionType>(denamed)
-        assertIs<NodeNamedProjectionType>(named)
-        assertEquals("Denamed<Struct<name: String, age: Int>>", denamed.toSource())
-        assertEquals("Named<Tuple<String, Int>>", named.toSource())
-    }
-    
-    @Test
-    fun tupleAndStructSpreadTypesParse() {
-        val file = parse(
-            """
-            type ExpandedTuple = Tuple<Int, *Another, Bool>
-            type ExpandedStruct = Struct<name: String, *Address, active: Bool>
-            """.trimIndent(),
-        )
-        val tupleAlias = assertIs<NodeTypeAlias>(file.elements[0]).alias
-        val structAlias = assertIs<NodeTypeAlias>(file.elements[1]).alias
-        
-        val tuple = assertIs<NodeTupleType>(tupleAlias)
-        assertEquals(3, tuple.items.size)
-        assertIs<NodeTupleTypeItem>(tuple.items[0])
-        assertIs<NodeTupleSpreadItem>(tuple.items[1])
-        assertIs<NodeTupleTypeItem>(tuple.items[2])
-        assertEquals("Tuple<Int, *Another, Bool>", tuple.toSource())
-        
-        val struct = assertIs<NodeStructType>(structAlias)
-        assertEquals(3, struct.items.size)
-        assertIs<NodeStructFieldItem>(struct.items[0])
-        assertIs<NodeStructSpreadItem>(struct.items[1])
-        assertIs<NodeStructFieldItem>(struct.items[2])
-        assertEquals("Struct<name: String, *Address, active: Bool>", struct.toSource())
-    }
-    
-    @Test
-    fun wildcardStructSplatAndGenForParse() {
-        val file = parse(
-            """
-            def <T = Struct<*>> forEachPrint(*T) {
-                genfor (f: F in T) {
-                    print<F>(f)
-                }
-            }
-            """.trimIndent(),
-        )
-        val method = assertIs<NodeMethodDefinition>(file.elements.single())
-        assertEquals("forEachPrint", method.name)
-        assertIs<NodeSplatFormalParameter>(method.parameters.single())
-        val genericConstraint = method.generics!!.getValue("T")
-        assertIs<NodeStructWildcardType>(genericConstraint.match)
-        val body = assertIs<NodeBlock>(method.body)
-        val genFor = assertIs<NodeGenFor>(body.statements.single())
-        assertEquals("f", genFor.valueName)
-        assertEquals("F", genFor.typeName)
-        assertEquals("T", assertIs<NodeNamedType>(genFor.targetType).name)
-        assertEquals(
-            "def <T = Struct<*>> forEachPrint(*T) {\n    genfor (f: F in T) {\n        print<F>(f)\n    }\n}",
-            method.toSource(),
-        )
-    }
-    
-    private fun parse(source: String): NodeFile {
-        val run = FoxGrammar.parseWithDiagnostics(
-            source = source,
-            root = node<NodeFile>(),
-            cursor = Cursor(0),
-            starters = FoxStarters,
-        )
-        val file = assertIs<Success<NodeFile>>(run.result, run.stop.render())
-        assertEquals(run.scanner.fragments.size, file.interval.end.fragIndex, run.stop.render())
-        return file.node
+    private fun parseTypeAlias(source: String): Success<FoxTypeAlias> {
+        val parser = Parser(FoxGrammar, node<FoxTypeAlias>())
+        val report = parser.parse(source)
+        val context = "Type alias should stay parseable:\n$source\n${report.stop}"
+        val alias = assertIs<Success<FoxTypeAlias>>(report.result, context)
+        assertEquals(report.context.fragments.size, alias.interval.end.fragIndex, context)
+        return alias
     }
 }
 
@@ -116,15 +54,44 @@ const val source = """
  */
  
 type MyTuple = Tuple<Unit, Bool, Byte, Short, Int, Long, Float, Double, Char, String>
-type ExpandedTuple = Tuple<Int, *Another, Bool>
 type MyArray = Array<MyTuple>
 type MyEnum = Enum<Success = Int, Failure = String>
 type MyStruct = Struct<name: String, age: Int, height: Double>
-type ExpandedStruct = Struct<name: String, *Address, active: Bool>
-type AnyStruct = Struct<*>
-type MyUnnamedTuple = Denamed<Struct<left: Int, right: String>>
-type MyNamedStruct = Named<Tuple<Int, String>>
 type MyMap = Map<String, MyEnum>
+type MyNamedMap = Map<Key = String, Value = MyEnum>
+type MyLambda = Lambda<MyStruct, Int, String, Bool>
+type MyWildcards = Tuple<Any, AnyTuple, AnyStruct, AnyEnum, AnyArray, AnyRef, AnyLambda>
+
+type MyTuplePart = PartOf<MyTuple, 4>
+type MyTupleFirst = FirstPartsOf<MyTuple, 3>
+type MyTupleLast = LastPartsOf<MyTuple, 2>
+type MyTupleDropFirst = DropFirstPartsOf<MyTuple, 3>
+type MyTupleDropLast = DropLastPartsOf<MyTuple, 2>
+type MyTupleMerge = MergePartsOf<MyTuple, Tuple<String, Int>>
+
+type MyStructField = FieldOf<MyStruct, name>
+type MyStructFields = FieldsOf<MyStruct, name, age>
+type MyStructDropFields = DropFieldsOf<MyStruct, height>
+type MyStructMerge = MergeFieldsOf<MyStruct, Struct<nick: String>>
+
+type MyEnumItem = ItemOf<MyEnum, Success>
+type MyEnumItems = ItemsOf<MyEnum, Success, Failure>
+type MyEnumDropItems = DropItemsOf<MyEnum, Failure>
+type MyEnumMerge = MergeItemsOf<MyEnum, Enum<Pending = Unit>>
+
+type MyArrayElement = ElementOf<MyArray>
+type MyRefReferent = ReferentOf<Ref<MyTuple>>
+type MyLambdaThis = ThisOf<MyLambda>
+type MyLambdaParameters = ParametersOf<MyLambda>
+type MyLambdaReturn = ReturnOf<MyLambda>
+
+def <T = AnyStruct, E = ItemOf<MyEnum, Success>> MergeFieldsOf<MyStruct, Struct<nick: String>>.describe(
+    sample: FieldsOf<MyStruct, name, age>,
+    item: E,
+    value: T,
+): FieldOf<MyStruct, name> {
+    return "fox"
+}
 
 def collatz(i: Int): Ref<List<Int>> {
     result := Ref<ArrayList<Int>>()
@@ -175,11 +142,4 @@ def main(args: Array<String>) {
         println('\u0abc')
     }
 }
-
-def <T = Struct<*>> forEachPrint(*T) {
-    genfor (f: F in T) {
-        print<F>(f)
-    }
-}
 """
-

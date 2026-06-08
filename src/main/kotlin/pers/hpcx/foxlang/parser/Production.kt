@@ -1,17 +1,4 @@
-package pers.hpcx.foxlang.frontend.parser
-
-import java.util.*
-import kotlin.reflect.KClass
-
-inline fun <reified T : Any> node() = ClassNonTerminal(T::class)
-fun token(token: String) = node<String>().name(token)
-fun <F, S> NonTerminal<F>.pair(second: NonTerminal<S>): NonTerminal<Pair<F, S>> = PairNonTerminal(this, second)
-fun <N> NonTerminal<N>.list(): NonTerminal<List<N>> = ListNonTerminal(this)
-fun <N> NonTerminal<N>.set(): NonTerminal<Set<N>> = SetNonTerminal(this)
-fun <N> NonTerminal<N>.seqSet(): NonTerminal<SequencedSet<N>> = SeqSetNonTerminal(this)
-fun <K, V> NonTerminal<K>.map(value: NonTerminal<V>): NonTerminal<Map<K, V>> = MapNonTerminal(this, value)
-fun <K, V> NonTerminal<K>.seqMap(value: NonTerminal<V>): NonTerminal<SequencedMap<K, V>> = SeqMapNonTerminal(this, value)
-fun <N> NonTerminal<N>.name(name: String): NonTerminal<N> = NamedNonTerminal(this, name)
+package pers.hpcx.foxlang.parser
 
 fun fixed(
     result: NonTerminal<String>,
@@ -144,100 +131,26 @@ fun <N> listLike(
     end: NonTerminal<*>?,
 ) = ListProduction(result, begin, element, separator, end)
 
-sealed interface StarterShape
-data class ExactToken(val text: String) : StarterShape
-data object WordToken : StarterShape
-data object CharLiteralToken : StarterShape
-data object StringLiteralToken : StarterShape
-data object FormattedStringLiteralToken : StarterShape
-data object EofToken : StarterShape
-
-typealias StarterRefinement = SourceScanner.(Cursor, NonTerminal<*>) -> Boolean
-
-data class StarterSpec(
-    val firstSets: Map<NonTerminal<*>, Set<StarterShape>>,
-    val refinements: Map<NonTerminal<*>, StarterRefinement> = emptyMap(),
-)
-
-sealed interface NonTerminal<N>
-data class ClassNonTerminal<N : Any>(val clazz: KClass<N>) : NonTerminal<N>
-data class PairNonTerminal<F, S>(val first: NonTerminal<F>, val second: NonTerminal<S>) : NonTerminal<Pair<F, S>>
-data class ListNonTerminal<N>(val type: NonTerminal<N>) : NonTerminal<List<N>>
-data class SetNonTerminal<N>(val type: NonTerminal<N>) : NonTerminal<Set<N>>
-data class SeqSetNonTerminal<N>(val type: NonTerminal<N>) : NonTerminal<SequencedSet<N>>
-data class MapNonTerminal<K, V>(val key: NonTerminal<K>, val value: NonTerminal<V>) : NonTerminal<Map<K, V>>
-data class SeqMapNonTerminal<K, V>(val key: NonTerminal<K>, val value: NonTerminal<V>) : NonTerminal<SequencedMap<K, V>>
-data class NamedNonTerminal<N>(val type: NonTerminal<N>, val name: String) : NonTerminal<N>
-
-sealed interface ParseResult<N> : Comparable<ParseResult<*>> {
-    val interval: Interval
-    val nonTerminal: NonTerminal<N>
-}
-
-data class Diagnosis(
-    val nonTerminal: NonTerminal<*>,
-    val interval: Interval,
-    val message: String,
-    val matchedParts: Int = 0,
-    val confidence: Int = 0,
-    val details: List<String> = emptyList(),
-) : Comparable<Diagnosis> {
-    override fun compareTo(other: Diagnosis): Int {
-        return compareValuesBy(this, other, Diagnosis::interval, Diagnosis::matchedParts, Diagnosis::confidence)
-    }
-}
-
-class Success<N>(
-    val node: N,
-    override val interval: Interval,
-    override val nonTerminal: NonTerminal<N>,
-) : ParseResult<N> {
-    
-    init {
-        require(interval.isNotEmpty()) { "Empty interval" }
-    }
-    
-    override fun compareTo(other: ParseResult<*>): Int {
-        check(nonTerminal == other.nonTerminal)
-        when (other) {
-            is Success -> {}
-            is Failure -> return 1
-        }
-        return interval.compareTo(other.interval)
-    }
-}
-
-class Failure<N>(
-    val message: String,
-    override val interval: Interval,
-    override val nonTerminal: NonTerminal<N>,
-) : ParseResult<N> {
-    
-    override fun compareTo(other: ParseResult<*>): Int {
-        check(nonTerminal == other.nonTerminal)
-        when (other) {
-            is Success -> return -1
-            is Failure -> {}
-        }
-        return interval.compareTo(other.interval)
-    }
-}
-
-class ParseException(override val message: String) : Exception(message)
-
 sealed interface Production<N> {
     val result: NonTerminal<N>
-    fun update(scanner: SourceScanner, cursor: Cursor)
-    fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? = null
+    override fun toString(): String
+    fun referencedNonTerminals(): List<NonTerminal<*>>
+    fun update(context: ParseContext, cursor: Cursor)
+    fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? = null
 }
 
 class FixedProduction(
     override val result: NonTerminal<String>,
     val string: String,
 ) : Production<String> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
-        scanner.memoize(
-            exactMatch(scanner, cursor)?.let { end ->
+    
+    override fun toString() = "$result ::= '${string}'"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = emptyList()
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
+        context.memoize(
+            exactMatch(context, cursor)?.let { end ->
                 Success(
                     node = string,
                     interval = Interval(cursor, end),
@@ -251,9 +164,9 @@ class FixedProduction(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
-        if (exactMatch(scanner, cursor) != null) return null
-        val fragment = scanner[cursor]
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
+        if (exactMatch(context, cursor) != null) return null
+        val fragment = context[cursor]
         val end = if (fragment == null) cursor else cursor + 1
         return Diagnosis(
             nonTerminal = result,
@@ -263,12 +176,12 @@ class FixedProduction(
         )
     }
     
-    private fun exactMatch(scanner: SourceScanner, cursor: Cursor): Cursor? {
+    private fun exactMatch(context: ParseContext, cursor: Cursor): Cursor? {
         var current = cursor
         var previous: PlainFragment? = null
         var candidate = ""
         while (candidate.length < string.length) {
-            val next = scanner[current]
+            val next = context[current]
             if (next !is PlainFragment) break
             if (previous != null) {
                 if (next.line != previous.line || next.column != previous.column + previous.text.length) break
@@ -287,9 +200,14 @@ class RegexProduction(
     val regex: Regex,
     val expectation: String,
 ) : Production<String> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
-        scanner.memoize(
-            longestMatch(scanner, cursor)?.let { (match, end) ->
+    
+    override fun toString() = "$result ::= /${regex.pattern}/"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = emptyList()
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
+        context.memoize(
+            longestMatch(context, cursor)?.let { (match, end) ->
                 Success(
                     node = match,
                     interval = Interval(cursor, end),
@@ -303,9 +221,9 @@ class RegexProduction(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
-        if (longestMatch(scanner, cursor) != null) return null
-        val fragment = scanner[cursor]
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
+        if (longestMatch(context, cursor) != null) return null
+        val fragment = context[cursor]
         val end = if (fragment == null) cursor else cursor + 1
         return Diagnosis(
             nonTerminal = result,
@@ -315,13 +233,13 @@ class RegexProduction(
         )
     }
     
-    private fun longestMatch(scanner: SourceScanner, cursor: Cursor): Pair<String, Cursor>? {
+    private fun longestMatch(context: ParseContext, cursor: Cursor): Pair<String, Cursor>? {
         var current = cursor
         var previous: PlainFragment? = null
         var candidate = ""
         var best: Pair<String, Cursor>? = null
         while (true) {
-            val next = scanner[current]
+            val next = context[current]
             if (next !is PlainFragment) break
             if (previous != null) {
                 if (next.line != previous.line || next.column != previous.column + previous.text.length) break
@@ -340,9 +258,14 @@ class RegexProduction(
 class CharLiteralProduction(
     override val result: NonTerminal<Char>,
 ) : Production<Char> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
-        val fragment = scanner[cursor]
-        scanner.memoize(
+    
+    override fun toString() = "$result ::= <char literal>"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = emptyList()
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
+        val fragment = context[cursor]
+        context.memoize(
             if (fragment is CharFragment) {
                 Success(
                     node = fragment.char,
@@ -359,8 +282,8 @@ class CharLiteralProduction(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
-        val fragment = scanner[cursor]
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
+        val fragment = context[cursor]
         if (fragment is CharFragment) return null
         val end = if (fragment == null) cursor else cursor + 1
         return Diagnosis(
@@ -375,9 +298,14 @@ class CharLiteralProduction(
 class StringLiteralProduction(
     override val result: NonTerminal<String>,
 ) : Production<String> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
-        val fragment = scanner[cursor]
-        scanner.memoize(
+    
+    override fun toString() = "$result ::= <string literal>"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = emptyList()
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
+        val fragment = context[cursor]
+        context.memoize(
             if (fragment is StringFragment) {
                 Success(
                     node = fragment.string,
@@ -394,8 +322,8 @@ class StringLiteralProduction(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
-        val fragment = scanner[cursor]
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
+        val fragment = context[cursor]
         if (fragment is StringFragment) return null
         val end = if (fragment == null) cursor else cursor + 1
         return Diagnosis(
@@ -410,9 +338,14 @@ class StringLiteralProduction(
 class FormattedStringLiteralProduction(
     override val result: NonTerminal<FormattedStringTemplate>,
 ) : Production<FormattedStringTemplate> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
-        val fragment = scanner[cursor]
-        scanner.memoize(
+    
+    override fun toString() = "$result ::= <formatted string literal>"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = emptyList()
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
+        val fragment = context[cursor]
+        context.memoize(
             if (fragment is FormattedStringFragment) {
                 Success(
                     node = FormattedStringTemplate(fragment.isRaw, fragment.parts),
@@ -429,8 +362,8 @@ class FormattedStringLiteralProduction(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
-        val fragment = scanner[cursor]
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
+        val fragment = context[cursor]
         if (fragment is FormattedStringFragment) return null
         val end = if (fragment == null) cursor else cursor + 1
         return Diagnosis(
@@ -447,18 +380,23 @@ class SerialProduction<N>(
     val components: List<NonTerminal<*>>,
     val factory: (List<*>) -> N,
 ) : Production<N> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
+    
+    override fun toString() = "$result ::= ${components.joinToString(" ")}"
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = components
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
         var current = cursor
         val results = mutableListOf<Any?>()
         components.forEach { comp ->
-            val result = scanner.parse(current, comp) ?: return
+            val result = context.parse(current, comp) ?: return
             results += result.node
             current = result.interval.end
         }
         val node = try {
             factory(results)
         } catch (e: ParseException) {
-            scanner.memoize(
+            context.memoize(
                 Failure(
                     message = e.message,
                     interval = Interval(cursor, current),
@@ -467,7 +405,7 @@ class SerialProduction<N>(
             )
             return
         }
-        scanner.memoize(
+        context.memoize(
             Success(
                 node = node,
                 interval = Interval(cursor, current),
@@ -476,39 +414,39 @@ class SerialProduction<N>(
         )
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
         var current = cursor
         val details = mutableListOf<String>()
         components.forEachIndexed { index, comp ->
             val begin = current
-            when (val result = scanner.memoized(current, comp)) {
+            when (val result = context.memoized(current, comp)) {
                 is Success<*> -> {
                     current = result.interval.end
-                    details += "matched #${index + 1} ${comp.displayName()} @${begin.fragIndex}..${current.fragIndex}"
+                    details += "matched #${index + 1} $comp @${begin.fragIndex}..${current.fragIndex}"
                 }
                 is Failure<*> -> {
                     return Diagnosis(
                         nonTerminal = this.result,
                         interval = Interval(cursor, maxOf(current, result.interval.end)),
-                        message = "failed at component #${index + 1} ${comp.displayName()}: ${result.message}",
+                        message = "failed at component #${index + 1} ${comp}: ${result.message}",
                         matchedParts = index,
                         confidence = index + 1,
-                        details = details + "failed #${index + 1} ${comp.displayName()} @${begin.fragIndex}..${result.interval.end.fragIndex}",
+                        details = details + "failed #${index + 1} $comp @${begin.fragIndex}..${result.interval.end.fragIndex}",
                     )
                 }
                 null -> {
                     return Diagnosis(
                         nonTerminal = this.result,
                         interval = Interval(cursor, current),
-                        message = "stalled at component #${index + 1} ${comp.displayName()}",
+                        message = "stalled at component #${index + 1} $comp",
                         matchedParts = index,
                         confidence = index,
-                        details = details + "stalled #${index + 1} ${comp.displayName()} @${begin.fragIndex}",
+                        details = details + "stalled #${index + 1} $comp @${begin.fragIndex}",
                     )
                 }
             }
         }
-        return when (val result = scanner.memoized(cursor, this.result)) {
+        return when (val result = context.memoized(cursor, this.result)) {
             is Failure<*> -> Diagnosis(
                 nonTerminal = this.result,
                 interval = result.interval,
@@ -529,35 +467,52 @@ class ListProduction<N>(
     val separator: NonTerminal<*>?,
     val end: NonTerminal<*>?,
 ) : Production<List<N>> {
-    override fun update(scanner: SourceScanner, cursor: Cursor) {
+    
+    override fun toString() = buildString {
+        append(result)
+        append(" ::= list(")
+        append("begin=")
+        append(begin ?: "<none>")
+        append(", element=")
+        append(element)
+        append(", separator=")
+        append(separator ?: "<none>")
+        append(", end=")
+        append(end ?: "<none>")
+        append(")")
+    }
+    
+    override fun referencedNonTerminals(): List<NonTerminal<*>> = listOfNotNull(begin, element, separator, end)
+    
+    override fun update(context: ParseContext, cursor: Cursor) {
         var current = cursor
         
         begin?.let {
-            scanner.parse(cursor, begin) ?: return
+            context.parse(cursor, begin) ?: return
         }?.let {
             current = it.interval.end
         }
         
         val elements = mutableListOf<N>()
         while (true) {
-            val element = scanner.parse(current, element) ?: break
+            val element = context.parse(current, element) ?: break
             elements += element.node
             current = element.interval.end
             separator?.let {
-                scanner.parse(current, separator) ?: break
+                context.parse(current, separator) ?: break
             }?.let {
                 current = it.interval.end
             }
         }
         
         end?.let {
-            scanner.parse(current, end) ?: return
+            context.parse(current, end) ?: return
         }?.let {
             current = it.interval.end
         }
         
         if (current > cursor) {
-            scanner.memoize(
+            context.memoize(
                 Success(
                     node = elements,
                     interval = Interval(cursor, current),
@@ -567,16 +522,16 @@ class ListProduction<N>(
         }
     }
     
-    override fun diagnose(scanner: SourceScanner, cursor: Cursor): Diagnosis? {
+    override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
         var current = cursor
         begin?.let { begin ->
-            when (val result = scanner.memoized(cursor, begin)) {
+            when (val result = context.memoized(cursor, begin)) {
                 is Success<*> -> current = result.interval.end
                 is Failure<*> -> {
                     return Diagnosis(
                         nonTerminal = this.result,
                         interval = result.interval,
-                        message = "Expected ${begin.displayName()} to start ${this.result.displayName()}",
+                        message = "Expected $begin to start ${this.result}",
                         confidence = 1,
                     )
                 }
@@ -584,14 +539,14 @@ class ListProduction<N>(
                     return Diagnosis(
                         nonTerminal = this.result,
                         interval = Interval(cursor, cursor),
-                        message = "Could not determine whether ${begin.displayName()} starts ${this.result.displayName()}",
+                        message = "Could not determine whether $begin starts ${this.result}",
                     )
                 }
             }
         }
         var count = 0
         while (true) {
-            when (val elementResult = scanner.memoized(current, element)) {
+            when (val elementResult = context.memoized(current, element)) {
                 is Success<*> -> {
                     count++
                     current = elementResult.interval.end
@@ -600,67 +555,34 @@ class ListProduction<N>(
                 null -> break
             }
             separator?.let { separator ->
-                when (val separatorResult = scanner.memoized(current, separator)) {
+                when (val separatorResult = context.memoized(current, separator)) {
                     is Success<*> -> current = separatorResult.interval.end
-                    is Failure<*> -> return diagnoseListEnd(scanner, cursor, current, count)
-                    null -> return diagnoseListEnd(scanner, cursor, current, count)
+                    is Failure<*> -> return diagnoseListEnd(context, cursor, current, count)
+                    null -> return diagnoseListEnd(context, cursor, current, count)
                 }
             } ?: break
         }
-        return diagnoseListEnd(scanner, cursor, current, count)
+        return diagnoseListEnd(context, cursor, current, count)
     }
     
-    private fun diagnoseListEnd(scanner: SourceScanner, cursor: Cursor, current: Cursor, count: Int): Diagnosis? {
+    private fun diagnoseListEnd(context: ParseContext, cursor: Cursor, current: Cursor, count: Int): Diagnosis? {
         end ?: return null
-        return when (val endResult = scanner.memoized(current, end)) {
+        return when (val endResult = context.memoized(current, end)) {
             is Success<*> -> null
             is Failure<*> -> Diagnosis(
                 nonTerminal = result,
                 interval = Interval(cursor, maxOf(current, endResult.interval.end)),
-                message = "Looks like ${result.displayName()} with $count item(s) but missing ${end.displayName()}",
+                message = "Looks like $result with $count item(s) but missing $end",
                 matchedParts = count,
                 confidence = count,
             )
             null -> Diagnosis(
                 nonTerminal = result,
                 interval = Interval(cursor, current),
-                message = "Looks like ${result.displayName()} with $count item(s) but ${end.displayName()} was not resolved",
+                message = "Looks like $result with $count item(s) but $end was not resolved",
                 matchedParts = count,
                 confidence = count,
             )
         }
     }
 }
-
-fun NonTerminal<*>.displayName(): String = when (this) {
-    is NamedNonTerminal<*> -> name
-    is ClassNonTerminal<*> -> clazz.simpleName ?: clazz.toString()
-    is PairNonTerminal<*, *> -> "Pair<${first.displayName()}, ${second.displayName()}>"
-    is ListNonTerminal<*> -> "List<${type.displayName()}>"
-    is SetNonTerminal<*> -> "Set<${type.displayName()}>"
-    is SeqSetNonTerminal<*> -> "SeqSet<${type.displayName()}>"
-    is MapNonTerminal<*, *> -> "Map<${key.displayName()}, ${value.displayName()}>"
-    is SeqMapNonTerminal<*, *> -> "SeqMap<${key.displayName()}, ${value.displayName()}>"
-}
-
-fun Production<*>.displayName(): String = when (this) {
-    is FixedProduction -> "${result.displayName()} ::= '$string'"
-    is RegexProduction -> "${result.displayName()} ::= /${regex.pattern}/"
-    is CharLiteralProduction -> "${result.displayName()} ::= <char>"
-    is StringLiteralProduction -> "${result.displayName()} ::= <string>"
-    is FormattedStringLiteralProduction -> "${result.displayName()} ::= <formatted-string>"
-    is SerialProduction<*> -> "${result.displayName()} ::= ${components.joinToString(" ") { it.displayName() }}"
-    is ListProduction<*> -> buildString {
-        append(result.displayName())
-        append(" ::= list(")
-        append(begin?.displayName() ?: "null")
-        append(", ")
-        append(element.displayName())
-        append(", ")
-        append(separator?.displayName() ?: "null")
-        append(", ")
-        append(end?.displayName() ?: "null")
-        append(")")
-    }
-}
-

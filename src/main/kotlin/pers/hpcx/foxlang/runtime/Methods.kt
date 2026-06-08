@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.runtime
 
-import pers.hpcx.foxlang.types.*
+import pers.hpcx.foxlang.ast.*
 import java.util.*
 
 data class FoxMethodIdentifier(
@@ -113,13 +113,13 @@ val panicMethodIdentifier = FoxMethodIdentifier(
 
 enum class FoxBuiltInMethodImplementation(
     name: String,
-    generics: Map<String, FoxConcreteType>,
-    thisType: FoxConcreteType,
-    parameters: Map<String, FoxConcreteType>,
-    returnType: FoxConcreteType,
+    generics: Map<String, FoxType>,
+    thisType: FoxType,
+    parameters: Map<String, FoxType>,
+    returnType: FoxType,
     val signature: FoxMethodSignature = FoxMethodSignature(
         name = name,
-        generics = generics.mapValuesTo(LinkedHashMap()) { (_, value) -> FoxExactMatchConstraint(value) },
+        generics = generics.mapValuesTo(LinkedHashMap()) { (_, value) -> FoxGenericConstraint(value) },
         thisType = thisType,
         parameters = LinkedHashMap(parameters),
         returnType = returnType,
@@ -312,4 +312,3 @@ enum class FoxBuiltInMethodImplementation(
     FloatRem("rem", emptyMap(), FoxFloatType, mapOf("that" to FoxFloatType), FoxFloatType),
     DoubleRem("rem", emptyMap(), FoxDoubleType, mapOf("that" to FoxDoubleType), FoxDoubleType),
 }
-

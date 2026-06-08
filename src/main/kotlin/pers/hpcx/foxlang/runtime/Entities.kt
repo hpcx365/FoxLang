@@ -20,4 +20,3 @@ data class FoxStruct(val fields: Map<String, FoxEntity>) : FoxEntity
 data class FoxEnum(val name: String, val value: FoxEntity) : FoxEntity
 data class FoxRef(val referent: Int) : FoxEntity
 data class FoxLambda(val captured: FoxTuple, val implementation: FoxMethodIdentifier) : FoxEntity
-
