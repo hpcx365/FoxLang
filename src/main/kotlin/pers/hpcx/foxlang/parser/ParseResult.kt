@@ -30,6 +30,67 @@ data class ParseStopReport(
 
 class ParseException(override val message: String) : Exception(message)
 
+class ParseResultStore {
+    private val successes = mutableListOf<Success<*>>()
+    private var bestFailure: Failure<*>? = null
+    
+    fun add(result: ParseResult<*>): Boolean = when (result) {
+        is Success<*> -> addSuccess(result)
+        is Failure<*> -> addFailure(result)
+    }
+    
+    fun successes(): List<Success<*>> = successes.toList()
+    
+    fun bestSuccess(): Success<*>? = successes.maxWithOrNull { left, right ->
+        left.compareTo(right)
+    }
+    
+    fun bestFailure(): Failure<*>? = bestFailure
+    
+    fun bestResult(): ParseResult<*>? = bestSuccess() ?: bestFailure
+    
+    fun copyStore(): ParseResultStore = ParseResultStore().also { copy ->
+        successes.forEach { copy.successes += it }
+        copy.bestFailure = bestFailure
+    }
+    
+    fun snapshot(): ParseResultSnapshot = ParseResultSnapshot(
+        successes = successes.toList(),
+        bestFailure = bestFailure,
+    )
+    
+    private fun addSuccess(result: Success<*>): Boolean {
+        val duplicated = successes.any {
+            it.nonTerminal == result.nonTerminal &&
+                it.interval == result.interval &&
+                it.node == result.node
+        }
+        if (duplicated) return false
+        successes += result
+        return true
+    }
+    
+    private fun addFailure(result: Failure<*>): Boolean {
+        val old = bestFailure
+        if (old == null || result > old) {
+            bestFailure = result
+            return true
+        }
+        return false
+    }
+}
+
+data class ParseResultSnapshot(
+    val successes: List<Success<*>>,
+    val bestFailure: Failure<*>?,
+) {
+    fun bestSuccess(): Success<*>? = successes.maxWithOrNull { left, right ->
+        left.compareTo(right)
+    }
+    
+    fun bestResult(): ParseResult<*>? = bestSuccess() ?: bestFailure
+}
+
 sealed interface ParseResult<N> : Comparable<ParseResult<*>> {
     val interval: Interval
     val nonTerminal: NonTerminal<N>

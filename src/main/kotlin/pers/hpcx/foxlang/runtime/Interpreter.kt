@@ -1,7 +1,6 @@
 package pers.hpcx.foxlang.runtime
 
 import pers.hpcx.foxlang.runtime.FoxBuiltInMethodImplementation.*
-import java.util.*
 
 class Interpreter {
     
@@ -15,7 +14,7 @@ class Interpreter {
         stack += StackFrame(
             method = methods.getValue(mainMethodIdentifier) as FoxCustomizedMethodImplementation,
             thisEntity = FoxUnit,
-            parameters = linkedMapOf("args" to FoxArray(arguments.map { FoxString(it) })),
+            parameters = mapOf("args" to FoxArray(arguments.map { FoxString(it) })),
         )
         runLoop()
     }
@@ -23,19 +22,18 @@ class Interpreter {
     fun invoke(
         identifier: FoxMethodIdentifier,
         thisEntity: FoxEntity = FoxUnit,
-        parameters: SequencedMap<String, FoxEntity> = linkedMapOf(),
+        parameters: Map<String, FoxEntity>,
     ): FoxEntity {
         completedReturn = FoxUnit
         when (val method = methods.getValue(identifier)) {
-            is FoxSimpleNativeMethodImplementation -> return method.invoke(thisEntity, parameters)
             is FoxBuiltInMethodImplementation -> {
                 val frame = StackFrame(
                     method = FoxCustomizedMethodImplementation(
                         startBlock = "entry",
-                        blocks = linkedMapOf("entry" to FoxInstBlock(emptyList(), JumpReturn(SlotConst(FoxUnit)))),
+                        blocks = mapOf("entry" to FoxInstBlock(emptyList(), JumpReturn(SlotConst(FoxUnit)))),
                     ),
                     thisEntity = thisEntity,
-                    parameters = linkedMapOf(),
+                    parameters = mapOf(),
                 )
                 return method.invoke(frame, thisEntity, parameters)
             }
@@ -93,43 +91,33 @@ class Interpreter {
             execute(
                 InstCall(
                     SlotConst(FoxUnit),
-                    linkedMapOf("message" to SlotConst(FoxString(message))),
                     panicMethodIdentifier,
+                    mapOf("message" to SlotConst(FoxString(message))),
                 ),
             )
         }
         
         fun execute(inst: FoxInst) {
             when (inst) {
-                is InstLoad -> inst.target.store(inst.entity)
-                is InstCopy -> inst.target.store(inst.source.fetch())
+                is InstLoad -> inst.target.store(inst.source.fetch())
                 is InstCall -> {
+                    val target = inst.target.fetch()
                     val callee = methods.getValue(inst.method)
-                    val target = inst.target.fetch()
-                    val parameters = LinkedHashMap<String, FoxEntity>().apply {
-                        inst.params.forEach { (name, slot) -> put(name, slot.fetch()) }
-                    }
-                    call(callee, target, parameters)
+                    val params = inst.params.mapValues { it.value.fetch() }
+                    call(callee, target, params)
                 }
-                is InstLambdaCall -> {
-                    val lambda = inst.method.fetch() as FoxLambda
-                    val callee = methods.getValue(lambda.implementation)
+                is InstIndirectCall -> {
                     val target = inst.target.fetch()
-                    val parameters = LinkedHashMap<String, FoxEntity>().apply {
-                        put("captured", lambda.captured)
-                        put("params", FoxTuple(inst.params.map { it.fetch() }))
-                    }
-                    call(callee, target, parameters)
+                    val callee = methods.getValue((inst.method.fetch() as FoxMethod).identifier)
+                    val params = inst.params.mapValues { it.value.fetch() }
+                    call(callee, target, params)
                 }
             }
         }
         
-        private fun call(callee: FoxMethodImplementation, target: FoxEntity, parameters: SequencedMap<String, FoxEntity>) {
+        private fun call(callee: FoxMethodImplementation, target: FoxEntity, parameters: Map<String, FoxEntity>) {
             when (callee) {
                 is FoxBuiltInMethodImplementation -> callee.invoke(this, target, parameters)
-                is FoxSimpleNativeMethodImplementation -> {
-                    returnEntity = callee.invoke(target, parameters)
-                }
                 is FoxCustomizedMethodImplementation -> {
                     stack += StackFrame(
                         method = callee,
@@ -194,14 +182,15 @@ class Interpreter {
                 is FoxArray -> value.elements.forEach { collectReferences(it) }
                 is FoxTuple -> value.components.forEach { collectReferences(it) }
                 is FoxStruct -> value.fields.values.forEach { collectReferences(it) }
+                is FoxObject -> value.members.values.forEach { collectReferences(it) }
                 is FoxEnum -> collectReferences(value.value)
                 is FoxRef -> if (add(value.referent)) collectReferences(values[value.referent] ?: error("Invalid reference"))
-                is FoxLambda -> collectReferences(value.captured)
+                is FoxMethod -> {}
             }
         }
     }
     
-    private fun FoxBuiltInMethodImplementation.invoke(frame: StackFrame, target: FoxEntity, params: SequencedMap<String, FoxEntity>): FoxEntity = when (this) {
+    private fun FoxBuiltInMethodImplementation.invoke(frame: StackFrame, target: FoxEntity, params: Map<String, FoxEntity>): FoxEntity = when (this) {
         ByteToByte -> target
         ShortToByte -> FoxByte((target as FoxShort).value.toByte())
         IntToByte -> FoxByte((target as FoxInt).value.toByte())

@@ -1,20 +1,19 @@
 package pers.hpcx.foxlang.runtime
 
 import pers.hpcx.foxlang.ast.*
-import java.util.*
 
 data class FoxMethodIdentifier(
     val name: String,
-    val generics: SequencedMap<String, FoxType>,
+    val generics: Map<String, FoxType>,
     val thisType: FoxType,
-    val parameters: SequencedMap<String, FoxType>,
+    val parameters: Map<String, FoxType>,
 )
 
 data class FoxMethodSignature(
     val name: String,
-    val generics: SequencedMap<String, FoxGenericConstraint>,
+    val generics: Map<String, FoxGenericConstraint>,
     val thisType: FoxType,
-    val parameters: SequencedMap<String, FoxType>,
+    val parameters: Map<String, FoxType>,
     val returnType: FoxType,
     val isInline: Boolean,
 )
@@ -22,11 +21,6 @@ data class FoxMethodSignature(
 sealed interface FoxMethodImplementation
 
 sealed interface FoxNativeMethodImplementation : FoxMethodImplementation
-
-data class FoxSimpleNativeMethodImplementation(
-    val signature: FoxMethodSignature,
-    val invoke: (target: FoxEntity, params: SequencedMap<String, FoxEntity>) -> FoxEntity,
-) : FoxNativeMethodImplementation
 
 data class FoxCustomizedMethodImplementation(
     val startBlock: String,
@@ -63,24 +57,19 @@ object SlotReturnValue : FoxFetchSlot
 
 data class InstLoad(
     val target: FoxStoreSlot,
-    val entity: FoxEntity,
-) : FoxInst
-
-data class InstCopy(
-    val target: FoxStoreSlot,
     val source: FoxFetchSlot,
 ) : FoxInst
 
 data class InstCall(
     val target: FoxFetchSlot,
-    val params: SequencedMap<String, FoxFetchSlot>,
     val method: FoxMethodIdentifier,
+    val params: Map<String, FoxFetchSlot>,
 ) : FoxInst
 
-data class InstLambdaCall(
+data class InstIndirectCall(
     val target: FoxFetchSlot,
-    val params: List<FoxFetchSlot>,
     val method: FoxFetchSlot,
+    val params: Map<String, FoxFetchSlot>,
 ) : FoxInst
 
 data class JumpGoto(
@@ -99,16 +88,16 @@ data class JumpReturn(
 
 val mainMethodIdentifier = FoxMethodIdentifier(
     name = "main",
-    generics = linkedMapOf(),
+    generics = mapOf(),
     thisType = FoxUnitType,
-    parameters = linkedMapOf("args" to FoxArrayType(FoxStringType)),
+    parameters = mapOf("args" to FoxArrayType(FoxStringType)),
 )
 
 val panicMethodIdentifier = FoxMethodIdentifier(
     name = "panic",
-    generics = linkedMapOf(),
+    generics = mapOf(),
     thisType = FoxUnitType,
-    parameters = linkedMapOf("message" to FoxStringType),
+    parameters = mapOf("message" to FoxStringType),
 )
 
 enum class FoxBuiltInMethodImplementation(

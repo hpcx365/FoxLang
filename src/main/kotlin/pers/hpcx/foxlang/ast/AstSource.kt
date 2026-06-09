@@ -3,7 +3,6 @@ package pers.hpcx.foxlang.ast
 import pers.hpcx.foxlang.runtime.*
 import java.io.PrintWriter
 import java.io.StringWriter
-import java.util.*
 
 data class AstSourceOptions(
     val indent: String = "    ",
@@ -96,17 +95,22 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                     FoxAnyType -> "Any"
                     FoxAnyTupleType -> "AnyTuple"
                     FoxAnyStructType -> "AnyStruct"
+                    FoxAnyObjectType -> "AnyObject"
                     FoxAnyEnumType -> "AnyEnum"
                     FoxAnyArrayType -> "AnyArray"
                     FoxAnyRefType -> "AnyRef"
-                    FoxAnyLambdaType -> "AnyLambda"
+                    FoxAnyMethodType -> "AnyMethod"
                 },
             )
             is FoxBuiltInType -> when (type) {
                 is FoxTupleType -> {
                     writer.print("Tuple<")
-                    writeCommaSeparated(type.parts, writer) { component, out ->
-                        render(component, out)
+                    writeCommaSeparated(type.components, writer) { component, out ->
+                        render(component.first, out)
+                        if (component.second > 1) {
+                            out.print(':')
+                            out.print(component.second)
+                        }
                     }
                     writer.print('>')
                 }
@@ -116,6 +120,15 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                         out.print(field.key)
                         out.print(": ")
                         render(field.value, out)
+                    }
+                    writer.print('>')
+                }
+                is FoxObjectType -> {
+                    writer.print("Object<")
+                    writeCommaSeparated(type.members.entries, writer) { member, out ->
+                        out.print(member.key)
+                        out.print(": ")
+                        render(member.value, out)
                     }
                     writer.print('>')
                 }
@@ -138,8 +151,8 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                     render(type.referent, writer)
                     writer.print('>')
                 }
-                is FoxLambdaType -> {
-                    writer.print("Lambda<")
+                is FoxMethodType -> {
+                    writer.print("Method<")
                     writeCommaSeparated(listOf(type.`this`, *type.parameters.toTypedArray(), type.`return`), writer) { type, out ->
                         render(type, out)
                     }
@@ -147,43 +160,50 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                 }
             }
             is FoxTransformType -> when (type) {
-                is FoxTuplePartOfType -> {
-                    writer.print("PartOf<")
+                is FoxTupleComponentAtType -> {
+                    writer.print("ComponentAt<")
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.index)
                     writer.print('>')
                 }
-                is FoxTupleFirstPartsOfType -> {
-                    writer.print("FirstPartsOf<")
+                is FoxTupleLastComponentAtType -> {
+                    writer.print("LastComponentAt<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.index)
+                    writer.print('>')
+                }
+                is FoxTupleFirstComponentsOfType -> {
+                    writer.print("FirstComponentsOf<")
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.count)
                     writer.print('>')
                 }
-                is FoxTupleLastPartsOfType -> {
-                    writer.print("LastPartsOf<")
+                is FoxTupleLastComponentsOfType -> {
+                    writer.print("LastComponentsOf<")
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.count)
                     writer.print('>')
                 }
-                is FoxTupleDropFirstPartsOfType -> {
-                    writer.print("DropFirstPartsOf<")
+                is FoxTupleDropFirstComponentsOfType -> {
+                    writer.print("DropFirstComponentsOf<")
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.count)
                     writer.print('>')
                 }
-                is FoxTupleDropLastPartsOfType -> {
-                    writer.print("DropLastPartsOf<")
+                is FoxTupleDropLastComponentsOfType -> {
+                    writer.print("DropLastComponentsOf<")
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.count)
                     writer.print('>')
                 }
-                is FoxTupleMergePartsOfType -> {
-                    writer.print("MergePartsOf<")
+                is FoxTupleMergeComponentsOfType -> {
+                    writer.print("MergeComponentsOf<")
                     writeCommaSeparated(type.types, writer) { type, out ->
                         render(type, out)
                     }
@@ -194,6 +214,48 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                     render(type.type, writer)
                     writer.print(", ")
                     writer.print(type.name)
+                    writer.print('>')
+                }
+                is FoxStructFieldAtType -> {
+                    writer.print("FieldAt<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.index)
+                    writer.print('>')
+                }
+                is FoxStructLastFieldAtType -> {
+                    writer.print("LastFieldAt<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.index)
+                    writer.print('>')
+                }
+                is FoxStructFirstFieldsOfType -> {
+                    writer.print("FirstFieldsOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.count)
+                    writer.print('>')
+                }
+                is FoxStructLastFieldsOfType -> {
+                    writer.print("LastFieldsOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.count)
+                    writer.print('>')
+                }
+                is FoxStructDropFirstFieldsOfType -> {
+                    writer.print("DropFirstFieldsOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.count)
+                    writer.print('>')
+                }
+                is FoxStructDropLastFieldsOfType -> {
+                    writer.print("DropLastFieldsOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.count)
                     writer.print('>')
                 }
                 is FoxStructFieldsOfType -> {
@@ -216,6 +278,38 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                 }
                 is FoxStructMergeFieldsOfType -> {
                     writer.print("MergeFieldsOf<")
+                    writeCommaSeparated(type.types, writer) { type, out ->
+                        render(type, out)
+                    }
+                    writer.print('>')
+                }
+                is FoxObjectMemberOfType -> {
+                    writer.print("MemberOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writer.print(type.name)
+                    writer.print('>')
+                }
+                is FoxObjectMembersOfType -> {
+                    writer.print("MembersOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writeCommaSeparated(type.names, writer) { name, out ->
+                        out.print(name)
+                    }
+                    writer.print('>')
+                }
+                is FoxObjectDropMembersOfType -> {
+                    writer.print("DropMembersOf<")
+                    render(type.type, writer)
+                    writer.print(", ")
+                    writeCommaSeparated(type.names, writer) { name, out ->
+                        out.print(name)
+                    }
+                    writer.print('>')
+                }
+                is FoxObjectMergeMembersOfType -> {
+                    writer.print("MergeMembersOf<")
                     writeCommaSeparated(type.types, writer) { type, out ->
                         render(type, out)
                     }
@@ -263,17 +357,17 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                     render(type.type, writer)
                     writer.print('>')
                 }
-                is FoxLambdaThisOfType -> {
+                is FoxMethodThisOfType -> {
                     writer.print("ThisOf<")
                     render(type.type, writer)
                     writer.print('>')
                 }
-                is FoxLambdaParametersOfType -> {
+                is FoxMethodParametersOfType -> {
                     writer.print("ParametersOf<")
                     render(type.type, writer)
                     writer.print('>')
                 }
-                is FoxLambdaReturnOfType -> {
+                is FoxMethodReturnOfType -> {
                     writer.print("ReturnOf<")
                     render(type.type, writer)
                     writer.print('>')
@@ -337,13 +431,11 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                 render(statement.type, writer)
                 writeActualParameters(statement.parameters, writer, indentLevel)
             }
-            is FoxLambdaStatement -> renderLambda(statement, writer, indentLevel)
-            is FoxLambdaCall -> renderLambdaCall(statement, writer, indentLevel)
+            is FoxIndirectCall -> renderIndirectCall(statement, writer, indentLevel)
             is FoxIf -> renderIf(statement, writer, indentLevel)
             is FoxWhen -> renderWhen(statement, writer, indentLevel)
             is FoxWhile -> renderWhile(statement, writer, indentLevel)
             is FoxDoWhile -> renderDoWhile(statement, writer, indentLevel)
-            is FoxGenFor -> renderGenFor(statement, writer, indentLevel)
             is FoxBreak -> {
                 writer.print("break")
                 statement.label?.let {
@@ -450,26 +542,8 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writeActualParameters(statement.parameters, writer, indentLevel)
     }
     
-    private fun renderLambda(
-        statement: FoxLambdaStatement,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writer.print("{ ")
-        writeCommaSeparated(statement.parameters, writer) { (name, type), out ->
-            out.print(name)
-            type?.let {
-                out.print(": ")
-                render(it, out)
-            }
-        }
-        writer.print(" -> ")
-        render(statement.body, writer, indentLevel + 1, Standalone)
-        writer.print(" }")
-    }
-    
-    private fun renderLambdaCall(
-        statement: FoxLambdaCall,
+    private fun renderIndirectCall(
+        statement: FoxIndirectCall,
         writer: PrintWriter,
         indentLevel: Int,
     ) {
@@ -582,21 +656,6 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writer.print(')')
     }
     
-    private fun renderGenFor(
-        statement: FoxGenFor,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writer.print("genfor (")
-        writer.print(statement.valueName)
-        writer.print(": ")
-        writer.print(statement.typeName)
-        writer.print(" in ")
-        render(statement.targetType, writer)
-        writer.print(") ")
-        renderControlBody(statement.body, writer, indentLevel)
-    }
-    
     private fun renderMethodBody(
         statement: FoxStatement,
         writer: PrintWriter,
@@ -638,7 +697,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeTypeParameterNames(
-        generics: SequencedSet<String>?,
+        generics: Set<String>?,
         writer: PrintWriter,
     ) {
         val values = generics?.takeIf { it.isNotEmpty() } ?: return
@@ -648,7 +707,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeFormalGenerics(
-        generics: SequencedMap<String, FoxGenericConstraint>,
+        generics: Map<String, FoxGenericConstraint>,
         writer: PrintWriter,
     ) {
         writer.print('<')
@@ -663,7 +722,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeFormalParameters(
-        parameters: SequencedMap<String, FoxType>,
+        parameters: Map<String, FoxType>,
         writer: PrintWriter,
     ) {
         writer.print('(')
@@ -756,43 +815,13 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                 writer.print(escapeString(entity.value))
                 writer.print('"')
             }
-            is FoxArray -> {
-                writer.print('[')
-                writeCommaSeparated(entity.elements, writer) { item, out -> renderEntity(item, out) }
-                writer.print(']')
-            }
-            is FoxTuple -> {
-                writer.print('(')
-                writeCommaSeparated(entity.components, writer) { item, out -> renderEntity(item, out) }
-                writer.print(')')
-            }
-            is FoxStruct -> {
-                writer.print("Struct(")
-                writeCommaSeparated(entity.fields.entries, writer) { (name, value), out ->
-                    out.print(name)
-                    out.print(" = ")
-                    renderEntity(value, out)
-                }
-                writer.print(')')
-            }
-            is FoxEnum -> {
-                writer.print(entity.name)
-                writer.print('(')
-                renderEntity(entity.value, writer)
-                writer.print(')')
-            }
-            is FoxRef -> {
-                writer.print("ref(")
-                writer.print(entity.referent)
-                writer.print(')')
-            }
-            is FoxLambda -> {
-                writer.print("lambda(captured = ")
-                renderEntity(entity.captured, writer)
-                writer.print(", implementation = ")
-                writer.print(entity.implementation)
-                writer.print(')')
-            }
+            is FoxArray -> TODO()
+            is FoxTuple -> TODO()
+            is FoxStruct -> TODO()
+            is FoxObject -> TODO()
+            is FoxEnum -> TODO()
+            is FoxRef -> TODO()
+            is FoxMethod -> TODO()
         }
     }
     
@@ -846,14 +875,12 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         is FoxWhen,
         is FoxWhile,
         is FoxDoWhile,
-        is FoxGenFor,
         is FoxBreak,
         is FoxContinue,
         is FoxYield,
         is FoxReturn,
         is FoxBlock,
         is FoxTypeBinding,
-        is FoxLambdaStatement,
             -> 0
         
         is FoxAssign -> 10
@@ -863,7 +890,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         is FoxComponentAccess,
         is FoxCall,
         is FoxConstruct,
-        is FoxLambdaCall,
+        is FoxIndirectCall,
             -> 130
         
         is FoxFormattedString,

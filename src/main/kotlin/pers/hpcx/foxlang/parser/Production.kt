@@ -386,32 +386,46 @@ class SerialProduction<N>(
     override fun referencedNonTerminals(): List<NonTerminal<*>> = components
     
     override fun update(context: ParseContext, cursor: Cursor) {
-        var current = cursor
-        val results = mutableListOf<Any?>()
+        data class Partial(
+            val cursor: Cursor,
+            val values: List<Any?>,
+        )
+        
+        var partials = listOf(Partial(cursor, emptyList()))
         components.forEach { comp ->
-            val result = context.parse(current, comp) ?: return
-            results += result.node
-            current = result.interval.end
+            val nextPartials = mutableListOf<Partial>()
+            partials.forEach { partial ->
+                context.parseSuccesses(partial.cursor, comp).forEach { success ->
+                    nextPartials += Partial(
+                        cursor = success.interval.end,
+                        values = partial.values + success.node,
+                    )
+                }
+            }
+            if (nextPartials.isEmpty()) return
+            partials = nextPartials
         }
-        val node = try {
-            factory(results)
-        } catch (e: ParseException) {
+        partials.forEach { partial ->
+            val node = try {
+                factory(partial.values)
+            } catch (e: ParseException) {
+                context.memoize(
+                    Failure(
+                        message = e.message,
+                        interval = Interval(cursor, partial.cursor),
+                        nonTerminal = result,
+                    ),
+                )
+                return@forEach
+            }
             context.memoize(
-                Failure(
-                    message = e.message,
-                    interval = Interval(cursor, current),
+                Success(
+                    node = node,
+                    interval = Interval(cursor, partial.cursor),
                     nonTerminal = result,
                 ),
             )
-            return
         }
-        context.memoize(
-            Success(
-                node = node,
-                interval = Interval(cursor, current),
-                nonTerminal = result,
-            ),
-        )
     }
     
     override fun diagnose(context: ParseContext, cursor: Cursor): Diagnosis? {
@@ -485,40 +499,76 @@ class ListProduction<N>(
     override fun referencedNonTerminals(): List<NonTerminal<*>> = listOfNotNull(begin, element, separator, end)
     
     override fun update(context: ParseContext, cursor: Cursor) {
-        var current = cursor
+        data class PartialList<N>(
+            val cursor: Cursor,
+            val values: List<N>,
+        )
         
-        begin?.let {
-            context.parse(cursor, begin) ?: return
-        }?.let {
-            current = it.interval.end
+        val started = mutableListOf<PartialList<N>>()
+        if (begin == null) {
+            started += PartialList(cursor, emptyList())
+        } else {
+            context.parseSuccesses(cursor, begin).forEach { success ->
+                started += PartialList(success.interval.end, emptyList())
+            }
+            if (started.isEmpty()) return
         }
         
-        val elements = mutableListOf<N>()
-        while (true) {
-            val element = context.parse(current, element) ?: break
-            elements += element.node
-            current = element.interval.end
-            separator?.let {
-                context.parse(current, separator) ?: break
-            }?.let {
-                current = it.interval.end
+        val visited = mutableSetOf<Pair<Cursor, Int>>()
+        val queue = ArrayDeque(started)
+        val finals = mutableListOf<PartialList<N>>()
+        
+        while (queue.isNotEmpty()) {
+            val partial = queue.removeFirst()
+            if (!visited.add(partial.cursor to partial.values.size)) continue
+            
+            val elementSuccesses = context.parseSuccesses(partial.cursor, element)
+            if (elementSuccesses.isEmpty()) {
+                finals += partial
+                continue
+            }
+            
+            var extended = false
+            elementSuccesses.forEach { elementSuccess ->
+                val afterElement = elementSuccess.interval.end
+                val nextValues = partial.values + elementSuccess.node
+                if (separator == null) {
+                    queue += PartialList(afterElement, nextValues)
+                    extended = true
+                } else {
+                    val separators = context.parseSuccesses(afterElement, separator)
+                    if (separators.isEmpty()) {
+                        finals += PartialList(afterElement, nextValues)
+                    } else {
+                        separators.forEach { separatorSuccess ->
+                            queue += PartialList(separatorSuccess.interval.end, nextValues)
+                        }
+                        extended = true
+                    }
+                }
+            }
+            if (!extended) {
+                finals += partial
             }
         }
         
-        end?.let {
-            context.parse(current, end) ?: return
-        }?.let {
-            current = it.interval.end
-        }
-        
-        if (current > cursor) {
-            context.memoize(
-                Success(
-                    node = elements,
-                    interval = Interval(cursor, current),
-                    nonTerminal = result,
-                ),
-            )
+        finals.forEach { partial ->
+            val ended = if (end == null) {
+                listOf(partial.cursor)
+            } else {
+                context.parseSuccesses(partial.cursor, end).map { it.interval.end }
+            }
+            ended.forEach { endCursor ->
+                if (partial.values.isNotEmpty() || endCursor > cursor) {
+                    context.memoize(
+                        Success(
+                            node = partial.values,
+                            interval = Interval(cursor, endCursor),
+                            nonTerminal = result,
+                        ),
+                    )
+                }
+            }
         }
     }
     

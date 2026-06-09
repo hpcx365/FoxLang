@@ -99,7 +99,7 @@ fun parseStopReport(context: ParseContext, maxItemsPerSection: Int = 8): ParseSt
         ?: context.memoization
             .values
             .flatMap { it.values }
-            .filterIsInstance<Success<*>>()
+            .flatMap { it.successes() }
             .maxByOrNull { it.interval.end.fragIndex }
             ?.interval
             ?.end
@@ -111,12 +111,12 @@ fun parseStopReport(context: ParseContext, maxItemsPerSection: Int = 8): ParseSt
         .sorted()
         .take(maxItemsPerSection)
     val successes = results.values
-        .filterIsInstance<Success<*>>()
+        .flatMap { it.successes }
         .sortedByDescending { it.interval.end.fragIndex }
         .take(maxItemsPerSection)
         .map { describeResult(it) }
     val failures = results.values
-        .filterIsInstance<Failure<*>>()
+        .mapNotNull { it.bestFailure }
         .sortedBy { it.nonTerminal.toString() }
         .take(maxItemsPerSection)
         .map { describeResult(it) }

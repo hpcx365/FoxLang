@@ -13,6 +13,12 @@ private data class ParseStateKey(
     val nonTerminal: NonTerminal<*>,
 )
 
+private data class StateEvaluationFrame(
+    val state: ParseStateKey,
+    val visibleSnapshot: ParseResultSnapshot,
+    val candidateStore: ParseResultStore,
+)
+
 class ParseContext(
     source: String,
     private val grammar: Grammar,
@@ -20,50 +26,73 @@ class ParseContext(
     val fragments = source.toFragments()
     val parseQueue = ArrayDeque<Pair<Cursor, NonTerminal<*>>>()
     val parseQueueVisited = mutableSetOf<Pair<Cursor, NonTerminal<*>>>()
-    val memoization = mutableMapOf<Cursor, MutableMap<NonTerminal<*>, ParseResult<*>>>()
+    val memoization = mutableMapOf<Cursor, MutableMap<NonTerminal<*>, ParseResultStore>>()
     private val discoveredStates = mutableSetOf<ParseStateKey>()
     private val queuedStates = mutableSetOf<ParseStateKey>()
     private val dependentStates = mutableMapOf<ParseStateKey, MutableSet<ParseStateKey>>()
     private var currentState: ParseStateKey? = null
+    private var currentEvaluationFrame: StateEvaluationFrame? = null
     
     operator fun get(cursor: Cursor): SourceFragment? {
         return fragments.getOrNull(cursor.fragIndex)
     }
     
     fun memoize(result: ParseResult<*>) {
-        memoization.getOrPut(result.interval.begin) { mutableMapOf() }.compute(result.nonTerminal) { _, oldResult ->
-            if (oldResult == null || result > oldResult) {
-                result.also {
-                    enqueueDependents(ParseStateKey(result.interval.begin, result.nonTerminal))
-                }
-            } else {
-                oldResult
-            }
+        val state = ParseStateKey(result.interval.begin, result.nonTerminal)
+        val frame = currentEvaluationFrame
+        if (frame != null && frame.state == state) {
+            frame.candidateStore.add(result)
+            return
+        }
+        val store = memoization.getOrPut(result.interval.begin) { mutableMapOf() }
+            .getOrPut(result.nonTerminal) { ParseResultStore() }
+        if (store.add(result)) {
+            enqueueDependents(state)
         }
     }
     
     @Suppress("UNCHECKED_CAST")
     fun <N> parse(cursor: Cursor, nonTerminal: NonTerminal<N>): Success<N>? {
+        return bestSuccess(cursor, nonTerminal)
+    }
+    
+    @Suppress("UNCHECKED_CAST")
+    fun <N> bestSuccess(cursor: Cursor, nonTerminal: NonTerminal<N>): Success<N>? {
+        return parseSuccesses(cursor, nonTerminal).maxWithOrNull { left, right ->
+            left.compareTo(right)
+        }
+    }
+    
+    @Suppress("UNCHECKED_CAST")
+    fun <N> parseSuccesses(cursor: Cursor, nonTerminal: NonTerminal<N>): List<Success<N>> {
         val next = ParseStateKey(cursor, nonTerminal)
         parseQueueVisited += cursor to nonTerminal
         recordDependency(next)
         if (!starterPredicate(cursor, nonTerminal)) {
-            return null
+            return emptyList()
+        }
+        currentEvaluationFrame?.takeIf { it.state == next }?.let { frame ->
+            return frame.visibleSnapshot.successes as List<Success<N>>
         }
         val raw = memoization[cursor]?.get(nonTerminal)
         if (raw == null) {
             enqueueDiscoveredState(next)
         }
-        return raw as? Success<N>?
+        return raw?.successes() as? List<Success<N>> ?: emptyList()
     }
     
     @Suppress("UNCHECKED_CAST")
     fun <N> memoized(cursor: Cursor, nonTerminal: NonTerminal<N>): ParseResult<N>? {
-        return memoization[cursor]?.get(nonTerminal) as ParseResult<N>?
+        currentEvaluationFrame
+            ?.takeIf { it.state == ParseStateKey(cursor, nonTerminal) }
+            ?.let { frame -> return frame.visibleSnapshot.bestResult() as ParseResult<N>? }
+        return memoization[cursor]?.get(nonTerminal)?.bestResult() as ParseResult<N>?
     }
     
-    fun memoizedAt(cursor: Cursor): Map<NonTerminal<*>, ParseResult<*>> {
-        return memoization[cursor]?.toMap() ?: emptyMap()
+    fun memoizedAt(cursor: Cursor): Map<NonTerminal<*>, ParseResultSnapshot> {
+        return memoization[cursor]
+            ?.mapValues { (_, store) -> store.snapshot() }
+            ?: emptyMap()
     }
     
     fun seedRoot(root: Pair<Cursor, NonTerminal<*>>) {
@@ -77,10 +106,19 @@ class ParseContext(
     
     fun <T> recordStateUpdate(cursor: Cursor, nonTerminal: NonTerminal<*>, block: () -> T): T {
         val previous = currentState
+        val previousFrame = currentEvaluationFrame
         currentState = ParseStateKey(cursor, nonTerminal)
+        val baseStore = memoization[cursor]?.get(nonTerminal)
+        currentEvaluationFrame = StateEvaluationFrame(
+            state = currentState!!,
+            visibleSnapshot = (baseStore ?: ParseResultStore()).snapshot(),
+            candidateStore = (baseStore?.copyStore() ?: ParseResultStore()),
+        )
         return try {
             block()
         } finally {
+            currentEvaluationFrame?.let(::commitEvaluationFrame)
+            currentEvaluationFrame = previousFrame
             currentState = previous
         }
     }
@@ -114,6 +152,21 @@ class ParseContext(
     private fun recordDependency(child: ParseStateKey) {
         val parent = currentState ?: return
         dependentStates.getOrPut(child) { mutableSetOf() }.add(parent)
+    }
+    
+    private fun commitEvaluationFrame(frame: StateEvaluationFrame) {
+        val currentStore = memoization.getOrPut(frame.state.cursor) { mutableMapOf() }
+            .getOrPut(frame.state.nonTerminal) { ParseResultStore() }
+        var changed = false
+        frame.candidateStore.successes().forEach { success ->
+            changed = currentStore.add(success) || changed
+        }
+        frame.candidateStore.bestFailure()?.let { failure ->
+            changed = currentStore.add(failure) || changed
+        }
+        if (changed) {
+            enqueueDependents(frame.state)
+        }
     }
     
     private fun starterPredicate(cursor: Cursor, nonTerminal: NonTerminal<*>): Boolean {

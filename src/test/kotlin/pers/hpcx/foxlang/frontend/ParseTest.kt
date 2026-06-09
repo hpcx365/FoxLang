@@ -2,7 +2,6 @@ package pers.hpcx.foxlang.frontend
 
 import pers.hpcx.foxlang.ast.FoxFile
 import pers.hpcx.foxlang.ast.FoxGrammar
-import pers.hpcx.foxlang.ast.FoxTypeAlias
 import pers.hpcx.foxlang.ast.toSource
 import pers.hpcx.foxlang.parser.Parser
 import pers.hpcx.foxlang.parser.Success
@@ -19,10 +18,6 @@ class ParseTest {
         val printed = file.node.toSource()
         val reparsed = parseFile(printed, "Rendered source should stay parseable:\n$printed\n")
         assertEquals(file.node, reparsed.node)
-        file.node.elements.filterIsInstance<FoxTypeAlias>().forEach { alias ->
-            val reparsedAlias = parseTypeAlias(alias.toSource())
-            assertEquals(alias, reparsedAlias.node, alias.toSource())
-        }
     }
     
     private fun parseFile(source: String, prefix: String): Success<FoxFile> {
@@ -33,15 +28,6 @@ class ParseTest {
         assertNotNull(file.node)
         assertEquals(report.context.fragments.size, file.interval.end.fragIndex, context)
         return file
-    }
-    
-    private fun parseTypeAlias(source: String): Success<FoxTypeAlias> {
-        val parser = Parser(FoxGrammar, node<FoxTypeAlias>())
-        val report = parser.parse(source)
-        val context = "Type alias should stay parseable:\n$source\n${report.stop}"
-        val alias = assertIs<Success<FoxTypeAlias>>(report.result, context)
-        assertEquals(report.context.fragments.size, alias.interval.end.fragIndex, context)
-        return alias
     }
 }
 
@@ -54,25 +40,39 @@ const val source = """
  */
  
 type MyTuple = Tuple<Unit, Bool, Byte, Short, Int, Long, Float, Double, Char, String>
+type MyPackedTuple = Tuple<Int:3, Float:4, Double>
 type MyArray = Array<MyTuple>
 type MyEnum = Enum<Success = Int, Failure = String>
 type MyStruct = Struct<name: String, age: Int, height: Double>
+type MyObject = Object<name: String, age: Int, active: Bool>
 type MyMap = Map<String, MyEnum>
 type MyNamedMap = Map<Key = String, Value = MyEnum>
-type MyLambda = Lambda<MyStruct, Int, String, Bool>
-type MyWildcards = Tuple<Any, AnyTuple, AnyStruct, AnyEnum, AnyArray, AnyRef, AnyLambda>
+type MyMethod = Method<MyStruct, Int, String, Bool>
+type MyWildcards = Tuple<Any, AnyTuple, AnyStruct, AnyObject, AnyEnum, AnyArray, AnyRef, AnyMethod>
 
-type MyTuplePart = PartOf<MyTuple, 4>
-type MyTupleFirst = FirstPartsOf<MyTuple, 3>
-type MyTupleLast = LastPartsOf<MyTuple, 2>
-type MyTupleDropFirst = DropFirstPartsOf<MyTuple, 3>
-type MyTupleDropLast = DropLastPartsOf<MyTuple, 2>
-type MyTupleMerge = MergePartsOf<MyTuple, Tuple<String, Int>>
+type MyTupleComponent = ComponentAt<MyTuple, 4>
+type MyTupleLastComponent = LastComponentAt<MyTuple, 0>
+type MyTupleFirst = FirstComponentsOf<MyTuple, 3>
+type MyTupleLast = LastComponentsOf<MyTuple, 2>
+type MyTupleDropFirst = DropFirstComponentsOf<MyTuple, 3>
+type MyTupleDropLast = DropLastComponentsOf<MyTuple, 2>
+type MyTupleMerge = MergeComponentsOf<MyTuple, Tuple<String, Int>>
 
 type MyStructField = FieldOf<MyStruct, name>
+type MyStructFieldAt = FieldAt<MyStruct, 1>
+type MyStructLastFieldAt = LastFieldAt<MyStruct, 0>
+type MyStructFirstFields = FirstFieldsOf<MyStruct, 2>
+type MyStructLastFields = LastFieldsOf<MyStruct, 2>
+type MyStructDropFirstFields = DropFirstFieldsOf<MyStruct, 1>
+type MyStructDropLastFields = DropLastFieldsOf<MyStruct, 1>
 type MyStructFields = FieldsOf<MyStruct, name, age>
 type MyStructDropFields = DropFieldsOf<MyStruct, height>
 type MyStructMerge = MergeFieldsOf<MyStruct, Struct<nick: String>>
+
+type MyObjectMember = MemberOf<MyObject, name>
+type MyObjectMembers = MembersOf<MyObject, name, active>
+type MyObjectDropMembers = DropMembersOf<MyObject, age>
+type MyObjectMerge = MergeMembersOf<MyObject, Object<nick: String>>
 
 type MyEnumItem = ItemOf<MyEnum, Success>
 type MyEnumItems = ItemsOf<MyEnum, Success, Failure>
@@ -81,9 +81,9 @@ type MyEnumMerge = MergeItemsOf<MyEnum, Enum<Pending = Unit>>
 
 type MyArrayElement = ElementOf<MyArray>
 type MyRefReferent = ReferentOf<Ref<MyTuple>>
-type MyLambdaThis = ThisOf<MyLambda>
-type MyLambdaParameters = ParametersOf<MyLambda>
-type MyLambdaReturn = ReturnOf<MyLambda>
+type MyMethodThis = ThisOf<MyMethod>
+type MyMethodParameters = ParametersOf<MyMethod>
+type MyMethodReturn = ReturnOf<MyMethod>
 
 def <T = AnyStruct, E = ItemOf<MyEnum, Success>> MergeFieldsOf<MyStruct, Struct<nick: String>>.describe(
     sample: FieldsOf<MyStruct, name, age>,
@@ -93,9 +93,12 @@ def <T = AnyStruct, E = ItemOf<MyEnum, Success>> MergeFieldsOf<MyStruct, Struct<
     return "fox"
 }
 
-def collatz(i: Int): Ref<List<Int>> {
+def Int.collatz(): Ref<List<Int>> {
     result := Ref<ArrayList<Int>>()
     
+    i := this
+    println((println)("indirect call"))
+    result.(forEach)({ println(it) })
     #loop while (i != 1) {
         result += i
         i = if (i % 2 == 0) i / 2 else {
@@ -124,7 +127,7 @@ def main(args: Array<String>) {
     if (i <= 0) panic("Invalid input! Expected a positive number.")
     if (i > 10_000) panic("Invalid input! Expected a number less than 10,000.")
     
-    result := collatz(i)
+    result := i.collatz()
     println("Collatz sequence:")
     result.forEach { println(it) }
     

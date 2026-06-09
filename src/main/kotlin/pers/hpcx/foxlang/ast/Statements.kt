@@ -77,12 +77,7 @@ data class FoxConstruct(
     val parameters: List<Pair<String?, FoxStatement>>,
 ) : FoxStatement
 
-data class FoxLambdaStatement(
-    val parameters: List<Pair<String, FoxType?>>,
-    val body: FoxStatement,
-) : FoxStatement
-
-data class FoxLambdaCall(
+data class FoxIndirectCall(
     val target: FoxStatement?,
     val method: FoxStatement,
     val parameters: List<FoxStatement>,
@@ -116,13 +111,6 @@ data class FoxDoWhile(
     val label: String?,
     val body: FoxStatement,
     val condition: FoxStatement,
-) : FoxStatement
-
-data class FoxGenFor(
-    val valueName: String,
-    val typeName: String,
-    val targetType: FoxType,
-    val body: FoxStatement,
 ) : FoxStatement
 
 data class FoxBreak(

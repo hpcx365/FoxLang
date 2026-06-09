@@ -1,5 +1,7 @@
 package pers.hpcx.foxlang.runtime
 
+import pers.hpcx.foxlang.utils.OrderedMap
+
 sealed interface FoxEntity
 sealed interface FoxPrimitive : FoxEntity
 
@@ -16,7 +18,8 @@ data class FoxString(val value: String) : FoxPrimitive
 
 data class FoxArray(val elements: List<FoxEntity>) : FoxEntity
 data class FoxTuple(val components: List<FoxEntity>) : FoxEntity
-data class FoxStruct(val fields: Map<String, FoxEntity>) : FoxEntity
+data class FoxStruct(val fields: OrderedMap<String, FoxEntity>) : FoxEntity
+data class FoxObject(val members: Map<String, FoxEntity>) : FoxEntity
 data class FoxEnum(val name: String, val value: FoxEntity) : FoxEntity
 data class FoxRef(val referent: Int) : FoxEntity
-data class FoxLambda(val captured: FoxTuple, val implementation: FoxMethodIdentifier) : FoxEntity
+data class FoxMethod(val identifier: FoxMethodIdentifier) : FoxEntity
