@@ -6,6 +6,7 @@ import kotlin.reflect.KClass
 
 inline fun <reified T : Any> node() = ClassNonTerminal(T::class)
 fun token(token: String) = node<String>().name(token)
+fun <N> NonTerminal<N>.optional(): NonTerminal<N?> = OptionalNonTerminal(this)
 fun <F, S> NonTerminal<F>.pair(second: NonTerminal<S>): NonTerminal<Pair<F, S>> = PairNonTerminal(this, second)
 fun <N> NonTerminal<N>.list(): NonTerminal<List<N>> = ListNonTerminal(this)
 fun <N> NonTerminal<N>.set(): NonTerminal<Set<N>> = SetNonTerminal(this)
@@ -18,6 +19,10 @@ sealed interface NonTerminal<N>
 
 data class ClassNonTerminal<N : Any>(val clazz: KClass<N>) : NonTerminal<N> {
     override fun toString() = clazz.simpleName ?: clazz.toString()
+}
+
+data class OptionalNonTerminal<N>(val type: NonTerminal<N>) : NonTerminal<N?> {
+    override fun toString() = "Optional<${type}>"
 }
 
 data class PairNonTerminal<F, S>(val first: NonTerminal<F>, val second: NonTerminal<S>) : NonTerminal<Pair<F, S>> {

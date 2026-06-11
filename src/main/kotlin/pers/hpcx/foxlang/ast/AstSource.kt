@@ -1,6 +1,8 @@
 package pers.hpcx.foxlang.ast
 
 import pers.hpcx.foxlang.runtime.*
+import pers.hpcx.foxlang.utils.OrderedMap
+import pers.hpcx.foxlang.utils.OrderedSet
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -153,9 +155,15 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                 }
                 is FoxMethodType -> {
                     writer.print("Method<")
-                    writeCommaSeparated(listOf(type.`this`, *type.parameters.toTypedArray(), type.`return`), writer) { type, out ->
-                        render(type, out)
+                    render(type.`this`, writer)
+                    writer.print(", ")
+                    type.parameters.forEach {
+                        writer.print(it.key)
+                        writer.print(": ")
+                        render(it.value, writer)
+                        writer.print(", ")
                     }
+                    render(type.`return`, writer)
                     writer.print('>')
                 }
             }
@@ -373,10 +381,17 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
                     writer.print('>')
                 }
             }
-            is FoxCustomizedType -> {
+            is FoxUnresolvedType -> {
                 writer.print(type.name)
-                writeActualTypeArguments(type.parameters, writer)
+                if (type.parameters != null) {
+                    writer.print('<')
+                    writeCommaSeparated(type.parameters, writer) { type, out ->
+                        render(type, out)
+                    }
+                    writer.print('>')
+                }
             }
+            is FoxPlaceholderType -> error("Placeholder type should not be rendered")
         }
     }
     
@@ -697,7 +712,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeTypeParameterNames(
-        generics: Set<String>?,
+        generics: OrderedSet<String>?,
         writer: PrintWriter,
     ) {
         val values = generics?.takeIf { it.isNotEmpty() } ?: return
@@ -707,22 +722,34 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeFormalGenerics(
-        generics: Map<String, FoxGenericConstraint>,
+        generics: OrderedMap<String, FoxGenericConstraint>,
         writer: PrintWriter,
     ) {
         writer.print('<')
         writeCommaSeparated(generics.entries, writer) { (name, constraint), out ->
             out.print(name)
-            constraint.match?.let {
+            if (constraint.positivePatterns.isNotEmpty() || constraint.negativePatterns.isNotEmpty()) {
                 out.print(" = ")
-                render(it, out)
+                var isFirst = true
+                constraint.positivePatterns.forEach {
+                    if (isFirst) isFirst = false
+                    else out.print(" + ")
+                    render(it, out)
+                }
+                constraint.negativePatterns.forEach {
+                    if (isFirst) {
+                        isFirst = false
+                        out.print("-")
+                    } else out.print(" - ")
+                    render(it, out)
+                }
             }
         }
         writer.print('>')
     }
     
     private fun writeFormalParameters(
-        parameters: Map<String, FoxType>,
+        parameters: OrderedMap<String, FoxType>,
         writer: PrintWriter,
     ) {
         writer.print('(')

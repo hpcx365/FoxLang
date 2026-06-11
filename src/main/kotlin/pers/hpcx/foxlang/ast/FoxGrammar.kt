@@ -31,21 +31,24 @@ private val FormattedStringTemplateLiteral = node<FormattedStringTemplate>().nam
 
 private val FormalParameter = node<String>().pair(node<FoxType>()).name("FormalParameter")
 private val RawFormalParameterList = node<String>().pair(node<FoxType>()).list().name("RawFormalParameterList")
-private val FormalParameterList = node<String>().map(node<FoxType>()).name("FormalParameterList")
+private val FormalParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalParameterList")
 
-private val ActualParameter = node<Pair<String?, FoxStatement>>().name("ActualParameter")
+private val ActualParameter = node<String>().optional().pair(node<FoxStatement>()).name("ActualParameter")
 private val ActualParameterList = ActualParameter.list().name("ActualParameterList")
 
 private val AnonymousActualParameterList = node<FoxStatement>().list().name("AnonymousActualParameterList")
 
 private val FormalGenericParameter = node<String>().pair(node<FoxGenericConstraint>()).name("FormalGenericParameter")
 private val RawFormalGenericParameterList = node<String>().pair(node<FoxGenericConstraint>()).list().name("RawFormalGenericParameterList")
-private val FormalGenericParameterList = node<String>().map(node<FoxGenericConstraint>()).name("FormalGenericParameterList")
+private val FormalGenericParameterList = node<String>().orderedMap(node<FoxGenericConstraint>()).name("FormalGenericParameterList")
+private val FormalGenericConstraintTerm = node<Boolean>().pair(node<FoxType>()).name("FormalGenericConstraintTerm")
+private val RawFormalGenericConstraintTermList = node<Boolean>().pair(node<FoxType>()).list().name("RawFormalGenericConstraintTermList")
+private val FormalGenericConstraintClause = node<FoxGenericConstraint>().name("FormalGenericConstraintClause")
 
 private val RawFormalGenericParameterListWithoutConstraints = node<String>().list().name("RawFormalGenericParameterListWithoutConstraints")
-private val FormalGenericParameterListWithoutConstraints = node<String>().set().name("FormalGenericParameterListWithoutConstraints")
+private val FormalGenericParameterListWithoutConstraints = node<String>().orderedSet().name("FormalGenericParameterListWithoutConstraints")
 
-private val ActualGenericParameter = node<Pair<String?, FoxType>>().name("ActualGenericParameter")
+private val ActualGenericParameter = node<String>().optional().pair(node<FoxType>()).name("ActualGenericParameter")
 private val ActualGenericParameterList = ActualGenericParameter.list().name("ActualGenericParameterList")
 
 private val NamedActualGenericParameter = node<String>().pair(node<FoxType>()).name("NamedActualGenericParameter")
@@ -53,8 +56,8 @@ private val RawNamedActualGenericParameterList = node<String>().pair(node<FoxTyp
 private val NamedActualGenericParameterList = node<String>().map(node<FoxType>()).name("NamedActualGenericParameterList")
 
 private val AnonymousActualGenericParameterList = node<FoxType>().list().name("AnonymousActualGenericParameterList")
-private val TupleComponentParameter = node<Pair<FoxType, Int>>().name("TupleComponentParameter")
-private val TupleComponentParameterList = node<Pair<FoxType, Int>>().list().name("TupleComponentParameterList")
+private val TupleComponentParameter = node<FoxType>().pair(node<Int>()).name("TupleComponentParameter")
+private val TupleComponentParameterList = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterList")
 
 private val StructFieldParameter = node<String>().pair(node<FoxType>()).name("StructFieldParameter")
 private val RawStructFieldParameterList = node<String>().pair(node<FoxType>()).list().name("RawStructFieldParameterList")
@@ -63,6 +66,8 @@ private val RawStructFieldNameList = node<String>().list().name("RawStructFieldN
 private val StructFieldNameList = node<String>().orderedSet().name("StructFieldNameList")
 private val ObjectMemberParameterList = node<String>().map(node<FoxType>()).name("ObjectMemberParameterList")
 private val ObjectMemberNameSet = node<String>().set().name("ObjectMemberNameSet")
+private val RawMethodTypeParameterList = node<String>().pair(node<FoxType>()).list().name("RawMethodTypeParameterList")
+private val MethodTypeParameterList = node<String>().orderedMap(node<FoxType>()).name("MethodTypeParameterList")
 
 private val EnumItemParameter = node<String>().pair(node<FoxType>()).name("EnumItemParameter")
 private val RawEnumItemParameterList = node<String>().pair(node<FoxType>()).list().name("RawEnumItemParameterList")
@@ -309,10 +314,18 @@ private val FoxProductions = buildList {
                 if (it.size != 1) throw ParseException("Ref type must have exactly one generic parameter")
                 FoxRefType(it.first())
             },
-            serial(node<FoxType>(), token("Method"), AnonymousActualGenericParameterList) { _, it ->
-                if (it.size < 2) throw ParseException("Method type must have at least two generic parameters")
-                FoxMethodType(it.first(), it.drop(1).dropLast(1), it.last())
-            },
+            serial(
+                node<FoxType>(),
+                token("Method"),
+                token("<"),
+                node<FoxType>(),
+                token(","),
+                MethodTypeParameterList,
+                token(","),
+                node<FoxType>(),
+                token(">"),
+            ) { _, _, `this`, _, params, _, `return`, _ -> FoxMethodType(`this`, params, `return`) },
+            
             serial(node<FoxType>(), token("ComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
                 FoxTupleComponentAtType(type, index)
             },
@@ -404,15 +417,15 @@ private val FoxProductions = buildList {
                 FoxMethodReturnOfType(type)
             },
             serial(node<FoxType>(), TypeName) {
-                FoxCustomizedType(it, emptyList())
+                FoxUnresolvedType(it, null)
             },
-            serial(node<FoxType>(), TypeName, ActualGenericParameterList) { name, it ->
-                FoxCustomizedType(name, it)
+            serial(node<FoxType>(), TypeName, AnonymousActualGenericParameterList) { name, it ->
+                FoxUnresolvedType(name, it)
             },
             
             serial(FormalParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type },
             listLike(RawFormalParameterList, token("("), FormalParameter, token(","), token(")")),
-            serial(FormalParameterList, RawFormalParameterList) { it.toMap("formal parameter") },
+            serial(FormalParameterList, RawFormalParameterList) { it.toOrderedMap("formal parameter") },
             
             serial(ActualParameter, node<FoxStatement>()) { null to it },
             serial(ActualParameter, IdentifierEqual, node<FoxStatement>()) { name, value -> name to value },
@@ -420,13 +433,38 @@ private val FoxProductions = buildList {
             
             listLike(AnonymousActualParameterList, token("("), node<FoxStatement>(), token(","), token(")")),
             
-            serial(FormalGenericParameter, TypeName) { it to FoxGenericConstraint(match = null) },
-            serial(FormalGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to FoxGenericConstraint(type) },
+            serial(FormalGenericConstraintTerm, token("+"), node<FoxType>()) { _, type -> true to type },
+            serial(FormalGenericConstraintTerm, token("-"), node<FoxType>()) { _, type -> false to type },
+            listLike(RawFormalGenericConstraintTermList, null, FormalGenericConstraintTerm, null, null),
+            serial(FormalGenericConstraintClause, node<FoxType>()) {
+                FoxGenericConstraint(listOf(it), emptyList())
+            },
+            serial(FormalGenericConstraintClause, FormalGenericConstraintTerm) { (positive, type) ->
+                if (positive) FoxGenericConstraint(listOf(type), emptyList())
+                else FoxGenericConstraint(emptyList(), listOf(type))
+            },
+            serial(FormalGenericConstraintClause, node<FoxType>(), RawFormalGenericConstraintTermList) { type, rest ->
+                FoxGenericConstraint(
+                    positivePatterns = listOf(type) + rest.filter { it.first }.map { it.second },
+                    negativePatterns = rest.filter { !it.first }.map { it.second },
+                )
+            },
+            serial(FormalGenericConstraintClause, FormalGenericConstraintTerm, RawFormalGenericConstraintTermList) { first, rest ->
+                val constraints = listOf(first) + rest
+                FoxGenericConstraint(
+                    positivePatterns = constraints.filter { it.first }.map { it.second },
+                    negativePatterns = constraints.filter { !it.first }.map { it.second },
+                )
+            },
+            serial(FormalGenericParameter, TypeName) { it to FoxGenericConstraint(emptyList(), emptyList()) },
+            serial(FormalGenericParameter, TypeName, token("="), FormalGenericConstraintClause) { name, _, constraint ->
+                name to constraint
+            },
             listLike(RawFormalGenericParameterList, token("<"), FormalGenericParameter, token(","), token(">")),
-            serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toMap("formal generic parameter") },
+            serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toOrderedMap("formal generic parameter") },
             
             listLike(RawFormalGenericParameterListWithoutConstraints, token("<"), TypeName, token(","), token(">")),
-            serial(FormalGenericParameterListWithoutConstraints, RawFormalGenericParameterListWithoutConstraints) { it.toSet("formal generic parameter") },
+            serial(FormalGenericParameterListWithoutConstraints, RawFormalGenericParameterListWithoutConstraints) { it.toOrderedSet("formal generic parameter") },
             
             serial(ActualGenericParameter, node<FoxType>()) { null to it },
             serial(ActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type },
@@ -456,6 +494,9 @@ private val FoxProductions = buildList {
             serial(StructFieldNameList, RawStructFieldNameList) { it.toOrderedSet("struct field name") },
             serial(ObjectMemberNameSet, RawStructFieldNameList) { it.toSet("object member name") },
             listLike(EnumItemNameList, null, TypeName, token(","), null),
+            
+            listLike(RawMethodTypeParameterList, null, FormalParameter, token(","), null),
+            serial(MethodTypeParameterList, RawMethodTypeParameterList) { it.toOrderedMap("method type parameter") },
             
             serial(Label, token("#"), Identifier) { _, it -> it },
             serial(ParenthesizedStatement, token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node },
@@ -780,10 +821,10 @@ private data class ParsedWhenCore(
 )
 
 private data class ParsedMethodHead(
-    val generics: Map<String, FoxGenericConstraint>?,
+    val generics: OrderedMap<String, FoxGenericConstraint>?,
     val thisType: FoxType?,
     val name: String,
-    val parameters: Map<String, FoxType>,
+    val parameters: OrderedMap<String, FoxType>,
 )
 
 private fun fixedTokens(vararg texts: String): List<Production<*>> = texts.map { fixed(token(it), it) }
