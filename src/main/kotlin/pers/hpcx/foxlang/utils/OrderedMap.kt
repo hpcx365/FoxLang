@@ -41,7 +41,24 @@ interface OrderedMap<K, out V> : Iterable<Map.Entry<K, V>> {
     override fun iterator(): Iterator<Map.Entry<K, V>> = entries.iterator()
 }
 
-fun <K, V> emptyOrderedMap(): OrderedMap<K, V> = ArrayHashOrderedMap()
+private object EmptyOrderedMap : OrderedMap<Any?, Any?> {
+    override val size: Int = 0
+    override val entries: List<Map.Entry<Any?, Any?>> = emptyList()
+    override val keys: OrderedSet<Any?> = emptyOrderedSet()
+    override val values: List<Any?> = emptyList()
+    override fun containsKey(key: Any?): Boolean = false
+    override fun containsValue(value: Any?): Boolean = false
+    override fun get(key: Any?): Any? = null
+    override fun getValue(key: Any?): Any = throw NoSuchElementException("Map is empty")
+    override fun keyAt(index: Int): Any = throw IndexOutOfBoundsException("Map is empty")
+    override fun valueAt(index: Int): Any = throw IndexOutOfBoundsException("Map is empty")
+    override fun indexOfKey(key: Any?): Int = -1
+    override fun toMap(): Map<Any?, Any?> = emptyMap()
+}
+
+fun <K, V> emptyOrderedMap(): OrderedMap<K, V> = @Suppress("UNCHECKED_CAST") (EmptyOrderedMap as OrderedMap<K, V>)
+
+fun <K, V> OrderedMap<K, V>?.orEmpty(): OrderedMap<K, V> = this ?: emptyOrderedMap()
 
 fun <K, V> orderedMapOf(vararg entries: Pair<K, V>): OrderedMap<K, V> = ArrayHashOrderedMap(entries.asIterable())
 
@@ -49,8 +66,8 @@ fun <K, V> Iterable<Pair<K, V>>.toOrderedMap(): OrderedMap<K, V> = ArrayHashOrde
 
 fun <K, V> Map<K, V>.toOrderedMap(): OrderedMap<K, V> = ArrayHashOrderedMap(this)
 
-fun <K, V, T> OrderedMap<K, V>.mapValues(transform: (K, V) -> T): OrderedMap<K, T> {
+fun <K, V, T> OrderedMap<K, V>.mapValues(transform: (Map.Entry<K, V>) -> T): OrderedMap<K, T> {
     val result = ArrayHashOrderedMap<K, T>()
-    forEach { (k, v) -> result[k] = transform(k, v) }
+    forEach { entry -> result[entry.key] = transform(entry) }
     return result
 }

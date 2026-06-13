@@ -112,7 +112,7 @@ enum class FoxBuiltInMethodImplementation(
     returnType: FoxType,
     val signature: FoxMethodSignature = FoxMethodSignature(
         name = name,
-        generics = generics.mapValues { _, value -> FoxGenericConstraint(listOf(value), emptyList()) },
+        generics = generics.mapValues { FoxGenericConstraint(listOf(it.value), emptyList()) },
         thisType = thisType,
         parameters = parameters,
         returnType = returnType,

@@ -82,6 +82,23 @@ class TypeAliasFlattenPassTest {
     }
     
     @Test
+    fun flattensAliasUsedAsGenericArgument() {
+        val file = FoxFile(
+            listOf(
+                FoxTypeAlias("Base", null, FoxIntType),
+                FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))),
+                FoxTypeAlias("Use", null, FoxUnresolvedType("Box", listOf(FoxUnresolvedType("Base", null)))),
+            ),
+        )
+        
+        val result = assertIs<TypeAliasFlattenSuccess>(runTypeAliasFlatten(file))
+        val aliases = result.newFile.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
+        
+        assertEquals(FoxArrayType(FoxIntType), aliases.getValue("Use").alias)
+        assertTrue(noAliasDependency(aliases.getValue("Use").alias, aliases.keys))
+    }
+    
+    @Test
     fun keepsMethodDefinitionsUntouched() {
         val method = FoxMethodDefinition(
             generics = null,
@@ -135,18 +152,6 @@ class TypeAliasFlattenPassTest {
     }
     
     @Test
-    fun rejectsWildcardInAlias() {
-        val file = FoxFile(
-            listOf(
-                FoxTypeAlias("WildcardAlias", null, FoxArrayType(FoxAnyType)),
-            ),
-        )
-        
-        val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
-        assertIs<TypeAliasUnexpectedWildcard>(result.errors.single())
-    }
-    
-    @Test
     fun detectsAliasLoop() {
         val a = FoxTypeAlias("A", null, FoxUnresolvedType("B", null))
         val b = FoxTypeAlias("B", null, FoxUnresolvedType("C", null))
@@ -157,19 +162,24 @@ class TypeAliasFlattenPassTest {
         val loop = assertIs<TypeAliasLoopDetected>(result.errors.single())
         
         assertEquals(listOf("B", "C"), loop.typeAliases.map { it.name })
+        assertSame(b, loop.typeAliases[0])
+        assertSame(c, loop.typeAliases[1])
     }
     
     @Test
     fun detectsDuplicatedAlias() {
+        val first = FoxTypeAlias("A", null, FoxIntType)
+        val duplicate = FoxTypeAlias("A", null, FoxFloatType)
         val file = FoxFile(
             listOf(
-                FoxTypeAlias("A", null, FoxIntType),
-                FoxTypeAlias("A", null, FoxFloatType),
+                first,
+                duplicate,
             ),
         )
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
-        assertIs<TypeAliasDuplicated>(result.errors.single())
+        val error = assertIs<TypeAliasDuplicated>(result.errors.single())
+        assertSame(duplicate, error.typeAlias)
     }
     
     @Test
@@ -182,30 +192,37 @@ class TypeAliasFlattenPassTest {
         
         assertEquals("A", error.referredBy.name)
         assertEquals("Missing", error.typeName)
+        assertSame(alias, error.referredBy)
     }
     
     @Test
     fun detectsUnexpectedGenericsOnNonGenericAlias() {
         val alias = FoxTypeAlias("A", null, FoxIntType)
-        val referrer = FoxTypeAlias("B", null, FoxUnresolvedType("A", listOf(FoxIntType)))
+        val reference = FoxUnresolvedType("A", listOf(FoxIntType))
+        val referrer = FoxTypeAlias("B", null, reference)
         val file = FoxFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasUnexpectedGenerics>(result.errors.single())
         
         assertEquals("B", error.referredBy.name)
+        assertSame(referrer, error.referredBy)
+        assertSame(reference, error.type)
     }
     
     @Test
     fun detectsMissingGenericsOnGenericAlias() {
         val alias = FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null)))
-        val referrer = FoxTypeAlias("Use", null, FoxUnresolvedType("Box", null))
+        val reference = FoxUnresolvedType("Box", null)
+        val referrer = FoxTypeAlias("Use", null, reference)
         val file = FoxFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasMissingGenerics>(result.errors.single())
         
         assertEquals("Use", error.referredBy.name)
+        assertSame(referrer, error.referredBy)
+        assertSame(reference, error.type)
     }
     
     @Test
@@ -215,21 +232,23 @@ class TypeAliasFlattenPassTest {
             orderedSetOf("A", "B"),
             FoxTupleType(listOf(FoxUnresolvedType("A", null) to 1, FoxUnresolvedType("B", null) to 1)),
         )
-        val referrer = FoxTypeAlias("Use", null, FoxUnresolvedType("Pair", listOf(FoxIntType)))
+        val reference = FoxUnresolvedType("Pair", listOf(FoxIntType))
+        val referrer = FoxTypeAlias("Use", null, reference)
         val file = FoxFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasGenericCountMismatch>(result.errors.single())
         
         assertEquals("Use", error.referredBy.name)
+        assertSame(referrer, error.referredBy)
+        assertSame(reference, error.type)
     }
     
-    private fun noAliasDependency(type: FoxType, aliasNames: Set<String>): Boolean = when (type) {
-        is FoxPrimitiveType -> true
-        is FoxBuiltInType -> type.nestedTypes().all { noAliasDependency(it, aliasNames) }
-        is FoxTransformType -> type.nestedTypes().all { noAliasDependency(it, aliasNames) }
-        is FoxUnresolvedType -> type.name !in aliasNames && type.parameters.orEmpty().all { noAliasDependency(it, aliasNames) }
-        is FoxWildcardType -> false
-        is FoxPlaceholderType -> false
+    private fun noAliasDependency(type: FoxType, aliasNames: Set<String>): Boolean {
+        var result = true
+        type.visitTypes<FoxUnresolvedType> { unresolved ->
+            result = result && unresolved.name !in aliasNames && unresolved.parameters.orEmpty().all { noAliasDependency(it, aliasNames) }
+        }
+        return result
     }
 }

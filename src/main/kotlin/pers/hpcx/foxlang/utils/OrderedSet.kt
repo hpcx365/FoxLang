@@ -23,7 +23,17 @@ interface OrderedSet<out E> : Iterable<E> {
     override fun iterator(): Iterator<E> = elements.iterator()
 }
 
-fun <E> emptyOrderedSet(): OrderedSet<E> = ArrayHashOrderedSet()
+private object EmptyOrderedSet : OrderedSet<Any?> {
+    override val size: Int = 0
+    override val elements: List<Any?> = emptyList()
+    override fun contains(element: Any?): Boolean = false
+    override fun indexOf(element: Any?): Int = -1
+    override fun toSet(): Set<Any?> = emptySet()
+}
+
+fun <E> emptyOrderedSet(): OrderedSet<E> = @Suppress("UNCHECKED_CAST") (EmptyOrderedSet as OrderedSet<E>)
+
+fun <E> OrderedSet<E>?.orEmpty(): OrderedSet<E> = this ?: emptyOrderedSet()
 
 fun <E> orderedSetOf(vararg elements: E): OrderedSet<E> = ArrayHashOrderedSet(elements.asIterable())
 

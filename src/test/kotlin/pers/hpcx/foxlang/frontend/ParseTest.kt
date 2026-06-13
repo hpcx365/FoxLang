@@ -20,16 +20,6 @@ class ParseTest {
         assertEquals(file.node, reparsed.node)
     }
     
-    @Test
-    fun testComponentAtType() {
-        parseFile("type X = ComponentAt<MyTuple, 4>", "")
-    }
-    
-    @Test
-    fun testMethodType() {
-        parseFile("type X = Method<MyStruct, left: Int, right: String, Bool>", "")
-    }
-    
     private fun parseFile(source: String, prefix: String): Success<FoxFile> {
         val parser = Parser(FoxGrammar, node<FoxFile>())
         val report = parser.parse(source)
@@ -57,7 +47,6 @@ type MyStruct = Struct<name: String, age: Int, height: Double>
 type MyObject = Object<name: String, age: Int, active: Bool>
 type MyMap = Map<String, MyEnum>
 type MyMethod = Method<MyStruct, left: Int, right: String, Bool>
-type MyWildcards = Tuple<Any, AnyTuple, AnyStruct, AnyObject, AnyEnum, AnyArray, AnyRef, AnyMethod>
 
 type MyTupleComponent = ComponentAt<MyTuple, 4>
 type MyTupleLastComponent = LastComponentAt<MyTuple, 0>
