@@ -4,6 +4,7 @@ import pers.hpcx.foxlang.runtime.FoxEntity
 
 sealed interface FoxStatement
 
+object FoxThis : FoxStatement
 data class FoxSymbol(val name: String) : FoxStatement
 data class FoxEntityStatement(val value: FoxEntity) : FoxStatement
 

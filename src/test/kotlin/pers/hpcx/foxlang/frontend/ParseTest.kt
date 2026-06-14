@@ -47,6 +47,12 @@ type MyStruct = Struct<name: String, age: Int, height: Double>
 type MyObject = Object<name: String, age: Int, active: Bool>
 type MyMap = Map<String, MyEnum>
 type MyMethod = Method<MyStruct, left: Int, right: String, Bool>
+type MyMethodNoThis = Method<left: Int, right: String, Bool>
+type MyMethodNoReturn = Method<MyStruct, left: Int, right: String>
+type MyMethodThisOnly = Method<this: MyStruct>
+type MyMethodReturnOnly = Method<return: Bool>
+type MyMethodThisAndReturn = Method<MyStruct, Bool>
+type MyMethodEmpty = Method<>
 
 type MyTupleComponent = ComponentAt<MyTuple, 4>
 type MyTupleLastComponent = LastComponentAt<MyTuple, 0>

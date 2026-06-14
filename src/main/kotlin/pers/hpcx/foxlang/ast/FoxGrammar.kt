@@ -8,6 +8,7 @@ import pers.hpcx.foxlang.utils.mutableOrderedMapOf
 import pers.hpcx.foxlang.utils.mutableOrderedSetOf
 import java.util.*
 
+// Lexical nodes
 private val Word = node<String>().name("Word")
 private val Identifier = node<String>().name("Identifier")
 private val TypeName = node<String>().name("TypeName")
@@ -17,6 +18,7 @@ private val TypeNameEqual = node<String>().name("TypeNameEqual")
 private val TypeNameColon = node<String>().name("TypeNameColon")
 private val Label = node<String>().name("Label")
 
+// Literal nodes
 private val BinInt = node<String>().name("BinInt")
 private val DecInt = node<String>().name("DecInt")
 private val HexInt = node<String>().name("HexInt")
@@ -29,6 +31,7 @@ private val DecDouble = node<String>().name("DecDouble")
 private val HexDouble = node<String>().name("HexDouble")
 private val FormattedStringTemplateLiteral = node<FormattedStringTemplate>().name("FormattedStringTemplateLiteral")
 
+// Parameter and generic nodes
 private val FormalParameter = node<String>().pair(node<FoxType>()).name("FormalParameter")
 private val RawFormalParameterList = node<String>().pair(node<FoxType>()).list().name("RawFormalParameterList")
 private val FormalParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalParameterList")
@@ -66,14 +69,15 @@ private val RawStructFieldNameList = node<String>().list().name("RawStructFieldN
 private val StructFieldNameList = node<String>().orderedSet().name("StructFieldNameList")
 private val ObjectMemberParameterList = node<String>().map(node<FoxType>()).name("ObjectMemberParameterList")
 private val ObjectMemberNameSet = node<String>().set().name("ObjectMemberNameSet")
-private val RawMethodTypeParameterList = node<String>().pair(node<FoxType>()).list().name("RawMethodTypeParameterList")
-private val MethodTypeParameterList = node<String>().orderedMap(node<FoxType>()).name("MethodTypeParameterList")
+private val MethodTypeArgument = node<ParsedMethodTypeArgument>().name("MethodTypeArgument")
+private val RawMethodTypeArgumentList = MethodTypeArgument.list().name("RawMethodTypeArgumentList")
 
 private val EnumItemParameter = node<String>().pair(node<FoxType>()).name("EnumItemParameter")
 private val RawEnumItemParameterList = node<String>().pair(node<FoxType>()).list().name("RawEnumItemParameterList")
 private val EnumItemParameterList = node<String>().map(node<FoxType>()).name("EnumItemParameterList")
 private val EnumItemNameList = node<String>().list().name("EnumItemNameList")
 
+// Expression nodes
 private val StatementBlock = node<FoxStatement>().list().name("StatementBlock")
 private val ParenthesizedStatement = node<FoxStatement>().name("ParenthesizedStatement")
 private val PrimaryExpression = node<FoxStatement>().name("PrimaryExpression")
@@ -92,6 +96,7 @@ private val LogicalOrExpression = node<FoxStatement>().name("LogicalOrExpression
 private val AssignableExpression = node<FoxStatement>().name("AssignableExpression")
 private val AssignmentExpression = node<FoxStatement>().name("AssignmentExpression")
 
+// Operator nodes
 private val MultiplicativeOperator = node<FoxBinaryOperator>().name("MultiplicativeOperator")
 private val AdditiveOperator = node<FoxBinaryOperator>().name("AdditiveOperator")
 private val ShiftOperator = node<FoxBinaryOperator>().name("ShiftOperator")
@@ -103,6 +108,7 @@ private val BitOrOperator = node<FoxBinaryOperator>().name("BitOrOperator")
 private val LogicalAndOperator = node<FoxBinaryOperator>().name("LogicalAndOperator")
 private val LogicalOrOperator = node<FoxBinaryOperator>().name("LogicalOrOperator")
 
+// Control-flow nodes
 private val WhenCaseConditionList = node<FoxStatement>().list().name("WhenCaseConditionList")
 private val WhenCase = node<FoxCase>().name("WhenCase")
 private val WhenCaseList = node<FoxCase>().list().name("WhenCaseList")
@@ -111,13 +117,14 @@ private val WhileCore = node<ParsedWhileCore>().name("WhileCore")
 private val DoWhileCore = node<ParsedDoWhileCore>().name("DoWhileCore")
 private val WhenCore = node<ParsedWhenCore>().name("WhenCore")
 
+// Top-level nodes
 private val ThisTypeQualifier = node<FoxType>().name("ThisTypeQualifier")
 private val ReturnTypeClause = node<FoxType>().name("ReturnTypeClause")
 private val MethodHead = node<ParsedMethodHead>().name("MethodHead")
 private val FileElementList = node<FoxFileElement>().list().name("FileElementList")
 
 private val ReservedKeywords = setOf(
-    "const", "type", "def", "if", "else", "when", "new", "yield", "return", "for", "in",
+    "const", "type", "def", "this", "if", "else", "when", "new", "yield", "return", "for", "in",
     "do", "while", "break", "continue", "try", "finally", "import", "unit", "true", "false",
     
     "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char",
@@ -131,8 +138,21 @@ private val ReservedKeywords = setOf(
 )
 
 private val FoxProductions = buildList {
+    addAll(tokenProductions())
+    addAll(nameProductions())
+    addAll(literalProductions())
+    addAll(parameterAndGenericProductions())
+    addAll(typeProductions())
+    addAll(expressionProductions())
+    addAll(controlFlowProductions())
+    addAll(topLevelProductions())
+}
+
+val FoxGrammar = Grammar(FoxProductions)
+
+private fun tokenProductions(): List<Production<*>> = buildList {
     addAll(fixedTokens(*ReservedKeywords.toTypedArray()))
-    
+
     addAll(
         fixedTokens(
             "(", ")", "[", "]", "{", "}", ".", ":", ";", ",",
@@ -141,7 +161,7 @@ private val FoxProductions = buildList {
             "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
         ),
     )
-    
+
     addAll(
         tokenValues(
             node<FoxUnaryOperator>(),
@@ -149,7 +169,7 @@ private val FoxProductions = buildList {
             "-" to FoxNegOperator,
         ),
     )
-    
+
     addAll(
         tokenValues(
             node<FoxBinaryOperator>(),
@@ -174,7 +194,7 @@ private val FoxProductions = buildList {
             "||" to FoxOrOrOperator,
         ),
     )
-    
+
     addAll(tokenValues(MultiplicativeOperator, "*" to FoxMulOperator, "/" to FoxDivOperator, "%" to FoxRemOperator))
     addAll(tokenValues(AdditiveOperator, "+" to FoxAddOperator, "-" to FoxSubOperator))
     addAll(tokenValues(ShiftOperator, "<<" to FoxShlOperator, ">>" to FoxShrOperator, ">>>" to FoxUshrOperator))
@@ -185,7 +205,7 @@ private val FoxProductions = buildList {
     addAll(tokenValues(BitOrOperator, "|" to FoxOrOperator))
     addAll(tokenValues(LogicalAndOperator, "&&" to FoxAndAndOperator))
     addAll(tokenValues(LogicalOrOperator, "||" to FoxOrOrOperator))
-    
+
     addAll(
         tokenValues(
             node<FoxAssignOperator>(),
@@ -206,7 +226,9 @@ private val FoxProductions = buildList {
             "||=" to FoxOrOrAssignOperator,
         ),
     )
-    
+}
+
+private fun nameProductions(): List<Production<*>> = buildList {
     add(regex(Word, Regex("[a-zA-Z0-9_]+"), "word"))
     add(
         serial(Identifier, Word) {
@@ -226,7 +248,9 @@ private val FoxProductions = buildList {
     add(serial(IdentifierColon, Identifier, token(":")) { it, _ -> it })
     add(serial(TypeNameEqual, TypeName, token("=")) { it, _ -> it })
     add(serial(TypeNameColon, TypeName, token(":")) { it, _ -> it })
-    
+}
+
+private fun literalProductions(): List<Production<*>> = buildList {
     add(serial(node<Unit>(), token("unit")) { })
     add(serial(node<Boolean>(), token("true")) { true })
     add(serial(node<Boolean>(), token("false")) { false })
@@ -253,21 +277,122 @@ private val FoxProductions = buildList {
     add(serial(node<FoxEntityStatement>(), node<Double>()) { FoxEntityStatement(FoxDouble(it)) })
     add(serial(node<FoxEntityStatement>(), node<Char>()) { FoxEntityStatement(FoxChar(it)) })
     add(serial(node<FoxEntityStatement>(), node<String>()) { FoxEntityStatement(FoxString(it)) })
-    add(serial(PrimaryExpression, node<FoxEntityStatement>()) { it })
+}
+
+private fun parameterAndGenericProductions(): List<Production<*>> = buildList {
+    add(serial(FormalParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type })
+    add(listLike(RawFormalParameterList, token("("), FormalParameter, token(","), token(")")))
+    add(serial(FormalParameterList, RawFormalParameterList) { it.toOrderedMap("formal parameter") })
+    
+    add(serial(ActualParameter, node<FoxStatement>()) { null to it })
+    add(serial(ActualParameter, IdentifierEqual, node<FoxStatement>()) { name, value -> name to value })
+    add(listLike(ActualParameterList, token("("), ActualParameter, token(","), token(")")))
+    
+    add(listLike(AnonymousActualParameterList, token("("), node<FoxStatement>(), token(","), token(")")))
+    
+    add(serial(FormalGenericConstraintTerm, token("+"), node<FoxType>()) { _, type -> true to type })
+    add(serial(FormalGenericConstraintTerm, token("-"), node<FoxType>()) { _, type -> false to type })
+    add(listLike(RawFormalGenericConstraintTermList, null, FormalGenericConstraintTerm, null, null))
     add(
-        serial(PrimaryExpression, FormattedStringTemplateLiteral) { template ->
-            FoxFormattedString(
-                parts = template.parts.map { part ->
-                    when (part) {
-                        is FormattedTextPart -> FoxFormattedText(part.text)
-                        is FormattedExpressionPart -> FoxFormattedExpression(parseFormattedExpression(part.source))
-                    }
-                },
-                isRaw = template.isRaw,
+        serial(FormalGenericConstraintClause, node<FoxType>()) {
+            FoxGenericConstraint(listOf(it), emptyList())
+        },
+    )
+    add(
+        serial(FormalGenericConstraintClause, FormalGenericConstraintTerm) { (positive, type) ->
+            if (positive) FoxGenericConstraint(listOf(type), emptyList())
+            else FoxGenericConstraint(emptyList(), listOf(type))
+        },
+    )
+    add(
+        serial(FormalGenericConstraintClause, node<FoxType>(), RawFormalGenericConstraintTermList) { type, rest ->
+            FoxGenericConstraint(
+                positivePatterns = listOf(type) + rest.filter { it.first }.map { it.second },
+                negativePatterns = rest.filter { !it.first }.map { it.second },
             )
         },
     )
+    add(
+        serial(FormalGenericConstraintClause, FormalGenericConstraintTerm, RawFormalGenericConstraintTermList) { first, rest ->
+            val constraints = listOf(first) + rest
+            FoxGenericConstraint(
+                positivePatterns = constraints.filter { it.first }.map { it.second },
+                negativePatterns = constraints.filter { !it.first }.map { it.second },
+            )
+        },
+    )
+    add(serial(FormalGenericParameter, TypeName) { it to FoxGenericConstraint(emptyList(), emptyList()) })
+    add(
+        serial(FormalGenericParameter, TypeName, token("="), FormalGenericConstraintClause) { name, _, constraint ->
+            name to constraint
+        },
+    )
+    add(listLike(RawFormalGenericParameterList, token("<"), FormalGenericParameter, token(","), token(">")))
+    add(serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toOrderedMap("formal generic parameter") })
     
+    add(listLike(RawFormalGenericParameterListWithoutConstraints, token("<"), TypeName, token(","), token(">")))
+    add(
+        serial(FormalGenericParameterListWithoutConstraints, RawFormalGenericParameterListWithoutConstraints) {
+            it.toOrderedSet("formal generic parameter")
+        },
+    )
+    
+    add(serial(ActualGenericParameter, node<FoxType>()) { null to it })
+    add(serial(ActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
+    add(listLike(ActualGenericParameterList, token("<"), ActualGenericParameter, token(","), token(">")))
+    
+    add(serial(NamedActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
+    add(listLike(RawNamedActualGenericParameterList, token("<"), NamedActualGenericParameter, token(","), token(">")))
+    add(serial(NamedActualGenericParameterList, RawNamedActualGenericParameterList) { it.toMap("actual generic parameter") })
+    
+    add(listLike(AnonymousActualGenericParameterList, token("<"), node<FoxType>(), token(","), token(">")))
+    
+    add(serial(TupleComponentParameter, node<FoxType>()) { it to 1 })
+    add(
+        serial(TupleComponentParameter, node<FoxType>(), token(":"), node<Int>()) { type, _, count ->
+            if (count <= 0) throw ParseException("Tuple component count must be positive")
+            type to count
+        },
+    )
+    add(listLike(TupleComponentParameterList, token("<"), TupleComponentParameter, token(","), token(">")))
+    
+    add(serial(StructFieldParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type })
+    add(listLike(RawStructFieldParameterList, token("<"), StructFieldParameter, token(","), token(">")))
+    add(serial(StructFieldParameterList, RawStructFieldParameterList) { it.toOrderedMap("struct field parameter") })
+    add(serial(ObjectMemberParameterList, RawStructFieldParameterList) { it.toMap("object member parameter") })
+    
+    add(serial(EnumItemParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
+    add(listLike(RawEnumItemParameterList, token("<"), EnumItemParameter, token(","), token(">")))
+    add(serial(EnumItemParameterList, RawEnumItemParameterList) { it.toMap("enum item type parameter") })
+    add(listLike(RawStructFieldNameList, null, Identifier, token(","), null))
+    add(serial(StructFieldNameList, RawStructFieldNameList) { it.toOrderedSet("struct field name") })
+    add(serial(ObjectMemberNameSet, RawStructFieldNameList) { it.toSet("object member name") })
+    add(listLike(EnumItemNameList, null, TypeName, token(","), null))
+    
+    add(
+        serial(MethodTypeArgument, token("this"), token(":"), node<FoxType>()) { _, _, type ->
+            ParsedMethodTypeArgument.This(type)
+        },
+    )
+    add(
+        serial(MethodTypeArgument, token("return"), token(":"), node<FoxType>()) { _, _, type ->
+            ParsedMethodTypeArgument.Return(type)
+        },
+    )
+    add(
+        serial(MethodTypeArgument, FormalParameter) { (name, type) ->
+            ParsedMethodTypeArgument.Parameter(name, type)
+        },
+    )
+    add(
+        serial(MethodTypeArgument, node<FoxType>()) { type ->
+            ParsedMethodTypeArgument.AnonymousType(type)
+        },
+    )
+    add(listLike(RawMethodTypeArgumentList, token("<"), MethodTypeArgument, token(","), token(">")))
+}
+
+private fun typeProductions(): List<Production<*>> = buildList {
     addAll(
         tokenValues(
             node<FoxType>(),
@@ -314,18 +439,9 @@ private val FoxProductions = buildList {
                 if (it.size != 1) throw ParseException("Ref type must have exactly one generic parameter")
                 FoxRefType(it.first())
             },
-            serial(
-                node<FoxType>(),
-                token("Method"),
-                token("<"),
-                node<FoxType>(),
-                token(","),
-                MethodTypeParameterList,
-                token(","),
-                node<FoxType>(),
-                token(">"),
-            ) { _, _, `this`, _, params, _, `return`, _ -> FoxMethodType(`this`, params, `return`) },
-            
+            serial(node<FoxType>(), token("Method"), RawMethodTypeArgumentList) { _, items ->
+                items.toFoxMethodType()
+            },
             serial(node<FoxType>(), token("ComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
                 FoxTupleComponentAtType(type, index)
             },
@@ -422,382 +538,408 @@ private val FoxProductions = buildList {
             serial(node<FoxType>(), TypeName, AnonymousActualGenericParameterList) { name, it ->
                 FoxUnresolvedType(name, it)
             },
-            
-            serial(FormalParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type },
-            listLike(RawFormalParameterList, token("("), FormalParameter, token(","), token(")")),
-            serial(FormalParameterList, RawFormalParameterList) { it.toOrderedMap("formal parameter") },
-            
-            serial(ActualParameter, node<FoxStatement>()) { null to it },
-            serial(ActualParameter, IdentifierEqual, node<FoxStatement>()) { name, value -> name to value },
-            listLike(ActualParameterList, token("("), ActualParameter, token(","), token(")")),
-            
-            listLike(AnonymousActualParameterList, token("("), node<FoxStatement>(), token(","), token(")")),
-            
-            serial(FormalGenericConstraintTerm, token("+"), node<FoxType>()) { _, type -> true to type },
-            serial(FormalGenericConstraintTerm, token("-"), node<FoxType>()) { _, type -> false to type },
-            listLike(RawFormalGenericConstraintTermList, null, FormalGenericConstraintTerm, null, null),
-            serial(FormalGenericConstraintClause, node<FoxType>()) {
-                FoxGenericConstraint(listOf(it), emptyList())
-            },
-            serial(FormalGenericConstraintClause, FormalGenericConstraintTerm) { (positive, type) ->
-                if (positive) FoxGenericConstraint(listOf(type), emptyList())
-                else FoxGenericConstraint(emptyList(), listOf(type))
-            },
-            serial(FormalGenericConstraintClause, node<FoxType>(), RawFormalGenericConstraintTermList) { type, rest ->
-                FoxGenericConstraint(
-                    positivePatterns = listOf(type) + rest.filter { it.first }.map { it.second },
-                    negativePatterns = rest.filter { !it.first }.map { it.second },
-                )
-            },
-            serial(FormalGenericConstraintClause, FormalGenericConstraintTerm, RawFormalGenericConstraintTermList) { first, rest ->
-                val constraints = listOf(first) + rest
-                FoxGenericConstraint(
-                    positivePatterns = constraints.filter { it.first }.map { it.second },
-                    negativePatterns = constraints.filter { !it.first }.map { it.second },
-                )
-            },
-            serial(FormalGenericParameter, TypeName) { it to FoxGenericConstraint(emptyList(), emptyList()) },
-            serial(FormalGenericParameter, TypeName, token("="), FormalGenericConstraintClause) { name, _, constraint ->
-                name to constraint
-            },
-            listLike(RawFormalGenericParameterList, token("<"), FormalGenericParameter, token(","), token(">")),
-            serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toOrderedMap("formal generic parameter") },
-            
-            listLike(RawFormalGenericParameterListWithoutConstraints, token("<"), TypeName, token(","), token(">")),
-            serial(FormalGenericParameterListWithoutConstraints, RawFormalGenericParameterListWithoutConstraints) { it.toOrderedSet("formal generic parameter") },
-            
-            serial(ActualGenericParameter, node<FoxType>()) { null to it },
-            serial(ActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type },
-            listLike(ActualGenericParameterList, token("<"), ActualGenericParameter, token(","), token(">")),
-            
-            serial(NamedActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type },
-            listLike(RawNamedActualGenericParameterList, token("<"), NamedActualGenericParameter, token(","), token(">")),
-            serial(NamedActualGenericParameterList, RawNamedActualGenericParameterList) { it.toMap("actual generic parameter") },
-            
-            listLike(AnonymousActualGenericParameterList, token("<"), node<FoxType>(), token(","), token(">")),
-            serial(TupleComponentParameter, node<FoxType>()) { it to 1 },
-            serial(TupleComponentParameter, node<FoxType>(), token(":"), node<Int>()) { type, _, count ->
-                if (count <= 0) throw ParseException("Tuple component count must be positive")
-                type to count
-            },
-            listLike(TupleComponentParameterList, token("<"), TupleComponentParameter, token(","), token(">")),
-            
-            serial(StructFieldParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type },
-            listLike(RawStructFieldParameterList, token("<"), StructFieldParameter, token(","), token(">")),
-            serial(StructFieldParameterList, RawStructFieldParameterList) { it.toOrderedMap("struct field parameter") },
-            serial(ObjectMemberParameterList, RawStructFieldParameterList) { it.toMap("object member parameter") },
-            
-            serial(EnumItemParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type },
-            listLike(RawEnumItemParameterList, token("<"), EnumItemParameter, token(","), token(">")),
-            serial(EnumItemParameterList, RawEnumItemParameterList) { it.toMap("enum item type parameter") },
-            listLike(RawStructFieldNameList, null, Identifier, token(","), null),
-            serial(StructFieldNameList, RawStructFieldNameList) { it.toOrderedSet("struct field name") },
-            serial(ObjectMemberNameSet, RawStructFieldNameList) { it.toSet("object member name") },
-            listLike(EnumItemNameList, null, TypeName, token(","), null),
-            
-            listLike(RawMethodTypeParameterList, null, FormalParameter, token(","), null),
-            serial(MethodTypeParameterList, RawMethodTypeParameterList) { it.toOrderedMap("method type parameter") },
-            
-            serial(Label, token("#"), Identifier) { _, it -> it },
-            serial(ParenthesizedStatement, token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node },
-            
-            serial(PrimaryExpression, Identifier) { FoxSymbol(it) },
-            serial(PrimaryExpression, ParenthesizedStatement) { it },
-            
-            serial(PostfixExpression, PrimaryExpression) { it },
-            serial(PostfixExpression, PostfixExpression, token("."), Identifier) { target, _, name ->
-                FoxFieldAccess(target, name)
-            },
-            serial(PostfixExpression, PostfixExpression, token("."), node<Int>()) { target, _, index ->
-                FoxComponentAccess(target, index)
-            },
-            serial(PostfixExpression, Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
-                FoxCall(null, name, generics, parameters)
-            },
-            serial(PostfixExpression, Identifier, ActualParameterList) { name, parameters ->
-                FoxCall(null, name, null, parameters)
-            },
-            serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
-                FoxCall(target, name, generics, parameters)
-            },
-            serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualParameterList) { target, _, name, parameters ->
-                FoxCall(target, name, null, parameters)
-            },
-            serial(PostfixExpression, node<FoxType>(), ActualParameterList) { type, parameters ->
-                FoxConstruct(type, parameters)
-            },
-            serial(PostfixExpression, ParenthesizedStatement, AnonymousActualParameterList) { method, parameters ->
-                FoxIndirectCall(null, method, parameters)
-            },
-            serial(PostfixExpression, PostfixExpression, token("."), ParenthesizedStatement, AnonymousActualParameterList) { target, _, method, parameters ->
-                FoxIndirectCall(target, method, parameters)
-            },
-            
-            serial(UnaryExpression, PostfixExpression) { it },
-            serial(UnaryExpression, node<FoxUnaryOperator>(), UnaryExpression) { operator, node ->
-                FoxUnary(operator, node)
-            },
-            
-            serial(MultiplicativeExpression, UnaryExpression) { it },
-            serial(MultiplicativeExpression, MultiplicativeExpression, MultiplicativeOperator, UnaryExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(AdditiveExpression, MultiplicativeExpression) { it },
-            serial(AdditiveExpression, AdditiveExpression, AdditiveOperator, MultiplicativeExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(ShiftExpression, AdditiveExpression) { it },
-            serial(ShiftExpression, ShiftExpression, ShiftOperator, AdditiveExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(ComparisonExpression, ShiftExpression) { it },
-            serial(ComparisonExpression, ComparisonExpression, ComparisonOperator, ShiftExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(EqualityExpression, ComparisonExpression) { it },
-            serial(EqualityExpression, EqualityExpression, EqualityOperator, ComparisonExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(BitAndExpression, EqualityExpression) { it },
-            serial(BitAndExpression, BitAndExpression, BitAndOperator, EqualityExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(BitXorExpression, BitAndExpression) { it },
-            serial(BitXorExpression, BitXorExpression, BitXorOperator, BitAndExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(BitOrExpression, BitXorExpression) { it },
-            serial(BitOrExpression, BitOrExpression, BitOrOperator, BitXorExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(LogicalAndExpression, BitOrExpression) { it },
-            serial(LogicalAndExpression, LogicalAndExpression, LogicalAndOperator, BitOrExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(LogicalOrExpression, LogicalAndExpression) { it },
-            serial(LogicalOrExpression, LogicalOrExpression, LogicalOrOperator, LogicalAndExpression) { left, operator, right ->
-                FoxBinary(left, operator, right)
-            },
-            
-            serial(AssignableExpression, PostfixExpression) { it },
-            
-            serial(AssignmentExpression, LogicalOrExpression) { it },
-            serial(AssignmentExpression, AssignableExpression, node<FoxAssignOperator>(), node<FoxStatement>()) { left, operator, right ->
-                FoxAssign(left, operator, right, beforeEvaluation = true)
-            },
-            
-            serial(node<FoxStatement>(), AssignmentExpression) { it },
-            serial(node<FoxStatement>(), Identifier, token(":"), node<FoxType>()) { name, _, type ->
-                FoxTypeBinding(name, type)
-            },
-            
-            serial(node<FoxStatement>(), token("break")) { FoxBreak(null) },
-            serial(node<FoxStatement>(), token("break"), Label) { _, label -> FoxBreak(label) },
-            serial(node<FoxStatement>(), token("continue")) { FoxContinue(null) },
-            serial(node<FoxStatement>(), token("continue"), Label) { _, label -> FoxContinue(label) },
-            serial(node<FoxStatement>(), token("return")) { FoxReturn(null) },
-            serial(node<FoxStatement>(), token("return"), node<FoxStatement>()) { _, value -> FoxReturn(value) },
-            serial(node<FoxStatement>(), token("yield"), node<FoxStatement>()) { _, value -> FoxYield(null, value) },
-            serial(node<FoxStatement>(), token("yield"), Label, node<FoxStatement>()) { _, label, value -> FoxYield(label, value) },
-            
-            listLike(StatementBlock, token("{"), node<FoxStatement>(), null, token("}")),
-            serial(node<FoxStatement>(), StatementBlock) { FoxBlock(null, it) },
-            serial(node<FoxStatement>(), Label, StatementBlock) { label, it -> FoxBlock(label, it) },
-            
-            serial(
-                IfCore,
-                token("if"),
-                ParenthesizedStatement,
-                node<FoxStatement>(),
-            ) { _, condition, body -> ParsedIfCore(condition, body, null) },
-            
-            serial(
-                IfCore,
-                token("if"),
-                ParenthesizedStatement,
-                node<FoxStatement>(),
-                token("else"),
-                node<FoxStatement>(),
-            ) { _, condition, thenBody, _, elseBody -> ParsedIfCore(condition, thenBody, elseBody) },
-            
-            serial(node<FoxStatement>(), IfCore) { core ->
-                FoxIf(null, core.condition, core.thenBody, core.elseBody)
-            },
-            
-            serial(node<FoxStatement>(), Label, IfCore) { label, core ->
-                FoxIf(label, core.condition, core.thenBody, core.elseBody)
-            },
-            
-            serial(
-                WhileCore,
-                token("while"),
-                ParenthesizedStatement,
-                node<FoxStatement>(),
-            ) { _, condition, body -> ParsedWhileCore(condition, body) },
-            
-            serial(node<FoxStatement>(), WhileCore) { core ->
-                FoxWhile(null, core.condition, core.body)
-            },
-            
-            serial(node<FoxStatement>(), Label, WhileCore) { label, core ->
-                FoxWhile(label, core.condition, core.body)
-            },
-            
-            serial(
-                DoWhileCore,
-                token("do"),
-                node<FoxStatement>(),
-                token("while"),
-                ParenthesizedStatement,
-            ) { _, body, _, condition -> ParsedDoWhileCore(body, condition) },
-            
-            serial(node<FoxStatement>(), DoWhileCore) { core ->
-                FoxDoWhile(null, core.body, core.condition)
-            },
-            
-            serial(node<FoxStatement>(), Label, DoWhileCore) { label, core ->
-                FoxDoWhile(label, core.body, core.condition)
-            },
-            
-            listLike(
-                WhenCaseConditionList,
-                null,
-                node<FoxStatement>(),
-                token(","),
-                token("->"),
-            ),
-            
-            serial(
-                WhenCase,
-                WhenCaseConditionList,
-                node<FoxStatement>(),
-            ) { conditions, body -> FoxCase(conditions, body) },
-            
-            serial(
-                WhenCase,
-                token("else"),
-                token("->"),
-                node<FoxStatement>(),
-            ) { _, _, body -> FoxCase(emptyList(), body) },
-            
-            listLike(
-                WhenCaseList,
-                token("{"),
-                WhenCase,
-                null,
-                token("}"),
-            ),
-            
-            serial(
-                WhenCore,
-                token("when"),
-                WhenCaseList,
-            ) { _, cases -> ParsedWhenCore(null, cases) },
-            
-            serial(
-                WhenCore,
-                token("when"),
-                ParenthesizedStatement,
-                WhenCaseList,
-            ) { _, value, cases -> ParsedWhenCore(value, cases) },
-            
-            serial(node<FoxStatement>(), WhenCore) { core ->
-                FoxWhen(null, core.value, core.cases)
-            },
-            
-            serial(node<FoxStatement>(), Label, WhenCore) { label, core ->
-                FoxWhen(label, core.value, core.cases)
-            },
-            
-            serial(ThisTypeQualifier, node<FoxType>(), token(".")) { type, _ -> type },
-            serial(ReturnTypeClause, token(":"), node<FoxType>()) { _, type -> type },
-            
-            serial(
-                node<FoxTypeAlias>(),
-                token("type"),
-                TypeName,
-                FormalGenericParameterListWithoutConstraints,
-                token("="),
-                node<FoxType>(),
-            ) { _, name, generics, _, type -> FoxTypeAlias(name, generics, type) },
-            serial(
-                node<FoxTypeAlias>(),
-                token("type"),
-                TypeName,
-                token("="),
-                node<FoxType>(),
-            ) { _, name, _, type -> FoxTypeAlias(name, null, type) },
-            
-            serial(
-                MethodHead,
-                token("def"),
-                FormalGenericParameterList,
-                ThisTypeQualifier,
-                Identifier,
-                FormalParameterList,
-            ) { _, generics, thisType, name, parameters ->
-                ParsedMethodHead(generics, thisType, name, parameters)
-            },
-            serial(
-                MethodHead,
-                token("def"),
-                FormalGenericParameterList,
-                Identifier,
-                FormalParameterList,
-            ) { _, generics, name, parameters ->
-                ParsedMethodHead(generics, null, name, parameters)
-            },
-            serial(
-                MethodHead,
-                token("def"),
-                ThisTypeQualifier,
-                Identifier,
-                FormalParameterList,
-            ) { _, thisType, name, parameters ->
-                ParsedMethodHead(null, thisType, name, parameters)
-            },
-            serial(
-                MethodHead,
-                token("def"),
-                Identifier,
-                FormalParameterList,
-            ) { _, name, parameters ->
-                ParsedMethodHead(null, null, name, parameters)
-            },
-            serial(
-                node<FoxMethodDefinition>(),
-                MethodHead,
-                ReturnTypeClause,
-                node<FoxStatement>(),
-            ) { head, returnType, body ->
-                FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, returnType, body)
-            },
-            serial(
-                node<FoxMethodDefinition>(),
-                MethodHead,
-                node<FoxStatement>(),
-            ) { head, body ->
-                FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, null, body)
-            },
-            
-            serial(node<FoxFileElement>(), node<FoxTypeAlias>()) { it },
-            serial(node<FoxFileElement>(), node<FoxMethodDefinition>()) { it },
-            listLike(FileElementList, null, node<FoxFileElement>(), null, null),
-            serial(node<FoxFile>(), FileElementList) { FoxFile(it) },
         ),
     )
 }
 
-val FoxGrammar = Grammar(FoxProductions)
+private fun expressionProductions(): List<Production<*>> = buildList {
+    add(serial(Label, token("#"), Identifier) { _, it -> it })
+    add(serial(ParenthesizedStatement, token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node })
+    
+    add(serial(PrimaryExpression, token("this")) { FoxThis })
+    add(serial(PrimaryExpression, Identifier) { FoxSymbol(it) })
+    add(serial(PrimaryExpression, ParenthesizedStatement) { it })
+    add(serial(PrimaryExpression, node<FoxEntityStatement>()) { it })
+    add(
+        serial(PrimaryExpression, FormattedStringTemplateLiteral) { template ->
+            FoxFormattedString(
+                parts = template.parts.map { part ->
+                    when (part) {
+                        is FormattedTextPart -> FoxFormattedText(part.text)
+                        is FormattedExpressionPart -> FoxFormattedExpression(parseFormattedExpression(part.source))
+                    }
+                },
+                isRaw = template.isRaw,
+            )
+        },
+    )
+    
+    add(serial(PostfixExpression, PrimaryExpression) { it })
+    add(
+        serial(PostfixExpression, PostfixExpression, token("."), Identifier) { target, _, name ->
+            FoxFieldAccess(target, name)
+        },
+    )
+    add(
+        serial(PostfixExpression, PostfixExpression, token("."), node<Int>()) { target, _, index ->
+            FoxComponentAccess(target, index)
+        },
+    )
+    add(
+        serial(PostfixExpression, Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
+            FoxCall(null, name, generics, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, Identifier, ActualParameterList) { name, parameters ->
+            FoxCall(null, name, null, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
+            FoxCall(target, name, generics, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualParameterList) { target, _, name, parameters ->
+            FoxCall(target, name, null, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, node<FoxType>(), ActualParameterList) { type, parameters ->
+            FoxConstruct(type, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, ParenthesizedStatement, AnonymousActualParameterList) { method, parameters ->
+            FoxIndirectCall(null, method, parameters)
+        },
+    )
+    add(
+        serial(PostfixExpression, PostfixExpression, token("."), ParenthesizedStatement, AnonymousActualParameterList) { target, _, method, parameters ->
+            FoxIndirectCall(target, method, parameters)
+        },
+    )
+    
+    add(serial(UnaryExpression, PostfixExpression) { it })
+    add(
+        serial(UnaryExpression, node<FoxUnaryOperator>(), UnaryExpression) { operator, node ->
+            FoxUnary(operator, node)
+        },
+    )
+    
+    add(serial(MultiplicativeExpression, UnaryExpression) { it })
+    add(
+        serial(MultiplicativeExpression, MultiplicativeExpression, MultiplicativeOperator, UnaryExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(AdditiveExpression, MultiplicativeExpression) { it })
+    add(
+        serial(AdditiveExpression, AdditiveExpression, AdditiveOperator, MultiplicativeExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(ShiftExpression, AdditiveExpression) { it })
+    add(
+        serial(ShiftExpression, ShiftExpression, ShiftOperator, AdditiveExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(ComparisonExpression, ShiftExpression) { it })
+    add(
+        serial(ComparisonExpression, ComparisonExpression, ComparisonOperator, ShiftExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(EqualityExpression, ComparisonExpression) { it })
+    add(
+        serial(EqualityExpression, EqualityExpression, EqualityOperator, ComparisonExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(BitAndExpression, EqualityExpression) { it })
+    add(
+        serial(BitAndExpression, BitAndExpression, BitAndOperator, EqualityExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(BitXorExpression, BitAndExpression) { it })
+    add(
+        serial(BitXorExpression, BitXorExpression, BitXorOperator, BitAndExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(BitOrExpression, BitXorExpression) { it })
+    add(
+        serial(BitOrExpression, BitOrExpression, BitOrOperator, BitXorExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(LogicalAndExpression, BitOrExpression) { it })
+    add(
+        serial(LogicalAndExpression, LogicalAndExpression, LogicalAndOperator, BitOrExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(LogicalOrExpression, LogicalAndExpression) { it })
+    add(
+        serial(LogicalOrExpression, LogicalOrExpression, LogicalOrOperator, LogicalAndExpression) { left, operator, right ->
+            FoxBinary(left, operator, right)
+        },
+    )
+    
+    add(serial(AssignableExpression, PostfixExpression) { it })
+    
+    add(serial(AssignmentExpression, LogicalOrExpression) { it })
+    add(
+        serial(AssignmentExpression, AssignableExpression, node<FoxAssignOperator>(), node<FoxStatement>()) { left, operator, right ->
+            FoxAssign(left, operator, right, beforeEvaluation = true)
+        },
+    )
+    
+    add(serial(node<FoxStatement>(), AssignmentExpression) { it })
+    add(
+        serial(node<FoxStatement>(), Identifier, token(":"), node<FoxType>()) { name, _, type ->
+            FoxTypeBinding(name, type)
+        },
+    )
+}
+
+private fun controlFlowProductions(): List<Production<*>> = buildList {
+    add(serial(node<FoxStatement>(), token("break")) { FoxBreak(null) })
+    add(serial(node<FoxStatement>(), token("break"), Label) { _, label -> FoxBreak(label) })
+    add(serial(node<FoxStatement>(), token("continue")) { FoxContinue(null) })
+    add(serial(node<FoxStatement>(), token("continue"), Label) { _, label -> FoxContinue(label) })
+    add(serial(node<FoxStatement>(), token("return")) { FoxReturn(null) })
+    add(serial(node<FoxStatement>(), token("return"), node<FoxStatement>()) { _, value -> FoxReturn(value) })
+    add(serial(node<FoxStatement>(), token("yield"), node<FoxStatement>()) { _, value -> FoxYield(null, value) })
+    add(serial(node<FoxStatement>(), token("yield"), Label, node<FoxStatement>()) { _, label, value -> FoxYield(label, value) })
+    
+    add(listLike(StatementBlock, token("{"), node<FoxStatement>(), null, token("}")))
+    add(serial(node<FoxStatement>(), StatementBlock) { FoxBlock(null, it) })
+    add(serial(node<FoxStatement>(), Label, StatementBlock) { label, it -> FoxBlock(label, it) })
+    
+    add(
+        serial(
+            IfCore,
+            token("if"),
+            ParenthesizedStatement,
+            node<FoxStatement>(),
+        ) { _, condition, body -> ParsedIfCore(condition, body, null) },
+    )
+    add(
+        serial(
+            IfCore,
+            token("if"),
+            ParenthesizedStatement,
+            node<FoxStatement>(),
+            token("else"),
+            node<FoxStatement>(),
+        ) { _, condition, thenBody, _, elseBody -> ParsedIfCore(condition, thenBody, elseBody) },
+    )
+    add(
+        serial(node<FoxStatement>(), IfCore) { core ->
+            FoxIf(null, core.condition, core.thenBody, core.elseBody)
+        },
+    )
+    add(
+        serial(node<FoxStatement>(), Label, IfCore) { label, core ->
+            FoxIf(label, core.condition, core.thenBody, core.elseBody)
+        },
+    )
+    
+    add(
+        serial(
+            WhileCore,
+            token("while"),
+            ParenthesizedStatement,
+            node<FoxStatement>(),
+        ) { _, condition, body -> ParsedWhileCore(condition, body) },
+    )
+    add(
+        serial(node<FoxStatement>(), WhileCore) { core ->
+            FoxWhile(null, core.condition, core.body)
+        },
+    )
+    add(
+        serial(node<FoxStatement>(), Label, WhileCore) { label, core ->
+            FoxWhile(label, core.condition, core.body)
+        },
+    )
+    
+    add(
+        serial(
+            DoWhileCore,
+            token("do"),
+            node<FoxStatement>(),
+            token("while"),
+            ParenthesizedStatement,
+        ) { _, body, _, condition -> ParsedDoWhileCore(body, condition) },
+    )
+    add(
+        serial(node<FoxStatement>(), DoWhileCore) { core ->
+            FoxDoWhile(null, core.body, core.condition)
+        },
+    )
+    add(
+        serial(node<FoxStatement>(), Label, DoWhileCore) { label, core ->
+            FoxDoWhile(label, core.body, core.condition)
+        },
+    )
+    
+    add(
+        listLike(
+            WhenCaseConditionList,
+            null,
+            node<FoxStatement>(),
+            token(","),
+            token("->"),
+        ),
+    )
+    add(
+        serial(
+            WhenCase,
+            WhenCaseConditionList,
+            node<FoxStatement>(),
+        ) { conditions, body -> FoxCase(conditions, body) },
+    )
+    add(
+        serial(
+            WhenCase,
+            token("else"),
+            token("->"),
+            node<FoxStatement>(),
+        ) { _, _, body -> FoxCase(emptyList(), body) },
+    )
+    add(
+        listLike(
+            WhenCaseList,
+            token("{"),
+            WhenCase,
+            null,
+            token("}"),
+        ),
+    )
+    add(
+        serial(
+            WhenCore,
+            token("when"),
+            WhenCaseList,
+        ) { _, cases -> ParsedWhenCore(null, cases) },
+    )
+    add(
+        serial(
+            WhenCore,
+            token("when"),
+            ParenthesizedStatement,
+            WhenCaseList,
+        ) { _, value, cases -> ParsedWhenCore(value, cases) },
+    )
+    add(
+        serial(node<FoxStatement>(), WhenCore) { core ->
+            FoxWhen(null, core.value, core.cases)
+        },
+    )
+    add(
+        serial(node<FoxStatement>(), Label, WhenCore) { label, core ->
+            FoxWhen(label, core.value, core.cases)
+        },
+    )
+}
+
+private fun topLevelProductions(): List<Production<*>> = buildList {
+    add(serial(ThisTypeQualifier, node<FoxType>(), token(".")) { type, _ -> type })
+    add(serial(ReturnTypeClause, token(":"), node<FoxType>()) { _, type -> type })
+    
+    add(
+        serial(
+            node<FoxTypeAlias>(),
+            token("type"),
+            TypeName,
+            FormalGenericParameterListWithoutConstraints,
+            token("="),
+            node<FoxType>(),
+        ) { _, name, generics, _, type -> FoxTypeAlias(name, generics, type) },
+    )
+    add(
+        serial(
+            node<FoxTypeAlias>(),
+            token("type"),
+            TypeName,
+            token("="),
+            node<FoxType>(),
+        ) { _, name, _, type -> FoxTypeAlias(name, null, type) },
+    )
+    
+    add(
+        serial(
+            MethodHead,
+            token("def"),
+            FormalGenericParameterList,
+            ThisTypeQualifier,
+            Identifier,
+            FormalParameterList,
+        ) { _, generics, thisType, name, parameters ->
+            ParsedMethodHead(generics, thisType, name, parameters)
+        },
+    )
+    add(
+        serial(
+            MethodHead,
+            token("def"),
+            FormalGenericParameterList,
+            Identifier,
+            FormalParameterList,
+        ) { _, generics, name, parameters ->
+            ParsedMethodHead(generics, null, name, parameters)
+        },
+    )
+    add(
+        serial(
+            MethodHead,
+            token("def"),
+            ThisTypeQualifier,
+            Identifier,
+            FormalParameterList,
+        ) { _, thisType, name, parameters ->
+            ParsedMethodHead(null, thisType, name, parameters)
+        },
+    )
+    add(
+        serial(
+            MethodHead,
+            token("def"),
+            Identifier,
+            FormalParameterList,
+        ) { _, name, parameters ->
+            ParsedMethodHead(null, null, name, parameters)
+        },
+    )
+    add(
+        serial(
+            node<FoxMethodDefinition>(),
+            MethodHead,
+            ReturnTypeClause,
+            node<FoxStatement>(),
+        ) { head, returnType, body ->
+            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, returnType, body)
+        },
+    )
+    add(
+        serial(
+            node<FoxMethodDefinition>(),
+            MethodHead,
+            node<FoxStatement>(),
+        ) { head, body ->
+            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, null, body)
+        },
+    )
+    
+    add(serial(node<FoxFileElement>(), node<FoxTypeAlias>()) { it })
+    add(serial(node<FoxFileElement>(), node<FoxMethodDefinition>()) { it })
+    add(listLike(FileElementList, null, node<FoxFileElement>(), null, null))
+    add(serial(node<FoxFile>(), FileElementList) { FoxFile(it) })
+}
 
 private data class ParsedIfCore(
     val condition: FoxStatement,
@@ -826,6 +968,13 @@ private data class ParsedMethodHead(
     val name: String,
     val parameters: OrderedMap<String, FoxType>,
 )
+
+private sealed interface ParsedMethodTypeArgument {
+    data class This(val type: FoxType) : ParsedMethodTypeArgument
+    data class Return(val type: FoxType) : ParsedMethodTypeArgument
+    data class Parameter(val name: String, val type: FoxType) : ParsedMethodTypeArgument
+    data class AnonymousType(val type: FoxType) : ParsedMethodTypeArgument
+}
 
 private fun fixedTokens(vararg texts: String): List<Production<*>> = texts.map { fixed(token(it), it) }
 
@@ -887,6 +1036,71 @@ private fun <V : Any> List<Pair<String, V>>.toOrderedMap(itemName: String): Orde
         result[name] = value
     }
     return result
+}
+
+private fun List<ParsedMethodTypeArgument>.toFoxMethodType(): FoxMethodType {
+    if (count { it is ParsedMethodTypeArgument.This } > 1) {
+        throw ParseException("Method type cannot declare more than one 'this' type")
+    }
+    if (count { it is ParsedMethodTypeArgument.Return } > 1) {
+        throw ParseException("Method type cannot declare more than one 'return' type")
+    }
+    forEachIndexed { index, item ->
+        if (item is ParsedMethodTypeArgument.This && index != 0) {
+            throw ParseException("Method type 'this' must be the first item")
+        }
+        if (item is ParsedMethodTypeArgument.Return && index != lastIndex) {
+            throw ParseException("Method type 'return' must be the last item")
+        }
+    }
+    if (size == 1 && firstOrNull() is ParsedMethodTypeArgument.AnonymousType) {
+        throw ParseException("Method<T> is ambiguous; use 'this: T' or 'return: T' explicitly")
+    }
+    
+    var start = 0
+    val thisType = when (val first = firstOrNull()) {
+        is ParsedMethodTypeArgument.This -> {
+            start = 1
+            first.type
+        }
+        is ParsedMethodTypeArgument.AnonymousType -> {
+            start = 1
+            first.type
+        }
+        else -> FoxUnitType
+    }
+    
+    var endExclusive = size
+    val returnType = when (val last = lastOrNull()) {
+        is ParsedMethodTypeArgument.Return -> {
+            endExclusive -= 1
+            last.type
+        }
+        is ParsedMethodTypeArgument.AnonymousType -> {
+            endExclusive -= 1
+            last.type
+        }
+        else -> FoxUnitType
+    }
+    
+    val parameters = mutableOrderedMapOf<String, FoxType>()
+    subList(start, endExclusive).forEach { item ->
+        when (item) {
+            is ParsedMethodTypeArgument.Parameter -> {
+                if (item.name in parameters) {
+                    throw ParseException("Duplicate method type parameter name '${item.name}'")
+                }
+                parameters[item.name] = item.type
+            }
+            is ParsedMethodTypeArgument.This ->
+                throw ParseException("Method type 'this' must be the first item")
+            is ParsedMethodTypeArgument.Return ->
+                throw ParseException("Method type 'return' must be the last item")
+            is ParsedMethodTypeArgument.AnonymousType ->
+                throw ParseException("Anonymous method type items may only appear as leading 'this' or trailing 'return'")
+        }
+    }
+    return FoxMethodType(thisType, parameters, returnType)
 }
 
 private val formattedExpressionCache = Collections.synchronizedMap(HashMap<String, FoxStatement>())

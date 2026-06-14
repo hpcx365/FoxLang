@@ -74,6 +74,7 @@ inline fun FoxGenericConstraint.mapTypes(crossinline transform: (FoxType) -> Fox
 )
 
 fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when (this) {
+    FoxThis -> this
     is FoxSymbol -> this
     is FoxEntityStatement -> this
     is FoxBreak -> this
