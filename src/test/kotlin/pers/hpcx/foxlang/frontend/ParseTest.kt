@@ -5,6 +5,7 @@ import pers.hpcx.foxlang.ast.FoxGrammar
 import pers.hpcx.foxlang.ast.toSource
 import pers.hpcx.foxlang.parser.Parser
 import pers.hpcx.foxlang.parser.Success
+import pers.hpcx.foxlang.parser.check
 import pers.hpcx.foxlang.parser.node
 import kotlin.test.*
 
@@ -89,10 +90,10 @@ type MyMethodThis = ThisOf<MyMethod>
 type MyMethodParameters = ParametersOf<MyMethod>
 type MyMethodReturn = ReturnOf<MyMethod>
 
-def <T = AnyStruct, E = ItemOf<MyEnum, Success>> MergeFieldsOf<MyStruct, Struct<nick: String>>.describe(
+def <T = AnyStructOf<String, Int>, E = ItemOf<MyEnum, Success>> MergeFieldsOf<MyStruct, Struct<nick: String>>.describe(
     sample: FieldsOf<MyStruct, name, age>,
     item: E,
-    value: T,
+    value: AnyOf<AnyTupleOf<T>, MyAnyOf>,
 ): FieldOf<MyStruct, name> {
     return "fox"
 }

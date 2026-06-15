@@ -55,7 +55,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     fun render(type: FoxType, writer: PrintWriter) {
         when (type) {
             is FoxPrimitiveType -> writer.print(primitiveTypeText(type))
-            is FoxWildcardType -> writer.print(wildcardTypeText(type))
+            is FoxWildcardType -> renderWildcardType(type, writer)
             is FoxBuiltInType -> renderBuiltInType(type, writer)
             is FoxTransformType -> renderTransformType(type, writer)
             is FoxUnresolvedType -> renderUnresolvedType(type, writer)
@@ -120,13 +120,28 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     
     private fun wildcardTypeText(type: FoxWildcardType) = when (type) {
         FoxAnyType -> "Any"
+        is FoxAnyOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyTupleType -> "AnyTuple"
+        is FoxAnyTupleOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyStructType -> "AnyStruct"
+        is FoxAnyStructOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyObjectType -> "AnyObject"
         FoxAnyEnumType -> "AnyEnum"
         FoxAnyArrayType -> "AnyArray"
         FoxAnyRefType -> "AnyRef"
         FoxAnyMethodType -> "AnyMethod"
+    }
+    
+    private fun renderWildcardType(
+        type: FoxWildcardType,
+        writer: PrintWriter,
+    ) {
+        when (type) {
+            is FoxAnyOfType -> renderTypeListArgument("AnyOf", type.types, writer)
+            is FoxAnyTupleOfType -> renderSingleTypeArgument("AnyTupleOf", type.component, writer)
+            is FoxAnyStructOfType -> renderTypeListArgument("AnyStructOf", type.fields, writer)
+            else -> writer.print(wildcardTypeText(type))
+        }
     }
     
     private fun renderBuiltInType(

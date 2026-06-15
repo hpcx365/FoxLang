@@ -129,7 +129,7 @@ private val ReservedKeywords = setOf(
     
     "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char",
     "String", "Tuple", "Struct", "Object", "Enum", "Array", "Ref", "Method",
-    "Any", "AnyTuple", "AnyStruct", "AnyObject", "AnyEnum", "AnyArray", "AnyRef", "AnyMethod",
+    "Any", "AnyOf", "AnyTuple", "AnyTupleOf", "AnyStruct", "AnyStructOf", "AnyObject", "AnyEnum", "AnyArray", "AnyRef", "AnyMethod",
     "ComponentAt", "LastComponentAt", "FirstComponentsOf", "LastComponentsOf", "DropFirstComponentsOf", "DropLastComponentsOf", "MergeComponentsOf",
     "FieldOf", "FieldAt", "LastFieldAt", "FirstFieldsOf", "LastFieldsOf", "DropFirstFieldsOf", "DropLastFieldsOf", "FieldsOf", "DropFieldsOf", "MergeFieldsOf",
     "MemberOf", "MembersOf", "DropMembersOf", "MergeMembersOf",
@@ -152,7 +152,7 @@ val FoxGrammar = Grammar(FoxProductions)
 
 private fun tokenProductions(): List<Production<*>> = buildList {
     addAll(fixedTokens(*ReservedKeywords.toTypedArray()))
-
+    
     addAll(
         fixedTokens(
             "(", ")", "[", "]", "{", "}", ".", ":", ";", ",",
@@ -161,7 +161,7 @@ private fun tokenProductions(): List<Production<*>> = buildList {
             "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
         ),
     )
-
+    
     addAll(
         tokenValues(
             node<FoxUnaryOperator>(),
@@ -169,7 +169,7 @@ private fun tokenProductions(): List<Production<*>> = buildList {
             "-" to FoxNegOperator,
         ),
     )
-
+    
     addAll(
         tokenValues(
             node<FoxBinaryOperator>(),
@@ -194,7 +194,7 @@ private fun tokenProductions(): List<Production<*>> = buildList {
             "||" to FoxOrOrOperator,
         ),
     )
-
+    
     addAll(tokenValues(MultiplicativeOperator, "*" to FoxMulOperator, "/" to FoxDivOperator, "%" to FoxRemOperator))
     addAll(tokenValues(AdditiveOperator, "+" to FoxAddOperator, "-" to FoxSubOperator))
     addAll(tokenValues(ShiftOperator, "<<" to FoxShlOperator, ">>" to FoxShrOperator, ">>>" to FoxUshrOperator))
@@ -205,7 +205,7 @@ private fun tokenProductions(): List<Production<*>> = buildList {
     addAll(tokenValues(BitOrOperator, "|" to FoxOrOperator))
     addAll(tokenValues(LogicalAndOperator, "&&" to FoxAndAndOperator))
     addAll(tokenValues(LogicalOrOperator, "||" to FoxOrOrOperator))
-
+    
     addAll(
         tokenValues(
             node<FoxAssignOperator>(),
@@ -419,11 +419,22 @@ private fun typeProductions(): List<Production<*>> = buildList {
     )
     addAll(
         listOf(
+            serial(node<FoxType>(), token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
+                FoxAnyOfType(it)
+            },
             serial(node<FoxType>(), token("Tuple"), TupleComponentParameterList) { _, it ->
                 it.toFoxTupleType()
             },
+            serial(node<FoxType>(), token("AnyTupleOf"), AnonymousActualGenericParameterList) { _, it ->
+                if (it.size != 1) throw ParseException("AnyTupleOf type must have exactly one generic parameter")
+                FoxAnyTupleOfType(it.first())
+            },
             serial(node<FoxType>(), token("Struct"), StructFieldParameterList) { _, it ->
                 FoxStructType(it)
+            },
+            serial(node<FoxType>(), token("AnyStructOf"), AnonymousActualGenericParameterList) { _, it ->
+                if (it.isEmpty()) throw ParseException("AnyStructOf type must have at least one generic parameter")
+                FoxAnyStructOfType(it)
             },
             serial(node<FoxType>(), token("Object"), ObjectMemberParameterList) { _, it ->
                 FoxObjectType(it)

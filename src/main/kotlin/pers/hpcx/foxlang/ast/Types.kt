@@ -20,8 +20,11 @@ object FoxStringType : FoxPrimitiveType
 
 sealed interface FoxWildcardType : FoxType
 object FoxAnyType : FoxWildcardType
+data class FoxAnyOfType(val types: List<FoxType>) : FoxWildcardType
 object FoxAnyTupleType : FoxWildcardType
+data class FoxAnyTupleOfType(val component: FoxType) : FoxWildcardType
 object FoxAnyStructType : FoxWildcardType
+data class FoxAnyStructOfType(val fields: List<FoxType>) : FoxWildcardType
 object FoxAnyObjectType : FoxWildcardType
 object FoxAnyEnumType : FoxWildcardType
 object FoxAnyArrayType : FoxWildcardType
