@@ -37,4 +37,4 @@ fun <E> OrderedSet<E>?.orEmpty(): OrderedSet<E> = this ?: emptyOrderedSet()
 
 fun <E> orderedSetOf(vararg elements: E): OrderedSet<E> = ArrayHashOrderedSet(elements.asIterable())
 
-fun <E> Iterable<E>.toOrderedSet(): OrderedSet<E> = ArrayHashOrderedSet(this)
+fun <E> List<E>.toOrderedSet(): OrderedSet<E> = ArrayHashOrderedSet(this)

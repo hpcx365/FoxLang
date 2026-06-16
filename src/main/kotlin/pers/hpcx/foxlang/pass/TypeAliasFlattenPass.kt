@@ -1,7 +1,8 @@
 package pers.hpcx.foxlang.pass
 
 import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.utils.orEmpty
+import pers.hpcx.foxlang.type.mapTypes
+import pers.hpcx.foxlang.type.visitTypes
 
 sealed interface TypeAliasFlattenResult
 data class TypeAliasFlattenSuccess(val newFile: FoxFile) : TypeAliasFlattenResult
@@ -10,8 +11,6 @@ data class TypeAliasFlattenFailure(val errors: List<TypeAliasFlattenError>) : Ty
 sealed interface TypeAliasFlattenError
 data class TypeAliasDuplicated(val typeAlias: FoxTypeAlias) : TypeAliasFlattenError
 data class TypeAliasNotFound(val referredBy: FoxTypeAlias, val typeName: String) : TypeAliasFlattenError
-data class TypeAliasUnexpectedGenerics(val referredBy: FoxTypeAlias, val type: FoxType) : TypeAliasFlattenError
-data class TypeAliasMissingGenerics(val referredBy: FoxTypeAlias, val type: FoxType) : TypeAliasFlattenError
 data class TypeAliasGenericCountMismatch(val referredBy: FoxTypeAlias, val type: FoxType) : TypeAliasFlattenError
 data class TypeAliasLoopDetected(val typeAliases: List<FoxTypeAlias>) : TypeAliasFlattenError
 
@@ -29,7 +28,7 @@ fun runTypeAliasFlatten(file: FoxFile): TypeAliasFlattenResult {
     val originalAliases = file.elements.filterIsInstance<FoxTypeAlias>()
     val classifiedAliases = originalAliases.map { typeAlias ->
         fun classifyTypeRef(type: FoxType): FoxType = type.mapTypes<FoxUnresolvedType> { unresolved ->
-            if (unresolved.name in typeAlias.generics.orEmpty() && unresolved.parameters == null) {
+            if (unresolved.name in typeAlias.generics && unresolved.parameters == null) {
                 FoxGenericRefMarker(unresolved.name)
             } else {
                 FoxAliasRefMarker(unresolved.name, unresolved.parameters?.map { classifyTypeRef(it) }, unresolved)
@@ -61,23 +60,13 @@ fun runTypeAliasFlatten(file: FoxFile): TypeAliasFlattenResult {
                         errors += TypeAliasNotFound(originalAlias, marker.aliasName)
                         return@visitTypes
                     }
-                    if (alias.generics == null) {
-                        if (marker.parameters != null) {
-                            errors += TypeAliasUnexpectedGenerics(originalAlias, marker.originalType)
-                            return@visitTypes
-                        }
-                    } else {
-                        if (marker.parameters == null) {
-                            errors += TypeAliasMissingGenerics(originalAlias, marker.originalType)
-                            return@visitTypes
-                        }
-                        if (marker.parameters.size != alias.generics.size) {
-                            errors += TypeAliasGenericCountMismatch(originalAlias, marker.originalType)
-                            return@visitTypes
-                        }
+                    val parameters = marker.parameters.orEmpty()
+                    if (parameters.size != alias.generics.size) {
+                        errors += TypeAliasGenericCountMismatch(originalAlias, marker.originalType)
+                        return@visitTypes
                     }
                     aliasDeps.getOrPut(classifiedAlias.name) { mutableSetOf() }.add(marker.aliasName)
-                    marker.parameters?.forEach { collectAliasDeps(it) }
+                    parameters.forEach { collectAliasDeps(it) }
                 }
             }
         }
@@ -133,7 +122,7 @@ fun runTypeAliasFlatten(file: FoxFile): TypeAliasFlattenResult {
                 is FoxGenericRefMarker -> marker
                 is FoxAliasRefMarker -> {
                     val flattened = flattenAlias(aliasByName.getValue(marker.aliasName))
-                    if (flattened.generics != null && marker.parameters != null) {
+                    if (marker.parameters != null) {
                         val genericReplacement = flattened.generics.zip(marker.parameters.map { flattenType(it) }).toMap()
                         substituteGenerics(flattened.alias, genericReplacement)
                     } else {

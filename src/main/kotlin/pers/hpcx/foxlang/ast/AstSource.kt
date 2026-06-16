@@ -32,16 +32,16 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     
     // File elements
     fun render(file: FoxFile) = writeToString { render(file, it) }
-
+    
     fun render(file: FoxFile, writer: PrintWriter) {
         file.elements.forEachIndexed { index, element ->
             if (index > 0) writer.print(fileSeparator)
             render(element, writer)
         }
     }
-
+    
     fun render(element: FoxFileElement) = writeToString { render(element, it) }
-
+    
     fun render(element: FoxFileElement, writer: PrintWriter) {
         when (element) {
             is FoxTypeAlias -> renderTypeAlias(element, writer)
@@ -86,19 +86,19 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writer: PrintWriter,
     ) {
         writer.print("def ")
-        element.generics?.takeIf { it.isNotEmpty() }?.let {
-            writeFormalGenerics(it, writer)
+        if (canonical || element.generics.isNotEmpty()) {
+            writeFormalGenerics(element.generics, writer)
             writer.print(' ')
         }
-        element.thisType?.let {
-            render(it, writer)
+        if (canonical || element.thisType != FoxUnitType) {
+            render(element.thisType, writer)
             writer.print('.')
         }
         writer.print(element.name)
         writeFormalParameters(element.parameters, writer)
-        element.returnType?.let {
+        if (canonical || element.returnType != FoxUnitType) {
             writer.print(": ")
-            render(it, writer)
+            render(element.returnType, writer)
         }
         writer.print(' ')
         renderMethodBody(element.body, writer)
@@ -121,15 +121,14 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     private fun wildcardTypeText(type: FoxWildcardType) = when (type) {
         FoxAnyType -> "Any"
         is FoxAnyOfType -> error("Parameterized wildcard type should not be rendered as plain text")
+        is FoxAllOfType -> error("Parameterized wildcard type should not be rendered as plain text")
+        is FoxNoneOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyTupleType -> "AnyTuple"
         is FoxAnyTupleOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyStructType -> "AnyStruct"
         is FoxAnyStructOfType -> error("Parameterized wildcard type should not be rendered as plain text")
         FoxAnyObjectType -> "AnyObject"
         FoxAnyEnumType -> "AnyEnum"
-        FoxAnyArrayType -> "AnyArray"
-        FoxAnyRefType -> "AnyRef"
-        FoxAnyMethodType -> "AnyMethod"
     }
     
     private fun renderWildcardType(
@@ -138,6 +137,8 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     ) {
         when (type) {
             is FoxAnyOfType -> renderTypeListArgument("AnyOf", type.types, writer)
+            is FoxAllOfType -> renderTypeListArgument("AllOf", type.types, writer)
+            is FoxNoneOfType -> renderTypeListArgument("NoneOf", type.types, writer)
             is FoxAnyTupleOfType -> renderSingleTypeArgument("AnyTupleOf", type.component, writer)
             is FoxAnyStructOfType -> renderTypeListArgument("AnyStructOf", type.fields, writer)
             else -> writer.print(wildcardTypeText(type))
@@ -167,17 +168,25 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
             is FoxTupleComponentAtType -> renderTypeAndIntArgument("ComponentAt", type.type, type.index, writer)
             is FoxTupleLastComponentAtType -> renderTypeAndIntArgument("LastComponentAt", type.type, type.index, writer)
             is FoxTupleFirstComponentsOfType -> renderTypeAndIntArgument("FirstComponentsOf", type.type, type.count, writer)
+            is FoxTupleExactFirstComponentsOfType -> renderTypeAndIntArgument("ExactFirstComponentsOf", type.type, type.count, writer)
             is FoxTupleLastComponentsOfType -> renderTypeAndIntArgument("LastComponentsOf", type.type, type.count, writer)
+            is FoxTupleExactLastComponentsOfType -> renderTypeAndIntArgument("ExactLastComponentsOf", type.type, type.count, writer)
             is FoxTupleDropFirstComponentsOfType -> renderTypeAndIntArgument("DropFirstComponentsOf", type.type, type.count, writer)
+            is FoxTupleExactDropFirstComponentsOfType -> renderTypeAndIntArgument("ExactDropFirstComponentsOf", type.type, type.count, writer)
             is FoxTupleDropLastComponentsOfType -> renderTypeAndIntArgument("DropLastComponentsOf", type.type, type.count, writer)
+            is FoxTupleExactDropLastComponentsOfType -> renderTypeAndIntArgument("ExactDropLastComponentsOf", type.type, type.count, writer)
             is FoxTupleMergeComponentsOfType -> renderTypeListArgument("MergeComponentsOf", type.types, writer)
             is FoxStructFieldOfType -> renderTypeAndNameArgument("FieldOf", type.type, type.name, writer)
             is FoxStructFieldAtType -> renderTypeAndIntArgument("FieldAt", type.type, type.index, writer)
             is FoxStructLastFieldAtType -> renderTypeAndIntArgument("LastFieldAt", type.type, type.index, writer)
             is FoxStructFirstFieldsOfType -> renderTypeAndIntArgument("FirstFieldsOf", type.type, type.count, writer)
+            is FoxStructExactFirstFieldsOfType -> renderTypeAndIntArgument("ExactFirstFieldsOf", type.type, type.count, writer)
             is FoxStructLastFieldsOfType -> renderTypeAndIntArgument("LastFieldsOf", type.type, type.count, writer)
+            is FoxStructExactLastFieldsOfType -> renderTypeAndIntArgument("ExactLastFieldsOf", type.type, type.count, writer)
             is FoxStructDropFirstFieldsOfType -> renderTypeAndIntArgument("DropFirstFieldsOf", type.type, type.count, writer)
+            is FoxStructExactDropFirstFieldsOfType -> renderTypeAndIntArgument("ExactDropFirstFieldsOf", type.type, type.count, writer)
             is FoxStructDropLastFieldsOfType -> renderTypeAndIntArgument("DropLastFieldsOf", type.type, type.count, writer)
+            is FoxStructExactDropLastFieldsOfType -> renderTypeAndIntArgument("ExactDropLastFieldsOf", type.type, type.count, writer)
             is FoxStructFieldsOfType -> renderTypeAndNamesArgument("FieldsOf", type.type, type.names, writer)
             is FoxStructDropFieldsOfType -> renderTypeAndNamesArgument("DropFieldsOf", type.type, type.names, writer)
             is FoxStructMergeFieldsOfType -> renderTypeListArgument("MergeFieldsOf", type.types, writer)
@@ -191,6 +200,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
             is FoxEnumMergeItemsOfType -> renderTypeListArgument("MergeItemsOf", type.types, writer)
             is FoxArrayElementOfType -> renderSingleTypeArgument("ElementOf", type.type, writer)
             is FoxRefReferentOfType -> renderSingleTypeArgument("ReferentOf", type.type, writer)
+            is FoxMethodOfType -> renderTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`), writer)
             is FoxMethodThisOfType -> renderSingleTypeArgument("ThisOf", type.type, writer)
             is FoxMethodParametersOfType -> renderSingleTypeArgument("ParametersOf", type.type, writer)
             is FoxMethodReturnOfType -> renderSingleTypeArgument("ReturnOf", type.type, writer)
@@ -349,7 +359,7 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         }
         writer.print('>')
     }
-
+    
     private fun render(
         statement: FoxStatement,
         writer: PrintWriter,
@@ -494,8 +504,8 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writer: PrintWriter,
         indentLevel: Int,
     ) {
-        statement.target?.let {
-            render(it, writer, indentLevel, PostfixTarget)
+        if (canonical || statement.target != FoxUnit) {
+            render(statement.target, writer, indentLevel, PostfixTarget)
             writer.print('.')
         }
         writer.print(statement.name)
@@ -508,16 +518,13 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writer: PrintWriter,
         indentLevel: Int,
     ) {
-        statement.target?.let {
-            render(it, writer, indentLevel, PostfixTarget)
-            writer.print(".(")
-            render(statement.method, writer, indentLevel, Standalone)
-            writer.print(')')
-        } ?: run {
-            writer.print('(')
-            render(statement.method, writer, indentLevel, Standalone)
-            writer.print(')')
+        if (canonical || statement.target != FoxUnit) {
+            render(statement.target, writer, indentLevel, PostfixTarget)
+            writer.print('.')
         }
+        writer.print('(')
+        render(statement.method, writer, indentLevel, Standalone)
+        writer.print(')')
         writer.print('(')
         writeCommaSeparated(statement.parameters, writer) { parameter, out ->
             render(parameter, out, indentLevel, Standalone)
@@ -653,38 +660,25 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun writeTypeParameterNames(
-        generics: OrderedSet<String>?,
+        generics: OrderedSet<String>,
         writer: PrintWriter,
     ) {
-        val values = generics?.takeIf { it.isNotEmpty() } ?: return
-        writer.print('<')
-        writeCommaSeparated(values, writer) { name, out -> out.print(name) }
-        writer.print('>')
+        if (canonical || generics.isNotEmpty()) {
+            writer.print('<')
+            writeCommaSeparated(generics, writer) { name, out -> out.print(name) }
+            writer.print('>')
+        }
     }
     
     private fun writeFormalGenerics(
-        generics: OrderedMap<String, FoxGenericConstraint>,
+        generics: OrderedMap<String, FoxType>,
         writer: PrintWriter,
     ) {
         writer.print('<')
-        writeCommaSeparated(generics.entries, writer) { (name, constraint), out ->
+        writeCommaSeparated(generics.entries, writer) { (name, pattern), out ->
             out.print(name)
-            if (constraint.positivePatterns.isNotEmpty() || constraint.negativePatterns.isNotEmpty()) {
-                out.print(" = ")
-                var isFirst = true
-                constraint.positivePatterns.forEach {
-                    if (isFirst) isFirst = false
-                    else out.print(" + ")
-                    render(it, out)
-                }
-                constraint.negativePatterns.forEach {
-                    if (isFirst) {
-                        isFirst = false
-                        out.print("-")
-                    } else out.print(" - ")
-                    render(it, out)
-                }
-            }
+            out.print(" = ")
+            render(pattern, out)
         }
         writer.print('>')
     }

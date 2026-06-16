@@ -1,5 +1,6 @@
 package pers.hpcx.foxlang.ast
 
+import pers.hpcx.foxlang.type.*
 import pers.hpcx.foxlang.utils.orderedMapOf
 import kotlin.test.Test
 import kotlin.test.assertEquals

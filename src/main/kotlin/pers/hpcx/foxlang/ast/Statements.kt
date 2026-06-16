@@ -33,14 +33,14 @@ data class FoxConstruct(
 ) : FoxStatement
 
 data class FoxCall(
-    val target: FoxStatement?,
+    val target: FoxStatement,
     val name: String,
     val generics: List<Pair<String?, FoxType>>?,
     val parameters: List<Pair<String?, FoxStatement>>,
 ) : FoxStatement
 
 data class FoxIndirectCall(
-    val target: FoxStatement?,
+    val target: FoxStatement,
     val method: FoxStatement,
     val parameters: List<FoxStatement>,
 ) : FoxStatement

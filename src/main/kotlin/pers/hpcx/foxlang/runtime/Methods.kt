@@ -15,7 +15,7 @@ data class FoxMethodIdentifier(
 
 data class FoxMethodSignature(
     val name: String,
-    val generics: OrderedMap<String, FoxGenericConstraint>,
+    val generics: OrderedMap<String, FoxType>,
     val thisType: FoxType,
     val parameters: OrderedMap<String, FoxType>,
     val returnType: FoxType,
@@ -112,7 +112,7 @@ enum class FoxBuiltInMethodImplementation(
     returnType: FoxType,
     val signature: FoxMethodSignature = FoxMethodSignature(
         name = name,
-        generics = generics.mapValues { FoxGenericConstraint(listOf(it.value), emptyList()) },
+        generics = generics.mapValues { it.value },
         thisType = thisType,
         parameters = parameters,
         returnType = returnType,

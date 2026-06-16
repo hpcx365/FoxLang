@@ -62,9 +62,7 @@ fun <K, V> OrderedMap<K, V>?.orEmpty(): OrderedMap<K, V> = this ?: emptyOrderedM
 
 fun <K, V> orderedMapOf(vararg entries: Pair<K, V>): OrderedMap<K, V> = ArrayHashOrderedMap(entries.asIterable())
 
-fun <K, V> Iterable<Pair<K, V>>.toOrderedMap(): OrderedMap<K, V> = ArrayHashOrderedMap(this)
-
-fun <K, V> Map<K, V>.toOrderedMap(): OrderedMap<K, V> = ArrayHashOrderedMap(this)
+fun <K, V> List<Pair<K, V>>.toOrderedMap(): OrderedMap<K, V> = ArrayHashOrderedMap(this)
 
 fun <K, V, T> OrderedMap<K, V>.mapValues(transform: (Map.Entry<K, V>) -> T): OrderedMap<K, T> {
     val result = ArrayHashOrderedMap<K, T>()

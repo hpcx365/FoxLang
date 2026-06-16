@@ -1,6 +1,7 @@
 package pers.hpcx.foxlang.pass
 
 import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.type.*
 import pers.hpcx.foxlang.utils.MutableOrderedMap
 import pers.hpcx.foxlang.utils.mapValues
 import pers.hpcx.foxlang.utils.mutableOrderedMapOf
@@ -114,6 +115,18 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
         is FoxRefType -> action(normalizedType)
         is FoxUnresolvedType, is FoxTransformType -> transform
         else -> familyMismatch(transform, "Ref", normalizedType)
+    }
+    
+    fun normalizeMethodOf(
+        transform: FoxType,
+        normalizedThis: FoxType,
+        normalizedParameters: FoxType,
+        normalizedReturn: FoxType,
+        action: (FoxType, FoxStructType, FoxType) -> FoxType,
+    ): FoxType = when (normalizedParameters) {
+        is FoxStructType -> action(normalizedThis, normalizedParameters, normalizedReturn)
+        is FoxUnresolvedType, is FoxTransformType -> transform
+        else -> familyMismatch(transform, "Struct", normalizedParameters)
     }
     
     fun normalizeMethodTransform(
@@ -322,42 +335,70 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleComponentAtType(normalizedBase, currentType.index)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleIndex(transform, currentType.index, tuple.size) { tuple.componentAt(currentType.index) }
+                        normalizeTupleIndex(transform, currentType.index, tuple.arity) { tuple.componentAt(currentType.index) }
                     }
                 }
                 is FoxTupleLastComponentAtType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleLastComponentAtType(normalizedBase, currentType.index)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleIndex(transform, currentType.index, tuple.size) { tuple.lastComponentAt(currentType.index) }
+                        normalizeTupleIndex(transform, currentType.index, tuple.arity) { tuple.lastComponentAt(currentType.index) }
                     }
                 }
                 is FoxTupleFirstComponentsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleFirstComponentsOfType(normalizedBase, currentType.count)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleCount(transform, currentType.count, tuple.size) { tuple.firstComponents(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.firstComponents(currentType.count) }
+                    }
+                }
+                is FoxTupleExactFirstComponentsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxTupleExactFirstComponentsOfType(normalizedBase, currentType.count)
+                    normalizeTupleTransform(transform, normalizedBase) { tuple ->
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.firstComponents(currentType.count) }
                     }
                 }
                 is FoxTupleLastComponentsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleLastComponentsOfType(normalizedBase, currentType.count)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleCount(transform, currentType.count, tuple.size) { tuple.lastComponents(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.lastComponents(currentType.count) }
+                    }
+                }
+                is FoxTupleExactLastComponentsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxTupleExactLastComponentsOfType(normalizedBase, currentType.count)
+                    normalizeTupleTransform(transform, normalizedBase) { tuple ->
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.lastComponents(currentType.count) }
                     }
                 }
                 is FoxTupleDropFirstComponentsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleDropFirstComponentsOfType(normalizedBase, currentType.count)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleCount(transform, currentType.count, tuple.size) { tuple.dropFirstComponents(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.dropFirstComponents(currentType.count) }
+                    }
+                }
+                is FoxTupleExactDropFirstComponentsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxTupleExactDropFirstComponentsOfType(normalizedBase, currentType.count)
+                    normalizeTupleTransform(transform, normalizedBase) { tuple ->
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.dropFirstComponents(currentType.count) }
                     }
                 }
                 is FoxTupleDropLastComponentsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxTupleDropLastComponentsOfType(normalizedBase, currentType.count)
                     normalizeTupleTransform(transform, normalizedBase) { tuple ->
-                        normalizeTupleCount(transform, currentType.count, tuple.size) { tuple.dropLastComponents(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.dropLastComponents(currentType.count) }
+                    }
+                }
+                is FoxTupleExactDropLastComponentsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxTupleExactDropLastComponentsOfType(normalizedBase, currentType.count)
+                    normalizeTupleTransform(transform, normalizedBase) { tuple ->
+                        normalizeTupleCount(transform, currentType.count, tuple.arity) { tuple.dropLastComponents(currentType.count) }
                     }
                 }
                 is FoxTupleMergeComponentsOfType -> normalizeMergeTuple(currentType.types)
@@ -373,42 +414,70 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructFieldAtType(normalizedBase, currentType.index)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeStructIndex(transform, currentType.index, struct.size) { struct.fieldAt(currentType.index).value }
+                        normalizeStructIndex(transform, currentType.index, struct.arity) { struct.fieldAt(currentType.index).value }
                     }
                 }
                 is FoxStructLastFieldAtType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructLastFieldAtType(normalizedBase, currentType.index)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeStructIndex(transform, currentType.index, struct.size) { struct.lastFieldAt(currentType.index).value }
+                        normalizeStructIndex(transform, currentType.index, struct.arity) { struct.lastFieldAt(currentType.index).value }
                     }
                 }
                 is FoxStructFirstFieldsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructFirstFieldsOfType(normalizedBase, currentType.count)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeTupleCount(transform, currentType.count, struct.size) { struct.firstFields(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.firstFields(currentType.count) }
+                    }
+                }
+                is FoxStructExactFirstFieldsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxStructExactFirstFieldsOfType(normalizedBase, currentType.count)
+                    normalizeStructTransform(transform, normalizedBase) { struct ->
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.firstFields(currentType.count) }
                     }
                 }
                 is FoxStructLastFieldsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructLastFieldsOfType(normalizedBase, currentType.count)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeTupleCount(transform, currentType.count, struct.size) { struct.lastFields(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.lastFields(currentType.count) }
+                    }
+                }
+                is FoxStructExactLastFieldsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxStructExactLastFieldsOfType(normalizedBase, currentType.count)
+                    normalizeStructTransform(transform, normalizedBase) { struct ->
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.lastFields(currentType.count) }
                     }
                 }
                 is FoxStructDropFirstFieldsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructDropFirstFieldsOfType(normalizedBase, currentType.count)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeTupleCount(transform, currentType.count, struct.size) { struct.dropFirstFields(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.dropFirstFields(currentType.count) }
+                    }
+                }
+                is FoxStructExactDropFirstFieldsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxStructExactDropFirstFieldsOfType(normalizedBase, currentType.count)
+                    normalizeStructTransform(transform, normalizedBase) { struct ->
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.dropFirstFields(currentType.count) }
                     }
                 }
                 is FoxStructDropLastFieldsOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxStructDropLastFieldsOfType(normalizedBase, currentType.count)
                     normalizeStructTransform(transform, normalizedBase) { struct ->
-                        normalizeTupleCount(transform, currentType.count, struct.size) { struct.dropLastFields(currentType.count) }
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.dropLastFields(currentType.count) }
+                    }
+                }
+                is FoxStructExactDropLastFieldsOfType -> {
+                    val normalizedBase = normalizeType(currentType.type)
+                    val transform = FoxStructExactDropLastFieldsOfType(normalizedBase, currentType.count)
+                    normalizeStructTransform(transform, normalizedBase) { struct ->
+                        normalizeTupleCount(transform, currentType.count, struct.arity) { struct.dropLastFields(currentType.count) }
                     }
                 }
                 is FoxStructFieldsOfType -> {
@@ -481,6 +550,15 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxRefReferentOfType(normalizedBase)
                     normalizeRefTransform(transform, normalizedBase) { ref -> ref.referent }
+                }
+                is FoxMethodOfType -> {
+                    val normalizedThis = normalizeType(currentType.`this`)
+                    val normalizedParameters = normalizeType(currentType.parameters)
+                    val normalizedReturn = normalizeType(currentType.`return`)
+                    val transform = FoxMethodOfType(normalizedThis, normalizedParameters, normalizedReturn)
+                    normalizeMethodOf(transform, normalizedThis, normalizedParameters, normalizedReturn) { `this`, parameters, `return` ->
+                        FoxMethodType(`this`, parameters.fields, `return`)
+                    }
                 }
                 is FoxMethodThisOfType -> {
                     val normalizedBase = normalizeType(currentType.type)

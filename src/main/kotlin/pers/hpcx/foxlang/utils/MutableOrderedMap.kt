@@ -42,6 +42,4 @@ fun <K, V> emptyMutableOrderedMap(): MutableOrderedMap<K, V> = ArrayHashOrderedM
 
 fun <K, V> mutableOrderedMapOf(vararg entries: Pair<K, V>): MutableOrderedMap<K, V> = ArrayHashOrderedMap(entries.asIterable())
 
-fun <K, V> Iterable<Pair<K, V>>.toMutableOrderedMap(): MutableOrderedMap<K, V> = ArrayHashOrderedMap(this)
-
-fun <K, V> Map<K, V>.toMutableOrderedMap(): MutableOrderedMap<K, V> = ArrayHashOrderedMap(this)
+fun <K, V> List<Pair<K, V>>.toMutableOrderedMap(): MutableOrderedMap<K, V> = ArrayHashOrderedMap(this)

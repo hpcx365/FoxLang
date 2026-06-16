@@ -86,6 +86,7 @@ type MyEnumMerge = MergeItemsOf<MyEnum, Enum<Pending = Unit>>
 
 type MyArrayElement = ElementOf<MyArray>
 type MyRefReferent = ReferentOf<Ref<MyTuple>>
+type MyMethodOf = MethodOf<MyObject, Struct<name: String, age: Int>, Int>
 type MyMethodThis = ThisOf<MyMethod>
 type MyMethodParameters = ParametersOf<MyMethod>
 type MyMethodReturn = ReturnOf<MyMethod>
@@ -94,6 +95,8 @@ def <T = AnyStructOf<String, Int>, E = ItemOf<MyEnum, Success>> MergeFieldsOf<My
     sample: FieldsOf<MyStruct, name, age>,
     item: E,
     value: AnyOf<AnyTupleOf<T>, MyAnyOf>,
+    both: AllOf<AnyTupleOf<T>, MyAllOf>,
+    neither: NoneOf<MyNoneOf, AnyStructOf<String, Int>>,
 ): FieldOf<MyStruct, name> {
     return "fox"
 }

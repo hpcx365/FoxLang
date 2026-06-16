@@ -1,6 +1,7 @@
 package pers.hpcx.foxlang.pass
 
 import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.type.mapTypes
 import pers.hpcx.foxlang.utils.mapValues
 
 sealed interface TypeAliasEliminationResult
@@ -9,8 +10,6 @@ data class TypeAliasEliminationFailure(val errors: List<TypeAliasEliminationErro
 
 sealed interface TypeAliasEliminationError
 data class TypeAliasEliminationNotFound(val referredBy: FoxMethodDefinition, val typeName: String) : TypeAliasEliminationError
-data class TypeAliasEliminationUnexpectedGenerics(val type: FoxType) : TypeAliasEliminationError
-data class TypeAliasEliminationMissingGenerics(val type: FoxType) : TypeAliasEliminationError
 data class TypeAliasEliminationGenericCountMismatch(val type: FoxType) : TypeAliasEliminationError
 
 fun runTypeAliasElimination(file: FoxFile): TypeAliasEliminationResult {
@@ -19,7 +18,7 @@ fun runTypeAliasElimination(file: FoxFile): TypeAliasEliminationResult {
     val aliases = file.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
     
     fun runTypeAliasElimination(method: FoxMethodDefinition): FoxMethodDefinition {
-        val genericNames = method.generics?.map { it.key }.orEmpty()
+        val genericNames = method.generics.map { it.key }
         
         fun expandTypeAlias(type: FoxType): FoxType = type.mapTypes<FoxUnresolvedType> { unresolved ->
             if (unresolved.name in genericNames && unresolved.parameters == null) {
@@ -30,22 +29,12 @@ fun runTypeAliasElimination(file: FoxFile): TypeAliasEliminationResult {
                 errors += TypeAliasEliminationNotFound(method, unresolved.name)
                 return@mapTypes unresolved
             }
-            if (typeAlias.generics == null) {
-                if (unresolved.parameters != null) {
-                    errors += TypeAliasEliminationUnexpectedGenerics(unresolved)
-                    return@mapTypes unresolved
-                }
-                return@mapTypes typeAlias.alias
-            }
-            if (unresolved.parameters == null) {
-                errors += TypeAliasEliminationMissingGenerics(unresolved)
-                return@mapTypes unresolved
-            }
-            if (unresolved.parameters.size != typeAlias.generics.size) {
+            val parameters = unresolved.parameters.orEmpty()
+            if (parameters.size != typeAlias.generics.size) {
                 errors += TypeAliasEliminationGenericCountMismatch(unresolved)
                 return@mapTypes unresolved
             }
-            val replacement = typeAlias.generics.zip(unresolved.parameters.map { expandTypeAlias(it) }).toMap()
+            val replacement = typeAlias.generics.zip(parameters.map { expandTypeAlias(it) }).toMap()
             typeAlias.alias.mapTypes<FoxUnresolvedType> { replacement.getValue(it.name) }
         }
         
@@ -60,17 +49,12 @@ fun runTypeAliasElimination(file: FoxFile): TypeAliasEliminationResult {
 }
 
 fun FoxMethodDefinition.mapTypes(transform: (FoxType) -> FoxType) = FoxMethodDefinition(
-    generics?.mapValues { it.value.mapTypes(transform) },
-    thisType?.mapTypes(transform),
+    generics.mapValues { it.value.mapTypes(transform) },
+    thisType.mapTypes(transform),
     name,
     parameters.mapValues { it.value.mapTypes(transform) },
-    returnType?.mapTypes(transform),
+    returnType.mapTypes(transform),
     body.mapTypes(transform),
-)
-
-inline fun FoxGenericConstraint.mapTypes(crossinline transform: (FoxType) -> FoxType) = FoxGenericConstraint(
-    positivePatterns.map { it.mapTypes(transform) },
-    negativePatterns.map { it.mapTypes(transform) },
 )
 
 fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when (this) {
@@ -101,13 +85,13 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
         parameters.map { (name, parameter) -> name to parameter.mapTypes(transform) },
     )
     is FoxCall -> FoxCall(
-        target?.mapTypes(transform),
+        target.mapTypes(transform),
         name,
         generics?.map { (name, type) -> name to transform(type) },
         parameters.map { (name, parameter) -> name to parameter.mapTypes(transform) },
     )
     is FoxIndirectCall -> FoxIndirectCall(
-        target?.mapTypes(transform),
+        target.mapTypes(transform),
         method.mapTypes(transform),
         parameters.map { it.mapTypes(transform) },
     )

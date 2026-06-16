@@ -2,10 +2,8 @@ package pers.hpcx.foxlang.ast
 
 import pers.hpcx.foxlang.parser.*
 import pers.hpcx.foxlang.runtime.*
-import pers.hpcx.foxlang.utils.OrderedMap
-import pers.hpcx.foxlang.utils.OrderedSet
-import pers.hpcx.foxlang.utils.mutableOrderedMapOf
-import pers.hpcx.foxlang.utils.mutableOrderedSetOf
+import pers.hpcx.foxlang.type.toFoxTupleType
+import pers.hpcx.foxlang.utils.*
 import java.util.*
 
 // Lexical nodes
@@ -41,12 +39,9 @@ private val ActualParameterList = ActualParameter.list().name("ActualParameterLi
 
 private val AnonymousActualParameterList = node<FoxStatement>().list().name("AnonymousActualParameterList")
 
-private val FormalGenericParameter = node<String>().pair(node<FoxGenericConstraint>()).name("FormalGenericParameter")
-private val RawFormalGenericParameterList = node<String>().pair(node<FoxGenericConstraint>()).list().name("RawFormalGenericParameterList")
-private val FormalGenericParameterList = node<String>().orderedMap(node<FoxGenericConstraint>()).name("FormalGenericParameterList")
-private val FormalGenericConstraintTerm = node<Boolean>().pair(node<FoxType>()).name("FormalGenericConstraintTerm")
-private val RawFormalGenericConstraintTermList = node<Boolean>().pair(node<FoxType>()).list().name("RawFormalGenericConstraintTermList")
-private val FormalGenericConstraintClause = node<FoxGenericConstraint>().name("FormalGenericConstraintClause")
+private val FormalGenericParameter = node<String>().pair(node<FoxType>()).name("FormalGenericParameter")
+private val RawFormalGenericParameterList = node<String>().pair(node<FoxType>()).list().name("RawFormalGenericParameterList")
+private val FormalGenericParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalGenericParameterList")
 
 private val RawFormalGenericParameterListWithoutConstraints = node<String>().list().name("RawFormalGenericParameterListWithoutConstraints")
 private val FormalGenericParameterListWithoutConstraints = node<String>().orderedSet().name("FormalGenericParameterListWithoutConstraints")
@@ -129,12 +124,14 @@ private val ReservedKeywords = setOf(
     
     "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char",
     "String", "Tuple", "Struct", "Object", "Enum", "Array", "Ref", "Method",
-    "Any", "AnyOf", "AnyTuple", "AnyTupleOf", "AnyStruct", "AnyStructOf", "AnyObject", "AnyEnum", "AnyArray", "AnyRef", "AnyMethod",
-    "ComponentAt", "LastComponentAt", "FirstComponentsOf", "LastComponentsOf", "DropFirstComponentsOf", "DropLastComponentsOf", "MergeComponentsOf",
-    "FieldOf", "FieldAt", "LastFieldAt", "FirstFieldsOf", "LastFieldsOf", "DropFirstFieldsOf", "DropLastFieldsOf", "FieldsOf", "DropFieldsOf", "MergeFieldsOf",
+    "Any", "AnyOf", "AllOf", "NoneOf", "AnyTuple", "AnyTupleOf", "AnyStruct", "AnyStructOf", "AnyObject", "AnyEnum",
+    "ComponentAt", "LastComponentAt", "FirstComponentsOf", "ExactFirstComponentsOf", "LastComponentsOf", "ExactLastComponentsOf",
+    "DropFirstComponentsOf", "ExactDropFirstComponentsOf", "DropLastComponentsOf", "ExactDropLastComponentsOf", "MergeComponentsOf",
+    "FieldOf", "FieldAt", "LastFieldAt", "FirstFieldsOf", "ExactFirstFieldsOf", "LastFieldsOf", "ExactLastFieldsOf",
+    "DropFirstFieldsOf", "ExactDropFirstFieldsOf", "DropLastFieldsOf", "ExactDropLastFieldsOf", "FieldsOf", "DropFieldsOf", "MergeFieldsOf",
     "MemberOf", "MembersOf", "DropMembersOf", "MergeMembersOf",
     "ItemOf", "ItemsOf", "DropItemsOf", "MergeItemsOf",
-    "ElementOf", "ReferentOf", "ThisOf", "ParametersOf", "ReturnOf",
+    "ElementOf", "ReferentOf", "MethodOf", "ThisOf", "ParametersOf", "ReturnOf",
 )
 
 private val FoxProductions = buildList {
@@ -290,43 +287,8 @@ private fun parameterAndGenericProductions(): List<Production<*>> = buildList {
     
     add(listLike(AnonymousActualParameterList, token("("), node<FoxStatement>(), token(","), token(")")))
     
-    add(serial(FormalGenericConstraintTerm, token("+"), node<FoxType>()) { _, type -> true to type })
-    add(serial(FormalGenericConstraintTerm, token("-"), node<FoxType>()) { _, type -> false to type })
-    add(listLike(RawFormalGenericConstraintTermList, null, FormalGenericConstraintTerm, null, null))
-    add(
-        serial(FormalGenericConstraintClause, node<FoxType>()) {
-            FoxGenericConstraint(listOf(it), emptyList())
-        },
-    )
-    add(
-        serial(FormalGenericConstraintClause, FormalGenericConstraintTerm) { (positive, type) ->
-            if (positive) FoxGenericConstraint(listOf(type), emptyList())
-            else FoxGenericConstraint(emptyList(), listOf(type))
-        },
-    )
-    add(
-        serial(FormalGenericConstraintClause, node<FoxType>(), RawFormalGenericConstraintTermList) { type, rest ->
-            FoxGenericConstraint(
-                positivePatterns = listOf(type) + rest.filter { it.first }.map { it.second },
-                negativePatterns = rest.filter { !it.first }.map { it.second },
-            )
-        },
-    )
-    add(
-        serial(FormalGenericConstraintClause, FormalGenericConstraintTerm, RawFormalGenericConstraintTermList) { first, rest ->
-            val constraints = listOf(first) + rest
-            FoxGenericConstraint(
-                positivePatterns = constraints.filter { it.first }.map { it.second },
-                negativePatterns = constraints.filter { !it.first }.map { it.second },
-            )
-        },
-    )
-    add(serial(FormalGenericParameter, TypeName) { it to FoxGenericConstraint(emptyList(), emptyList()) })
-    add(
-        serial(FormalGenericParameter, TypeName, token("="), FormalGenericConstraintClause) { name, _, constraint ->
-            name to constraint
-        },
-    )
+    add(serial(FormalGenericParameter, TypeName) { it to FoxAnyType })
+    add(serial(FormalGenericParameter, TypeName, token("="), node<FoxType>()) { name, _, constraint -> name to constraint })
     add(listLike(RawFormalGenericParameterList, token("<"), FormalGenericParameter, token(","), token(">")))
     add(serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toOrderedMap("formal generic parameter") })
     
@@ -412,15 +374,18 @@ private fun typeProductions(): List<Production<*>> = buildList {
             "AnyStruct" to FoxAnyStructType,
             "AnyObject" to FoxAnyObjectType,
             "AnyEnum" to FoxAnyEnumType,
-            "AnyArray" to FoxAnyArrayType,
-            "AnyRef" to FoxAnyRefType,
-            "AnyMethod" to FoxAnyMethodType,
         ),
     )
     addAll(
         listOf(
             serial(node<FoxType>(), token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
                 FoxAnyOfType(it)
+            },
+            serial(node<FoxType>(), token("AllOf"), AnonymousActualGenericParameterList) { _, it ->
+                FoxAllOfType(it)
+            },
+            serial(node<FoxType>(), token("NoneOf"), AnonymousActualGenericParameterList) { _, it ->
+                FoxNoneOfType(it)
             },
             serial(node<FoxType>(), token("Tuple"), TupleComponentParameterList) { _, it ->
                 it.toFoxTupleType()
@@ -462,14 +427,26 @@ private fun typeProductions(): List<Production<*>> = buildList {
             serial(node<FoxType>(), token("FirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxTupleFirstComponentsOfType(type, count)
             },
+            serial(node<FoxType>(), token("ExactFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxTupleExactFirstComponentsOfType(type, count)
+            },
             serial(node<FoxType>(), token("LastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxTupleLastComponentsOfType(type, count)
+            },
+            serial(node<FoxType>(), token("ExactLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxTupleExactLastComponentsOfType(type, count)
             },
             serial(node<FoxType>(), token("DropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxTupleDropFirstComponentsOfType(type, count)
             },
+            serial(node<FoxType>(), token("ExactDropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxTupleExactDropFirstComponentsOfType(type, count)
+            },
             serial(node<FoxType>(), token("DropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxTupleDropLastComponentsOfType(type, count)
+            },
+            serial(node<FoxType>(), token("ExactDropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxTupleExactDropLastComponentsOfType(type, count)
             },
             serial(node<FoxType>(), token("MergeComponentsOf"), AnonymousActualGenericParameterList) { _, it ->
                 FoxTupleMergeComponentsOfType(it)
@@ -486,14 +463,26 @@ private fun typeProductions(): List<Production<*>> = buildList {
             serial(node<FoxType>(), token("FirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxStructFirstFieldsOfType(type, count)
             },
+            serial(node<FoxType>(), token("ExactFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxStructExactFirstFieldsOfType(type, count)
+            },
             serial(node<FoxType>(), token("LastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxStructLastFieldsOfType(type, count)
+            },
+            serial(node<FoxType>(), token("ExactLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxStructExactLastFieldsOfType(type, count)
             },
             serial(node<FoxType>(), token("DropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxStructDropFirstFieldsOfType(type, count)
             },
+            serial(node<FoxType>(), token("ExactDropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxStructExactDropFirstFieldsOfType(type, count)
+            },
             serial(node<FoxType>(), token("DropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
                 FoxStructDropLastFieldsOfType(type, count)
+            },
+            serial(node<FoxType>(), token("ExactDropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+                FoxStructExactDropLastFieldsOfType(type, count)
             },
             serial(node<FoxType>(), token("FieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
                 FoxStructFieldsOfType(type, names)
@@ -533,6 +522,19 @@ private fun typeProductions(): List<Production<*>> = buildList {
             },
             serial(node<FoxType>(), token("ReferentOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
                 FoxRefReferentOfType(type)
+            },
+            serial(
+                node<FoxType>(),
+                token("MethodOf"),
+                token("<"),
+                node<FoxType>(),
+                token(","),
+                node<FoxType>(),
+                token(","),
+                node<FoxType>(),
+                token(">"),
+            ) { _, _, `this`, _, parameters, _, `return`, _ ->
+                FoxMethodOfType(`this`, parameters, `return`)
             },
             serial(node<FoxType>(), token("ThisOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
                 FoxMethodThisOfType(type)
@@ -588,12 +590,12 @@ private fun expressionProductions(): List<Production<*>> = buildList {
     )
     add(
         serial(PostfixExpression, Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
-            FoxCall(null, name, generics, parameters)
+            FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters)
         },
     )
     add(
         serial(PostfixExpression, Identifier, ActualParameterList) { name, parameters ->
-            FoxCall(null, name, null, parameters)
+            FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters)
         },
     )
     add(
@@ -613,7 +615,7 @@ private fun expressionProductions(): List<Production<*>> = buildList {
     )
     add(
         serial(PostfixExpression, ParenthesizedStatement, AnonymousActualParameterList) { method, parameters ->
-            FoxIndirectCall(null, method, parameters)
+            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters)
         },
     )
     add(
@@ -879,7 +881,7 @@ private fun topLevelProductions(): List<Production<*>> = buildList {
             TypeName,
             token("="),
             node<FoxType>(),
-        ) { _, name, _, type -> FoxTypeAlias(name, null, type) },
+        ) { _, name, _, type -> FoxTypeAlias(name, emptyOrderedSet(), type) },
     )
     
     add(
@@ -902,7 +904,7 @@ private fun topLevelProductions(): List<Production<*>> = buildList {
             Identifier,
             FormalParameterList,
         ) { _, generics, name, parameters ->
-            ParsedMethodHead(generics, null, name, parameters)
+            ParsedMethodHead(generics, FoxUnitType, name, parameters)
         },
     )
     add(
@@ -913,7 +915,7 @@ private fun topLevelProductions(): List<Production<*>> = buildList {
             Identifier,
             FormalParameterList,
         ) { _, thisType, name, parameters ->
-            ParsedMethodHead(null, thisType, name, parameters)
+            ParsedMethodHead(emptyOrderedMap(), thisType, name, parameters)
         },
     )
     add(
@@ -923,7 +925,7 @@ private fun topLevelProductions(): List<Production<*>> = buildList {
             Identifier,
             FormalParameterList,
         ) { _, name, parameters ->
-            ParsedMethodHead(null, null, name, parameters)
+            ParsedMethodHead(emptyOrderedMap(), FoxUnitType, name, parameters)
         },
     )
     add(
@@ -942,7 +944,7 @@ private fun topLevelProductions(): List<Production<*>> = buildList {
             MethodHead,
             node<FoxStatement>(),
         ) { head, body ->
-            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, null, body)
+            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, FoxUnitType, body)
         },
     )
     
@@ -974,8 +976,8 @@ private data class ParsedWhenCore(
 )
 
 private data class ParsedMethodHead(
-    val generics: OrderedMap<String, FoxGenericConstraint>?,
-    val thisType: FoxType?,
+    val generics: OrderedMap<String, FoxType>,
+    val thisType: FoxType,
     val name: String,
     val parameters: OrderedMap<String, FoxType>,
 )

@@ -1,6 +1,9 @@
 package pers.hpcx.foxlang.pass
 
 import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.runtime.FoxUnit
+import pers.hpcx.foxlang.utils.emptyOrderedMap
+import pers.hpcx.foxlang.utils.emptyOrderedSet
 import pers.hpcx.foxlang.utils.orderedMapOf
 import pers.hpcx.foxlang.utils.orderedSetOf
 import kotlin.test.Test
@@ -14,10 +17,7 @@ class TypeAliasEliminationPassTest {
     fun eliminatesAliasesFromMethodTypes() {
         val method = FoxMethodDefinition(
             generics = orderedMapOf(
-                "T" to FoxGenericConstraint(
-                    positivePatterns = listOf(FoxUnresolvedType("Box", listOf(FoxUnresolvedType("T", null)))),
-                    negativePatterns = listOf(FoxUnresolvedType("Pair", listOf(FoxIntType, FoxUnresolvedType("T", null)))),
-                ),
+                "T" to FoxUnresolvedType("Box", listOf(FoxUnresolvedType("T", null))),
             ),
             thisType = FoxUnresolvedType("RefInt", null),
             name = "wrap",
@@ -35,7 +35,7 @@ class TypeAliasEliminationPassTest {
                         emptyList(),
                     ),
                     FoxCall(
-                        target = null,
+                        target = FoxEntityStatement(FoxUnit),
                         name = "consume",
                         generics = listOf(null to FoxUnresolvedType("Box", listOf(FoxIntType))),
                         parameters = listOf(null to FoxConstruct(FoxUnresolvedType("Box", listOf(FoxIntType)), emptyList())),
@@ -52,7 +52,7 @@ class TypeAliasEliminationPassTest {
                     orderedSetOf("A", "B"),
                     FoxTupleType(listOf(FoxUnresolvedType("A", null) to 1, FoxUnresolvedType("B", null) to 1)),
                 ),
-                FoxTypeAlias("RefInt", null, FoxRefType(FoxIntType)),
+                FoxTypeAlias("RefInt", emptyOrderedSet(), FoxRefType(FoxIntType)),
                 method,
             ),
         )
@@ -60,10 +60,7 @@ class TypeAliasEliminationPassTest {
         val result = assertIs<TypeAliasEliminationSuccess>(runTypeAliasElimination(file))
         val expected = FoxMethodDefinition(
             generics = orderedMapOf(
-                "T" to FoxGenericConstraint(
-                    positivePatterns = listOf(FoxArrayType(FoxUnresolvedType("T", null))),
-                    negativePatterns = listOf(FoxTupleType(listOf(FoxIntType to 1, FoxUnresolvedType("T", null) to 1))),
-                ),
+                "T" to FoxArrayType(FoxUnresolvedType("T", null)),
             ),
             thisType = FoxRefType(FoxIntType),
             name = "wrap",
@@ -81,7 +78,7 @@ class TypeAliasEliminationPassTest {
                         emptyList(),
                     ),
                     FoxCall(
-                        target = null,
+                        target = FoxEntityStatement(FoxUnit),
                         name = "consume",
                         generics = listOf(null to FoxArrayType(FoxIntType)),
                         parameters = listOf(null to FoxConstruct(FoxArrayType(FoxIntType), emptyList())),
@@ -98,16 +95,16 @@ class TypeAliasEliminationPassTest {
     @Test
     fun removesTypeAliasesAndKeepsMethodOrder() {
         val first = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "first",
             parameters = orderedMapOf("value" to FoxIntType),
             returnType = FoxIntType,
             body = FoxReturn(FoxSymbol("value")),
         )
         val second = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "second",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Box", listOf(FoxIntType))),
             returnType = FoxUnresolvedType("Box", listOf(FoxIntType)),
@@ -115,7 +112,7 @@ class TypeAliasEliminationPassTest {
         )
         val file = FoxFile(
             listOf(
-                FoxTypeAlias("Ignored", null, FoxIntType),
+                FoxTypeAlias("Ignored", emptyOrderedSet(), FoxIntType),
                 first,
                 FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))),
                 second,
@@ -133,12 +130,9 @@ class TypeAliasEliminationPassTest {
     fun preservesMethodGenericWhenItShadowsAliasName() {
         val method = FoxMethodDefinition(
             generics = orderedMapOf(
-                "T" to FoxGenericConstraint(
-                    positivePatterns = listOf(FoxUnresolvedType("T", null)),
-                    negativePatterns = emptyList(),
-                ),
+                "T" to FoxUnresolvedType("T", null),
             ),
-            thisType = null,
+            thisType = FoxUnitType,
             name = "shadow",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Box", listOf(FoxUnresolvedType("T", null)))),
             returnType = FoxUnresolvedType("T", null),
@@ -146,7 +140,7 @@ class TypeAliasEliminationPassTest {
         )
         val file = FoxFile(
             listOf(
-                FoxTypeAlias("T", null, FoxIntType),
+                FoxTypeAlias("T", emptyOrderedSet(), FoxIntType),
                 FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))),
                 method,
             ),
@@ -166,11 +160,11 @@ class TypeAliasEliminationPassTest {
     @Test
     fun detectsMissingAliasReference() {
         val method = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "missing",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Missing", null)),
-            returnType = null,
+            returnType = FoxUnitType,
             body = FoxReturn(FoxSymbol("value")),
         )
         
@@ -184,17 +178,17 @@ class TypeAliasEliminationPassTest {
     @Test
     fun detectsUnexpectedGenericsOnNonGenericAlias() {
         val method = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "unexpectedGenerics",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Base", listOf(FoxIntType))),
-            returnType = null,
+            returnType = FoxUnitType,
             body = FoxReturn(FoxSymbol("value")),
         )
-        val file = FoxFile(listOf(FoxTypeAlias("Base", null, FoxIntType), method))
+        val file = FoxFile(listOf(FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType), method))
         
         val result = assertIs<TypeAliasEliminationFailure>(runTypeAliasElimination(file))
-        val error = assertIs<TypeAliasEliminationUnexpectedGenerics>(result.errors.single())
+        val error = assertIs<TypeAliasEliminationGenericCountMismatch>(result.errors.single())
         
         assertEquals(FoxUnresolvedType("Base", listOf(FoxIntType)), error.type)
     }
@@ -202,17 +196,17 @@ class TypeAliasEliminationPassTest {
     @Test
     fun detectsMissingGenericsOnGenericAlias() {
         val method = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "missingGenerics",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Box", null)),
-            returnType = null,
+            returnType = FoxUnitType,
             body = FoxReturn(FoxSymbol("value")),
         )
         val file = FoxFile(listOf(FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))), method))
         
         val result = assertIs<TypeAliasEliminationFailure>(runTypeAliasElimination(file))
-        val error = assertIs<TypeAliasEliminationMissingGenerics>(result.errors.single())
+        val error = assertIs<TypeAliasEliminationGenericCountMismatch>(result.errors.single())
         
         assertEquals(FoxUnresolvedType("Box", null), error.type)
     }
@@ -220,11 +214,11 @@ class TypeAliasEliminationPassTest {
     @Test
     fun detectsGenericCountMismatch() {
         val method = FoxMethodDefinition(
-            generics = null,
-            thisType = null,
+            generics = emptyOrderedMap(),
+            thisType = FoxUnitType,
             name = "genericCountMismatch",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Pair", listOf(FoxIntType))),
-            returnType = null,
+            returnType = FoxUnitType,
             body = FoxReturn(FoxSymbol("value")),
         )
         val file = FoxFile(

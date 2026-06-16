@@ -147,9 +147,6 @@ class OrderedMapTest {
     @Test
     fun topLevelFactoriesSupportConversions() {
         val fromEntries = listOf("a" to 1, "b" to 2).toOrderedMap()
-        val fromMap = linkedMapOf("x" to 7, "y" to 8).toMutableOrderedMap()
-        
         assertEquals(listOf("a", "b"), fromEntries.keys.elements)
-        assertEquals(listOf("x", "y"), fromMap.keys.elements)
     }
 }

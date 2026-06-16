@@ -34,4 +34,4 @@ fun <E> emptyMutableOrderedSet(): MutableOrderedSet<E> = ArrayHashOrderedSet()
 
 fun <E> mutableOrderedSetOf(vararg elements: E): MutableOrderedSet<E> = ArrayHashOrderedSet(elements.asIterable())
 
-fun <E> Iterable<E>.toMutableOrderedSet(): MutableOrderedSet<E> = ArrayHashOrderedSet(this)
+fun <E> List<E>.toMutableOrderedSet(): MutableOrderedSet<E> = ArrayHashOrderedSet(this)
