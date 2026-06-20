@@ -1,32 +1,17 @@
 package pers.hpcx.foxlang.type.space
 
-fun <T, C : SpaceContext<T>> intersect(vararg spaces: Space<T, C>) = intersect(spaces.toList())
-
 fun <T, C : SpaceContext<T>> intersect(vararg spaces: TraversableSpace<T, C>) = intersect(spaces.toList())
 
-fun <T, C : SpaceContext<T>> intersect(spaces: List<Space<T, C>>) = if (spaces.all { it is TraversableSpace<T, C> }) {
-    @Suppress("UNCHECKED_CAST") TraversableIntersectSpace(spaces as List<TraversableSpace<T, C>>)
-} else {
-    GenericIntersectSpace(spaces)
-}
+fun <T, C : SpaceContext<T>> intersect(spaces: List<TraversableSpace<T, C>>) = IntersectSpace(spaces)
 
-fun <T, C : SpaceContext<T>> intersect(spaces: List<TraversableSpace<T, C>>) = TraversableIntersectSpace(spaces)
-
-sealed interface IntersectSpace<T, C : SpaceContext<T>> : Space<T, C> {
-    
-    val parts: List<Space<T, C>>
-    
-    override fun contains(that: T, context: C): Boolean {
-        return parts.all { it.contains(that, context) }
-    }
-}
-
-data class GenericIntersectSpace<T, C : SpaceContext<T>>(override val parts: List<Space<T, C>>) : IntersectSpace<T, C>
-
-data class TraversableIntersectSpace<T, C : SpaceContext<T>>(override val parts: List<TraversableSpace<T, C>>) : IntersectSpace<T, C>, TraversableSpace<T, C> {
+data class IntersectSpace<T, C : SpaceContext<T>>(val parts: List<TraversableSpace<T, C>>) : TraversableSpace<T, C> {
     
     init {
         require(parts.isNotEmpty()) { "IntersectLang must have at least one part" }
+    }
+    
+    override fun contains(that: T, context: C): Boolean {
+        return parts.all { it.contains(that, context) }
     }
     
     override fun traverser(context: C) = object : SpaceTraverser<T> {

@@ -2,68 +2,109 @@ package pers.hpcx.foxlang.type
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.space.*
+import pers.hpcx.foxlang.type.space.NameDictionary.StructFieldNames
 
-sealed interface TypeCompileResult
-data class TypeCompileSuccess(val typeSpace: TypeSpace) : TypeCompileResult
-sealed interface TypeCompileError : TypeCompileResult
-object NotOutermostProjectiveTransform : TypeCompileError
-
-private inline fun TypeCompileResult.ifSuccess(block: (TraversableTypeSpace) -> TypeSpace): TypeCompileResult = when {
-    this is TypeCompileSuccess && typeSpace is TraversableTypeSpace -> {
-        TypeCompileSuccess(block(typeSpace))
-    }
-    else -> NotOutermostProjectiveTransform
-}
-
-private inline fun List<TypeCompileResult>.ifSuccess(block: (List<TraversableTypeSpace>) -> TypeSpace): TypeCompileResult = when {
-    all { it is TypeCompileSuccess && it.typeSpace is TraversableTypeSpace } -> {
-        TypeCompileSuccess(block(map { (it as TypeCompileSuccess).typeSpace as TraversableTypeSpace }))
-    }
-    else -> NotOutermostProjectiveTransform
-}
-
-fun compileType(type: FoxType, context: TypeSpaceContext): TypeCompileResult = when (type) {
-    is FoxPrimitiveType -> TypeCompileSuccess(singleSpace(type))
+fun compileType(type: FoxType, context: TypeSpaceContext): TypeSpace = when (type) {
+    is FoxPrimitiveType -> singleSpace(type)
     is FoxBuiltInType -> compileBuiltInType(type, context)
     is FoxWildcardType -> compileWildcardType(type, context)
     is FoxTransformType -> compileTransformType(type, context)
-    is FoxUnresolvedType -> error("Unresolved type compilation is not implemented yet: $type")
+    is FoxUnresolvedType -> TODO()
     is FoxPlaceholderType -> error("Placeholder type cannot be compiled")
 }
 
-private fun compileBuiltInType(type: FoxBuiltInType, context: TypeSpaceContext): TypeCompileResult = when (type) {
-    is FoxTupleType -> (0 until type.arity).map { compileType(type.componentAt(it), context) }.ifSuccess { tupleProduct(it) }
-    is FoxStructType -> error("Struct type compilation is not implemented yet: $type")
-    is FoxObjectType -> error("Object type compilation is not implemented yet: $type")
-    is FoxEnumType -> error("Enum type compilation is not implemented yet: $type")
-    is FoxArrayType -> compileType(type.element, context).ifSuccess { array(it) }
-    is FoxRefType -> compileType(type.referent, context).ifSuccess { ref(it) }
-    is FoxMethodType -> error("Method type compilation is not implemented yet: $type")
+private fun compileBuiltInType(type: FoxBuiltInType, context: TypeSpaceContext): TraversableTypeSpace = when (type) {
+    is FoxTupleType -> tupleProduct((0 until type.arity).map { compileType(type.componentAt(it), context) as TraversableTypeSpace })
+    is FoxStructType -> structPattern(
+        type.fields.keys.map { singleSpace<String, NameSpaceContextView>(it) }.zip(
+            type.fields.values.map { compileType(it, context) as TraversableTypeSpace },
+        ) { name, type -> structFieldSpace(name, type) },
+    )
+    is FoxObjectType -> TODO()
+    is FoxEnumType -> TODO()
+    is FoxArrayType -> arraySpace(compileType(type.element, context) as TraversableTypeSpace)
+    is FoxRefType -> refSpace(compileType(type.referent, context) as TraversableTypeSpace)
+    is FoxMethodType -> TODO()
 }
 
-private fun compileWildcardType(type: FoxWildcardType, context: TypeSpaceContext): TypeCompileResult = when (type) {
-    FoxAnyType -> TypeCompileSuccess(universe(context.bounds.maxHeight))
-    is FoxAnyOfType -> type.types.map { compileType(it, context) }.ifSuccess { union(it) }
-    is FoxAllOfType -> type.types.map { compileType(it, context) }.ifSuccess { intersect(it) }
-    is FoxNoneOfType -> type.types.map { compileType(it, context) }.ifSuccess { subtract(universe(context.bounds.maxHeight), union(it)) }
-    FoxAnyTupleType -> TypeCompileSuccess(tupleRepeat(universe(context.bounds.maxHeight), 0, context.bounds.maxTupleArity))
-    is FoxAnyTupleOfType -> compileType(type.component, context).ifSuccess { tupleRepeat(it, 0, context.bounds.maxTupleArity) }
-    else -> error("Wildcard type compilation is not implemented yet: $type")
+private fun compileWildcardType(type: FoxWildcardType, context: TypeSpaceContext): TraversableTypeSpace = when (type) {
+    FoxAnyType -> universalTypeSpace()
+    is FoxAnyOfType -> union(type.types.map { compileType(it, context) as TraversableTypeSpace })
+    is FoxAllOfType -> intersect(type.types.map { compileType(it, context) as TraversableTypeSpace })
+    is FoxNoneOfType -> subtract(
+        universalTypeSpace(),
+        union(type.types.map { compileType(it, context) as TraversableTypeSpace }),
+    )
+    FoxAnyTupleType -> tupleRepeat(
+        universalTypeSpace(),
+        0, Int.MAX_VALUE,
+    )
+    is FoxAnyTupleOfType -> tupleRepeat(
+        compileType(type.component, context) as TraversableTypeSpace,
+        0, Int.MAX_VALUE,
+    )
+    FoxAnyStructType -> structRepeat(
+        structFieldSpace(
+            universalNameSpace(StructFieldNames),
+            universalTypeSpace(),
+        ),
+        0, Int.MAX_VALUE,
+    )
+    is FoxAnyStructOfType -> structPattern(
+        type.fields.map { type ->
+            structFieldSpace(
+                universalNameSpace(StructFieldNames),
+                compileType(type, context) as TraversableTypeSpace,
+            )
+        },
+    )
+    FoxAnyObjectType -> TODO()
+    FoxAnyEnumType -> TODO()
 }
 
-private fun compileTransformType(type: FoxTransformType, context: TypeSpaceContext): TypeCompileResult = when (type) {
-    is FoxTupleComponentAtType -> compileType(type.type, context).ifSuccess { tupleComponentAt(it, type.index) }
-    is FoxTupleLastComponentAtType -> compileType(type.type, context).ifSuccess { tupleLastComponentAt(it, type.index) }
-    is FoxTupleFirstComponentsOfType -> compileType(type.type, context).ifSuccess { tupleFirstOf(it, type.count, exact = false) }
-    is FoxTupleExactFirstComponentsOfType -> compileType(type.type, context).ifSuccess { tupleFirstOf(it, type.count, exact = true) }
-    is FoxTupleLastComponentsOfType -> compileType(type.type, context).ifSuccess { tupleLastOf(it, type.count, exact = false) }
-    is FoxTupleExactLastComponentsOfType -> compileType(type.type, context).ifSuccess { tupleLastOf(it, type.count, exact = true) }
-    is FoxTupleDropFirstComponentsOfType -> compileType(type.type, context).ifSuccess { tupleDropFirstOf(it, type.count, exact = false) }
-    is FoxTupleExactDropFirstComponentsOfType -> compileType(type.type, context).ifSuccess { tupleDropFirstOf(it, type.count, exact = true) }
-    is FoxTupleDropLastComponentsOfType -> compileType(type.type, context).ifSuccess { tupleDropLastOf(it, type.count, exact = false) }
-    is FoxTupleExactDropLastComponentsOfType -> compileType(type.type, context).ifSuccess { tupleDropLastOf(it, type.count, exact = true) }
-    is FoxTupleMergeComponentsOfType -> type.types.map { compileType(it, context) }.ifSuccess { tupleConcat(it) }
-    is FoxArrayElementOfType -> compileType(type.type, context).ifSuccess { arrayElementOf(it) }
-    is FoxRefReferentOfType -> compileType(type.type, context).ifSuccess { refReferentOf(it) }
-    else -> error("Transform type compilation is not implemented yet: $type")
+private fun compileTransformType(type: FoxTransformType, context: TypeSpaceContext): TypeSpace = when (type) {
+    is FoxTupleComponentAtType -> tupleComponentAt(compileType(type.type, context) as TraversableTypeSpace, type.index)
+    is FoxTupleLastComponentAtType -> tupleLastComponentAt(compileType(type.type, context) as TraversableTypeSpace, type.index)
+    is FoxTupleFirstComponentsOfType -> tupleFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxTupleExactFirstComponentsOfType -> tupleFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxTupleLastComponentsOfType -> tupleLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxTupleExactLastComponentsOfType -> tupleLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxTupleDropFirstComponentsOfType -> tupleDropFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxTupleExactDropFirstComponentsOfType -> tupleDropFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxTupleDropLastComponentsOfType -> tupleDropLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxTupleExactDropLastComponentsOfType -> tupleDropLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxTupleMergeComponentsOfType -> tupleConcat(type.types.map { compileType(it, context) as TraversableTypeSpace })
+    
+    is FoxStructFieldOfType -> TODO()
+    is FoxStructFieldAtType -> structFieldAt(compileType(type.type, context) as TraversableTypeSpace, type.index)
+    is FoxStructLastFieldAtType -> structLastFieldAt(compileType(type.type, context) as TraversableTypeSpace, type.index)
+    is FoxStructFirstFieldsOfType -> structFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxStructExactFirstFieldsOfType -> structFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxStructLastFieldsOfType -> structLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxStructExactLastFieldsOfType -> structLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxStructDropFirstFieldsOfType -> structDropFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxStructExactDropFirstFieldsOfType -> structDropFirstOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxStructDropLastFieldsOfType -> structDropLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = false)
+    is FoxStructExactDropLastFieldsOfType -> structDropLastOf(compileType(type.type, context) as TraversableTypeSpace, type.count, exact = true)
+    is FoxStructFieldsOfType -> TODO()
+    is FoxStructDropFieldsOfType -> TODO()
+    is FoxStructMergeFieldsOfType -> TODO()
+    
+    is FoxObjectMemberOfType -> TODO()
+    is FoxObjectMembersOfType -> TODO()
+    is FoxObjectDropMembersOfType -> TODO()
+    is FoxObjectMergeMembersOfType -> TODO()
+    
+    is FoxEnumItemOfType -> TODO()
+    is FoxEnumItemsOfType -> TODO()
+    is FoxEnumDropItemsOfType -> TODO()
+    is FoxEnumMergeItemsOfType -> TODO()
+    
+    is FoxArrayElementOfType -> arrayElementOf(compileType(type.type, context) as TraversableTypeSpace)
+    is FoxRefReferentOfType -> refReferentOf(compileType(type.type, context) as TraversableTypeSpace)
+    
+    is FoxMethodOfType -> TODO()
+    is FoxMethodThisOfType -> TODO()
+    is FoxMethodParametersOfType -> TODO()
+    is FoxMethodReturnOfType -> TODO()
 }

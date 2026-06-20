@@ -2,10 +2,9 @@ package pers.hpcx.foxlang.type
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.space.*
-import pers.hpcx.foxlang.utils.emptyOrderedSet
 import kotlin.test.*
 
-class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
+class TupleSpaceTest : TypeSpaceTestBase() {
     
     @Test
     fun tupleProductTraverserStartsFromLexicographicallySmallestTupleAtMinimumHeight() {
@@ -169,11 +168,10 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleComponentAtTraverserStartsFromShortestTupleWithConstrainedIndex() {
-        val localContext = TypeSpaceContext(TypeBounds(maxHeight = 2, maxTupleArity = 2, maxStructArity = 0, nameDictionary = emptyOrderedSet()))
         val traverser = TupleComponentAtPreimageSpace(
             index = 1,
             component = singleSpace(FoxIntType),
-        ).traverser(localContext)
+        ).traverser(context)
         
         assertEquals(listOf(FoxVoidType, FoxIntType).toFoxTupleType(), traverser.current())
     }
@@ -190,11 +188,10 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleLastComponentAtTraverserStartsFromShortestTupleWithConstrainedTailIndex() {
-        val localContext = TypeSpaceContext(TypeBounds(maxHeight = 2, maxTupleArity = 2, maxStructArity = 0, nameDictionary = emptyOrderedSet()))
         val traverser = TupleLastComponentAtPreimageSpace(
             index = 1,
             component = singleSpace(FoxIntType),
-        ).traverser(localContext)
+        ).traverser(context)
         
         assertEquals(listOf(FoxIntType, FoxVoidType).toFoxTupleType(), traverser.current())
     }
@@ -284,7 +281,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     fun tupleConcatContainsAcceptsVariableLengthPartition() {
         val lang = tupleConcat(
             singleSpace(listOf(FoxIntType).toFoxTupleType()),
-            tupleRepeat(singleSpace(FoxIntType), 0, context.bounds.maxTupleArity),
+            tupleRepeat(singleSpace(FoxIntType), 0, Int.MAX_VALUE),
         )
         
         assertTrue(lang.contains(FoxTupleType(listOf(FoxIntType to 3)), context))
@@ -303,12 +300,12 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     @Test
     fun tupleConcatContainsAllowsMixedPartsThatCanProduceTuples() {
         val lang = tupleConcat(
-            universe(finiteContext.bounds.maxHeight),
+            universalTypeSpace(),
             singleSpace(listOf(FoxIntType).toFoxTupleType()),
         )
         
-        assertTrue(lang.contains(listOf(FoxIntType).toFoxTupleType(), finiteContext))
-        assertTrue(lang.contains(listOf(FoxVoidType, FoxIntType).toFoxTupleType(), finiteContext))
+        assertTrue(lang.contains(listOf(FoxIntType).toFoxTupleType(), context))
+        assertTrue(lang.contains(listOf(FoxVoidType, FoxIntType).toFoxTupleType(), context))
     }
     
     @Test
@@ -321,7 +318,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileConcreteTupleTypeToTupleProductLang() {
-        val lang = (compileType(listOf(FoxIntType, FoxStringType).toFoxTupleType(), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(listOf(FoxIntType, FoxStringType).toFoxTupleType(), context)
         
         assertTrue(lang is TupleProductSpace)
         assertEquals(listOf(FoxIntType, FoxStringType).toFoxTupleType(), lang.traverser(context).current())
@@ -329,24 +326,24 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileAnyTupleTypeToTupleRepeatLang() {
-        val lang = (compileType(FoxAnyTupleType, context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxAnyTupleType, context)
         
-        assertEquals(tupleRepeat(universe(context.bounds.maxHeight), 0, context.bounds.maxTupleArity), lang)
+        assertEquals(tupleRepeat(universalTypeSpace(), 0, Int.MAX_VALUE), lang)
     }
     
     @Test
     fun compileAnyTupleOfTypeToTupleRepeatLang() {
-        val lang = (compileType(FoxAnyTupleOfType(FoxIntType), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxAnyTupleOfType(FoxIntType), context)
         
-        assertEquals(tupleRepeat(singleSpace(FoxIntType), 0, context.bounds.maxTupleArity), lang)
+        assertEquals(tupleRepeat(singleSpace(FoxIntType), 0, Int.MAX_VALUE), lang)
     }
     
     @Test
     fun compileTupleComponentAtTypeToProjectiveLang() {
-        val lang = (compileType(FoxTupleComponentAtType(listOf(FoxBoolType, FoxIntType).toFoxTupleType(), 1), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxTupleComponentAtType(listOf(FoxBoolType, FoxIntType).toFoxTupleType(), 1), context)
         
         assertEquals(
-            TupleComponentAtProjectiveSpace(
+            TupleComponentAtProjectionSpace(
                 TupleProductSpace(listOf(singleSpace(FoxBoolType), singleSpace(FoxIntType))),
                 1,
             ),
@@ -358,10 +355,10 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileTupleLastComponentAtTypeToProjectiveLang() {
-        val lang = (compileType(FoxTupleLastComponentAtType(listOf(FoxIntType, FoxBoolType).toFoxTupleType(), 1), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxTupleLastComponentAtType(listOf(FoxIntType, FoxBoolType).toFoxTupleType(), 1), context)
         
         assertEquals(
-            TupleLastComponentAtProjectiveSpace(
+            TupleLastComponentAtProjectionSpace(
                 TupleProductSpace(listOf(singleSpace(FoxIntType), singleSpace(FoxBoolType))),
                 1,
             ),
@@ -373,25 +370,25 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileArrayElementOfTypeToProjectiveLang() {
-        val lang = (compileType(FoxArrayElementOfType(FoxArrayType(FoxIntType)), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxArrayElementOfType(FoxArrayType(FoxIntType)), context)
         
-        assertEquals(ArrayElementProjectiveSpace(ArraySpace(singleSpace(FoxIntType))), lang)
+        assertEquals(ArrayElementProjectionSpace(ArraySpace(singleSpace(FoxIntType))), lang)
         assertTrue(lang.contains(FoxIntType, context))
         assertFalse(lang.contains(FoxStringType, context))
     }
     
     @Test
     fun compileRefReferentOfTypeToProjectiveLang() {
-        val lang = (compileType(FoxRefReferentOfType(FoxRefType(FoxIntType)), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxRefReferentOfType(FoxRefType(FoxIntType)), context)
         
-        assertEquals(RefReferentProjectiveSpace(RefSpace(singleSpace(FoxIntType))), lang)
+        assertEquals(RefReferentProjectionSpace(RefSpace(singleSpace(FoxIntType))), lang)
         assertTrue(lang.contains(FoxIntType, context))
         assertFalse(lang.contains(FoxStringType, context))
     }
     
     @Test
     fun arrayElementProjectiveContainsUsesPreimageIntersection() {
-        val lang = ArrayElementProjectiveSpace(
+        val lang = ArrayElementProjectionSpace(
             union(
                 singleSpace(FoxArrayType(FoxIntType)),
                 singleSpace(FoxArrayType(FoxStringType)),
@@ -405,7 +402,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleComponentAtProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleComponentAtProjectiveSpace(
+        val lang = TupleComponentAtProjectionSpace(
             union(
                 singleSpace(listOf(FoxBoolType, FoxIntType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType, FoxStringType).toFoxTupleType()),
@@ -420,7 +417,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleLastComponentAtProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleLastComponentAtProjectiveSpace(
+        val lang = TupleLastComponentAtProjectionSpace(
             union(
                 singleSpace(listOf(FoxIntType, FoxBoolType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType, FoxStringType).toFoxTupleType()),
@@ -435,7 +432,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleDropFirstProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleDropFirstProjectiveSpace(
+        val lang = TupleDropFirstProjectionSpace(
             union(
                 singleSpace(listOf(FoxBoolType, FoxIntType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType).toFoxTupleType()),
@@ -451,7 +448,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleDropLastProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleDropLastProjectiveSpace(
+        val lang = TupleDropLastProjectionSpace(
             union(
                 singleSpace(listOf(FoxIntType, FoxBoolType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType).toFoxTupleType()),
@@ -485,7 +482,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleFirstProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleFirstProjectiveSpace(
+        val lang = TupleFirstProjectionSpace(
             union(
                 singleSpace(listOf(FoxIntType, FoxBoolType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType).toFoxTupleType()),
@@ -501,7 +498,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleLastProjectiveContainsUsesPreimageIntersection() {
-        val lang = TupleLastProjectiveSpace(
+        val lang = TupleLastProjectionSpace(
             union(
                 singleSpace(listOf(FoxIntType, FoxBoolType).toFoxTupleType()),
                 singleSpace(listOf(FoxStringType).toFoxTupleType()),
@@ -549,7 +546,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun refReferentProjectiveContainsUsesPreimageIntersection() {
-        val lang = RefReferentProjectiveSpace(
+        val lang = RefReferentProjectionSpace(
             union(
                 singleSpace(FoxRefType(FoxIntType)),
                 singleSpace(FoxRefType(FoxStringType)),
@@ -563,7 +560,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileTupleMergeComponentsOfToTupleConcatLang() {
-        val lang = (compileType(
+        val lang = compileType(
             FoxTupleMergeComponentsOfType(
                 listOf(
                     FoxTupleType(listOf(FoxIntType to 2)),
@@ -571,13 +568,13 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
                 ),
             ),
             context,
-        ) as TypeCompileSuccess).typeSpace
+        )
         
         assertEquals(
             TupleConcatSpace(
                 listOf(
                     TupleProductSpace(listOf(singleSpace(FoxIntType), singleSpace(FoxIntType))),
-                    tupleRepeat(singleSpace(FoxIntType), 0, context.bounds.maxTupleArity),
+                    tupleRepeat(singleSpace(FoxIntType), 0, Int.MAX_VALUE),
                 ),
             ),
             lang,
@@ -592,40 +589,40 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileTupleMergeComponentsOfAcceptsMixedLanguagePartsThatCanProduceTuples() {
-        val lang = (compileType(
+        val lang = compileType(
             FoxTupleMergeComponentsOfType(
                 listOf(
                     FoxAnyType,
                     FoxTupleType(listOf(FoxIntType to 1)),
                 ),
             ),
-            finiteContext,
-        ) as TypeCompileSuccess).typeSpace
+            context,
+        )
         
         assertEquals(
             TupleConcatSpace(
                 listOf(
-                    universe(finiteContext.bounds.maxHeight),
+                    universalTypeSpace(),
                     TupleProductSpace(listOf(singleSpace(FoxIntType))),
                 ),
             ),
             lang,
         )
         
-        val traverser = (lang as TraversableSpace).traverser(finiteContext)
+        val traverser = (lang as TraversableSpace).traverser(context)
         assertEquals(FoxTupleType(listOf(FoxIntType to 1)), traverser.current())
     }
     
     @Test
     fun compileAnyOfTypeToUnionLang() {
-        val lang = (compileType(FoxAnyOfType(listOf(FoxIntType, FoxStringType)), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxAnyOfType(listOf(FoxIntType, FoxStringType)), context)
         
         assertEquals(union<FoxType, TypeSpaceContext>(listOf(singleSpace(FoxIntType), singleSpace(FoxStringType))), lang)
     }
     
     @Test
     fun compileAnyOfTupleConcreteAndWildcardContainsBothBranches() {
-        val lang = (compileType(
+        val lang = compileType(
             FoxAnyOfType(
                 listOf(
                     listOf(FoxIntType).toFoxTupleType(),
@@ -633,7 +630,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
                 ),
             ),
             context,
-        ) as TypeCompileSuccess).typeSpace
+        )
         
         assertTrue(lang.contains(listOf(FoxIntType).toFoxTupleType(), context))
         assertTrue(lang.contains(listOf(FoxStringType, FoxStringType).toFoxTupleType(), context))
@@ -702,18 +699,18 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileAllOfTypeToIntersectLang() {
-        val lang = (compileType(FoxAllOfType(listOf(FoxIntType, FoxStringType)), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxAllOfType(listOf(FoxIntType, FoxStringType)), context)
         
         assertEquals(intersect<FoxType, TypeSpaceContext>(listOf(singleSpace(FoxIntType), singleSpace(FoxStringType))), lang)
     }
     
     @Test
     fun compileNoneOfTypeToSubtractLang() {
-        val lang = (compileType(FoxNoneOfType(listOf(FoxIntType, FoxStringType)), context) as TypeCompileSuccess).typeSpace
+        val lang = compileType(FoxNoneOfType(listOf(FoxIntType, FoxStringType)), context)
         
         assertEquals(
-            TraversableSubtractSpace(
-                universe(context.bounds.maxHeight),
+            subtract(
+                universalTypeSpace(),
                 union(singleSpace(FoxIntType), singleSpace(FoxStringType)),
             ),
             lang,
@@ -722,7 +719,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileAllOfTupleWildcardAndConcreteNarrowsToConcreteTuple() {
-        val lang = (compileType(
+        val lang = compileType(
             FoxAllOfType(
                 listOf(
                     FoxAnyTupleOfType(FoxIntType),
@@ -730,7 +727,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
                 ),
             ),
             context,
-        ) as TypeCompileSuccess).typeSpace
+        )
         
         val traverser = (lang as TraversableTypeSpace).tupleTraverser(context)
         assertEquals(FoxTupleType(listOf(FoxIntType to 2)), traverser.current())
@@ -740,7 +737,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun compileAllOfConflictingTupleSpacesProducesEmptyIntersection() {
-        val lang = (compileType(
+        val lang = compileType(
             FoxAllOfType(
                 listOf(
                     FoxAnyTupleOfType(FoxIntType),
@@ -748,11 +745,11 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
                 ),
             ),
             context,
-        ) as TypeCompileSuccess).typeSpace
+        )
         
         assertEquals(
             intersect(
-                tupleRepeat(singleSpace(FoxIntType), 0, context.bounds.maxTupleArity),
+                tupleRepeat(singleSpace(FoxIntType), 0, Int.MAX_VALUE),
                 TupleProductSpace(listOf(singleSpace(FoxStringType))),
             ),
             lang,
@@ -808,14 +805,14 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun universeTraverserStartsFromSmallestConcreteType() {
-        val traverser = universe(context.bounds.maxHeight).traverser(finiteContext)
+        val traverser = universalTypeSpace().traverser(context)
         
         assertEquals(FoxVoidType, traverser.current())
     }
     
     @Test
     fun universeTraverserCanMoveToEmptyTuple() {
-        val traverser = universe(context.bounds.maxHeight).traverser(finiteContext)
+        val traverser = universalTypeSpace().traverser(context)
         
         traverser.seekCeilOf(emptyList<FoxType>().toFoxTupleType())
         
@@ -844,8 +841,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleFirstPreimageTraverserStartsFromFixedPrefixWhenResultArityEqualsCount() {
-        val localContext = TypeSpaceContext(TypeBounds(maxHeight = 2, maxTupleArity = 2, maxStructArity = 0, nameDictionary = emptyOrderedSet()))
-        val traverser = TupleFirstPreimageSpace(1, listOf(FoxIntType).toFoxTupleType(), exact = false).traverser(localContext)
+        val traverser = TupleFirstPreimageSpace(1, listOf(FoxIntType).toFoxTupleType(), exact = false).traverser(context)
         
         assertEquals(listOf(FoxIntType).toFoxTupleType(), traverser.current())
         
@@ -855,8 +851,7 @@ class TupleTypeSpaceContextTest : TypeSpaceContextTestBase() {
     
     @Test
     fun tupleLastPreimageTraverserStartsFromFixedSuffixWhenResultArityEqualsCount() {
-        val localContext = TypeSpaceContext(TypeBounds(maxHeight = 2, maxTupleArity = 2, maxStructArity = 0, nameDictionary = emptyOrderedSet()))
-        val traverser = TupleLastPreimageSpace(1, listOf(FoxIntType).toFoxTupleType(), exact = false).traverser(localContext)
+        val traverser = TupleLastPreimageSpace(1, listOf(FoxIntType).toFoxTupleType(), exact = false).traverser(context)
         
         assertEquals(listOf(FoxIntType).toFoxTupleType(), traverser.current())
         

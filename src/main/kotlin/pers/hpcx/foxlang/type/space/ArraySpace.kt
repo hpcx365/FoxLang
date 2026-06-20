@@ -5,7 +5,7 @@ import pers.hpcx.foxlang.ast.FoxType
 import pers.hpcx.foxlang.type.ConcreteTypeFamily
 import pers.hpcx.foxlang.type.family
 
-fun array(element: TraversableTypeSpace) = ArraySpace(element)
+fun arraySpace(element: TraversableTypeSpace) = ArraySpace(element)
 
 data class ArraySpace(val element: TraversableTypeSpace) : TraversableTypeSpace {
     
@@ -59,11 +59,11 @@ data class ArraySpace(val element: TraversableTypeSpace) : TraversableTypeSpace 
     }
 }
 
-fun arrayElementOf(baseSpace: TraversableTypeSpace) = ArrayElementProjectiveSpace(baseSpace)
+fun arrayElementOf(baseSpace: TraversableTypeSpace) = ArrayElementProjectionSpace(baseSpace)
 
-data class ArrayElementProjectiveSpace(override val baseSpace: TraversableTypeSpace) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+data class ArrayElementProjectionSpace(override val baseSpace: TraversableTypeSpace) : ProjectionTypeSpace {
     
     override fun preimageOf(that: FoxType): TraversableTypeSpace {
-        return array(singleSpace(that))
+        return arraySpace(singleSpace(that))
     }
 }

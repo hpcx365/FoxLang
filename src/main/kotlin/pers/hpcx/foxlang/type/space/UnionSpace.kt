@@ -1,29 +1,14 @@
 package pers.hpcx.foxlang.type.space
 
-fun <T, C : SpaceContext<T>> union(vararg spaces: Space<T, C>) = union(spaces.toList())
-
 fun <T, C : SpaceContext<T>> union(vararg spaces: TraversableSpace<T, C>) = union(spaces.toList())
 
-fun <T, C : SpaceContext<T>> union(spaces: List<Space<T, C>>) = if (spaces.all { it is TraversableSpace<T, C> }) {
-    @Suppress("UNCHECKED_CAST") TraversableUnionSpace(spaces as List<TraversableSpace<T, C>>)
-} else {
-    GenericUnionSpace(spaces)
-}
+fun <T, C : SpaceContext<T>> union(spaces: List<TraversableSpace<T, C>>) = UnionSpace(spaces)
 
-fun <T, C : SpaceContext<T>> union(spaces: List<TraversableSpace<T, C>>) = TraversableUnionSpace(spaces)
-
-sealed interface UnionSpace<T, C : SpaceContext<T>> : Space<T, C> {
-    
-    val parts: List<Space<T, C>>
+data class UnionSpace<T, C : SpaceContext<T>>(val parts: List<TraversableSpace<T, C>>) : TraversableSpace<T, C> {
     
     override fun contains(that: T, context: C): Boolean {
         return parts.any { it.contains(that, context) }
     }
-}
-
-data class GenericUnionSpace<T, C : SpaceContext<T>>(override val parts: List<Space<T, C>>) : UnionSpace<T, C>
-
-data class TraversableUnionSpace<T, C : SpaceContext<T>>(override val parts: List<TraversableSpace<T, C>>) : UnionSpace<T, C>, TraversableSpace<T, C> {
     
     override fun traverser(context: C) = object : SpaceTraverser<T> {
         

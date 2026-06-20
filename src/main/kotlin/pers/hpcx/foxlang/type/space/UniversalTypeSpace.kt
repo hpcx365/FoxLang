@@ -3,18 +3,17 @@ package pers.hpcx.foxlang.type.space
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.ConcreteTypeFamily
 import pers.hpcx.foxlang.type.family
+import pers.hpcx.foxlang.type.space.NameDictionary.StructFieldNames
 
-fun universe(maxHeight: Int) = UniverseTypeSpace(maxHeight)
+fun universalTypeSpace() = UniversalTypeSpace
 
-data class UniverseTypeSpace(val maxHeight: Int) : TraversableTypeSpace {
+data object UniversalTypeSpace : TraversableTypeSpace {
     
     override fun contains(that: FoxType, context: TypeSpaceContext): Boolean {
         return intersect(this, singleSpace(that)).traverser(context).current() != null
     }
     
-    override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> = if (maxHeight == 0) {
-        emptySpace<FoxType, TypeSpaceContext>().traverser(context)
-    } else object : SpaceTraverser<FoxType> {
+    override fun traverser(context: TypeSpaceContext) = object : SpaceTraverser<FoxType> {
         
         private var dirty = true
         private var current: FoxType? = null
@@ -85,12 +84,12 @@ data class UniverseTypeSpace(val maxHeight: Int) : TraversableTypeSpace {
             ConcreteTypeFamily.DOUBLE -> singleSpace(FoxDoubleType)
             ConcreteTypeFamily.CHAR -> singleSpace(FoxCharType)
             ConcreteTypeFamily.STRING -> singleSpace(FoxStringType)
-            ConcreteTypeFamily.TUPLE -> TupleRepeatSpace(UniverseTypeSpace(maxHeight - 1), 0, context.bounds.maxTupleArity)
-            ConcreteTypeFamily.STRUCT -> TODO()
+            ConcreteTypeFamily.TUPLE -> tupleRepeat(universalTypeSpace(), 0, Int.MAX_VALUE)
+            ConcreteTypeFamily.STRUCT -> structRepeat(structFieldSpace(universalNameSpace(StructFieldNames), universalTypeSpace()), 0, Int.MAX_VALUE)
             ConcreteTypeFamily.OBJECT -> TODO()
             ConcreteTypeFamily.ENUM -> TODO()
-            ConcreteTypeFamily.ARRAY -> ArraySpace(UniverseTypeSpace(maxHeight - 1))
-            ConcreteTypeFamily.REF -> RefSpace(UniverseTypeSpace(maxHeight - 1))
+            ConcreteTypeFamily.ARRAY -> arraySpace(universalTypeSpace())
+            ConcreteTypeFamily.REF -> refSpace(universalTypeSpace())
             ConcreteTypeFamily.METHOD -> TODO()
         }
     }

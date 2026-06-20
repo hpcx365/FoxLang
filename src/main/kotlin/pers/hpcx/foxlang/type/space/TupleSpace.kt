@@ -106,11 +106,7 @@ data class TupleProductSpace(val components: List<TraversableTypeSpace>) : Trave
 
 fun tupleRepeat(component: TraversableTypeSpace, minArity: Int, maxArity: Int) = TupleRepeatSpace(component, minArity, maxArity)
 
-data class TupleRepeatSpace(
-    val component: TraversableTypeSpace,
-    val minArity: Int,
-    val maxArity: Int,
-) : TraversableTypeSpace {
+data class TupleRepeatSpace(val component: TraversableTypeSpace, val minArity: Int, val maxArity: Int) : TraversableTypeSpace {
     
     init {
         require(minArity >= 0) { "minArity must be non-negative: $minArity" }
@@ -121,37 +117,31 @@ data class TupleRepeatSpace(
         return that is FoxTupleType && that.arity in minArity..maxArity && that.components.all { component.contains(it.first, context) }
     }
     
-    override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> = object : SpaceTraverser<FoxType> {
+    override fun traverser(context: TypeSpaceContext) = object : SpaceTraverser<FoxType> {
         
         private var dirty = true
         private var current: FoxTupleType? = null
-        private val traversers by lazy(LazyThreadSafetyMode.NONE) {
-            mutableListOf<SpaceTraverser<FoxType>>().apply { repeat(minArity) { add(newTraverser()) } }
-        }
-        
-        private fun newTraverser() = component.traverser(context)
+        private var currentArity = minArity
+        private var backend: SpaceTraverser<FoxType>? = null
         
         override fun current(): FoxTupleType? {
             if (!dirty) return current
             while (true) {
-                val firstExhausted = traversers.indexOfFirst { it.current() == null }
-                if (firstExhausted < 0) {
+                if (backend == null && currentArity <= maxArity) {
+                    backend = tupleProduct(List(currentArity) { component }).traverser(context)
+                }
+                val candidate = backend?.current() as FoxTupleType?
+                if (candidate != null) {
                     dirty = false
-                    current = traversers.map { it.current()!! }.toFoxTupleType()
+                    current = candidate
                     break
                 }
-                if (firstExhausted > 0) {
-                    traversers[firstExhausted - 1].seekNext()
-                    (firstExhausted until traversers.size).forEach { traversers[it] = newTraverser() }
-                    continue
+                if (currentArity == maxArity) {
+                    exhaust()
+                    break
                 }
-                if (traversers.size < maxArity) {
-                    traversers.indices.forEach { traversers[it] = newTraverser() }
-                    traversers += newTraverser()
-                    continue
-                }
-                exhaust()
-                break
+                currentArity++
+                backend = null
             }
             check(!dirty)
             return current
@@ -159,15 +149,7 @@ data class TupleRepeatSpace(
         
         override fun seekNext() {
             if (current() == null) return
-            if (traversers.isEmpty()) {
-                if (maxArity == 0) {
-                    exhaust()
-                    return
-                }
-                traversers += newTraverser()
-            } else {
-                traversers.last().seekNext()
-            }
+            backend!!.seekNext()
             markDirty()
         }
         
@@ -182,33 +164,23 @@ data class TupleRepeatSpace(
             }
             
             check(that is FoxTupleType)
-            val targetSize = that.arity
-            if (targetSize < traversers.size) return
-            if (targetSize > maxArity) {
+            val targetArity = that.arity
+            if (targetArity < currentArity) return
+            if (targetArity > maxArity) {
                 exhaust()
                 return
             }
             
-            if (targetSize > traversers.size) {
-                traversers.indices.forEach { traversers[it] = newTraverser() }
-                while (targetSize > traversers.size) {
-                    traversers += newTraverser()
-                }
+            if (targetArity > currentArity) {
+                currentArity = maxOf(targetArity, minArity)
+                backend = null
                 markDirty()
             }
             
-            while (true) {
-                val current = current() ?: return
-                if (current.arity > targetSize) return
-                val firstDifference = (0 until targetSize).firstOrNull {
-                    val comparison = context.compare(current.componentAt(it), that.componentAt(it))
-                    if (comparison > 0) return
-                    comparison < 0
-                } ?: return
-                traversers[firstDifference].seekCeilOf(that.componentAt(firstDifference))
-                (firstDifference + 1 until targetSize).forEach { traversers[it] = newTraverser() }
-                markDirty()
-            }
+            val cur = current() ?: return
+            if (context.compare(cur, that) >= 0) return
+            backend!!.seekCeilOf(that)
+            markDirty()
         }
         
         private fun exhaust() {
@@ -460,21 +432,21 @@ private fun tupleConcatSuffixBoundsOf(partBounds: List<TupleArityBounds?>): List
 }
 
 private fun tupleArityBoundsOf(lang: TypeSpace, context: TypeSpaceContext): TupleArityBounds? = when (lang) {
-    is UniverseTypeSpace -> TupleArityBounds(0, context.bounds.maxTupleArity)
+    is UniversalTypeSpace -> TupleArityBounds(0, Int.MAX_VALUE)
     is SingleSpace -> (lang.single as? FoxTupleType)?.let { TupleArityBounds(it.arity, it.arity) }
-    is TupleComponentAtPreimageSpace -> TupleArityBounds(lang.index + 1, context.bounds.maxTupleArity)
-    is TupleLastComponentAtPreimageSpace -> TupleArityBounds(lang.index + 1, context.bounds.maxTupleArity)
+    is TupleComponentAtPreimageSpace -> TupleArityBounds(lang.index + 1, Int.MAX_VALUE)
+    is TupleLastComponentAtPreimageSpace -> TupleArityBounds(lang.index + 1, Int.MAX_VALUE)
     is TupleFirstPreimageSpace -> when {
         lang.prefix.arity > lang.count -> null
         lang.exact && lang.prefix.arity != lang.count -> null
         !lang.exact && lang.prefix.arity < lang.count -> TupleArityBounds(lang.prefix.arity, lang.prefix.arity)
-        else -> TupleArityBounds(lang.prefix.arity, context.bounds.maxTupleArity)
+        else -> TupleArityBounds(lang.prefix.arity, Int.MAX_VALUE)
     }
     is TupleLastPreimageSpace -> when {
         lang.suffix.arity > lang.count -> null
         lang.exact && lang.suffix.arity != lang.count -> null
         !lang.exact && lang.suffix.arity < lang.count -> TupleArityBounds(lang.suffix.arity, lang.suffix.arity)
-        else -> TupleArityBounds(lang.suffix.arity, context.bounds.maxTupleArity)
+        else -> TupleArityBounds(lang.suffix.arity, Int.MAX_VALUE)
     }
     is TupleDropFirstPreimageSpace -> {
         val resultArity = lang.suffix.arity
@@ -562,12 +534,12 @@ fun TraversableTypeSpace.tupleTraverserOfSize(size: Int, context: TypeSpaceConte
     }
 }
 
-fun tupleComponentAt(baseSpace: TraversableTypeSpace, index: Int) = TupleComponentAtProjectiveSpace(baseSpace, index)
+fun tupleComponentAt(baseSpace: TraversableTypeSpace, index: Int) = TupleComponentAtProjectionSpace(baseSpace, index)
 
-data class TupleComponentAtProjectiveSpace(
+data class TupleComponentAtProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val index: Int,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(index >= 0) { "index must be non-negative: $index" }
@@ -592,9 +564,9 @@ data class TupleComponentAtPreimageSpace(
     }
     
     override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> {
-        val maxArity = context.bounds.maxTupleArity
+        val maxArity = Int.MAX_VALUE
         if (maxArity <= index) return emptySpace<FoxType, TypeSpaceContext>().tupleTraverser(context)
-        val any = universe(context.bounds.maxHeight)
+        val any = universalTypeSpace()
         return tupleConcat(
             tupleRepeat(any, index, index),
             tupleProduct(component),
@@ -603,12 +575,12 @@ data class TupleComponentAtPreimageSpace(
     }
 }
 
-fun tupleLastComponentAt(baseSpace: TraversableTypeSpace, index: Int) = TupleLastComponentAtProjectiveSpace(baseSpace, index)
+fun tupleLastComponentAt(baseSpace: TraversableTypeSpace, index: Int) = TupleLastComponentAtProjectionSpace(baseSpace, index)
 
-data class TupleLastComponentAtProjectiveSpace(
+data class TupleLastComponentAtProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val index: Int,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(index >= 0) { "index must be non-negative: $index" }
@@ -633,9 +605,9 @@ data class TupleLastComponentAtPreimageSpace(
     }
     
     override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> {
-        val maxArity = context.bounds.maxTupleArity
+        val maxArity = Int.MAX_VALUE
         if (maxArity <= index) return emptySpace<FoxType, TypeSpaceContext>().tupleTraverser(context)
-        val any = universe(context.bounds.maxHeight)
+        val any = universalTypeSpace()
         return tupleConcat(
             tupleRepeat(any, 0, maxArity - index - 1),
             tupleProduct(component),
@@ -644,13 +616,13 @@ data class TupleLastComponentAtPreimageSpace(
     }
 }
 
-fun tupleFirstOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleFirstProjectiveSpace(baseSpace, count, exact)
+fun tupleFirstOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleFirstProjectionSpace(baseSpace, count, exact)
 
-data class TupleFirstProjectiveSpace(
+data class TupleFirstProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val count: Int,
     val exact: Boolean,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(count >= 0) { "count must be non-negative: $count" }
@@ -690,19 +662,19 @@ data class TupleFirstPreimageSpace(
             !exact && prefix.arity < count -> singleSpace<FoxType, TypeSpaceContext>(prefix).tupleTraverser(context)
             else -> tupleConcat(
                 singleSpace(prefix),
-                tupleRepeat(universe(context.bounds.maxHeight), 0, context.bounds.maxTupleArity - prefix.arity),
+                tupleRepeat(universalTypeSpace(), 0, Int.MAX_VALUE - prefix.arity),
             ).traverser(context)
         }
     }
 }
 
-fun tupleLastOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleLastProjectiveSpace(baseSpace, count, exact)
+fun tupleLastOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleLastProjectionSpace(baseSpace, count, exact)
 
-data class TupleLastProjectiveSpace(
+data class TupleLastProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val count: Int,
     val exact: Boolean,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(count >= 0) { "count must be non-negative: $count" }
@@ -741,20 +713,20 @@ data class TupleLastPreimageSpace(
             exact && suffix.arity != count -> emptySpace<FoxType, TypeSpaceContext>().tupleTraverser(context)
             !exact && suffix.arity < count -> singleSpace<FoxType, TypeSpaceContext>(suffix).tupleTraverser(context)
             else -> tupleConcat(
-                tupleRepeat(universe(context.bounds.maxHeight), 0, context.bounds.maxTupleArity - suffix.arity),
+                tupleRepeat(universalTypeSpace(), 0, Int.MAX_VALUE - suffix.arity),
                 singleSpace(suffix),
             ).traverser(context)
         }
     }
 }
 
-fun tupleDropFirstOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleDropFirstProjectiveSpace(baseSpace, count, exact)
+fun tupleDropFirstOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleDropFirstProjectionSpace(baseSpace, count, exact)
 
-data class TupleDropFirstProjectiveSpace(
+data class TupleDropFirstProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val count: Int,
     val exact: Boolean,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(count >= 0) { "count must be non-negative: $count" }
@@ -787,7 +759,7 @@ data class TupleDropFirstPreimageSpace(
     }
     
     override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> {
-        val any = universe(context.bounds.maxHeight)
+        val any = universalTypeSpace()
         return if (!exact && suffix.arity == 0) {
             tupleRepeat(any, 0, count).traverser(context)
         } else {
@@ -799,13 +771,13 @@ data class TupleDropFirstPreimageSpace(
     }
 }
 
-fun tupleDropLastOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleDropLastProjectiveSpace(baseSpace, count, exact)
+fun tupleDropLastOf(baseSpace: TraversableTypeSpace, count: Int, exact: Boolean) = TupleDropLastProjectionSpace(baseSpace, count, exact)
 
-data class TupleDropLastProjectiveSpace(
+data class TupleDropLastProjectionSpace(
     override val baseSpace: TraversableTypeSpace,
     val count: Int,
     val exact: Boolean,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+) : ProjectionTypeSpace {
     
     init {
         require(count >= 0) { "count must be non-negative: $count" }
@@ -838,7 +810,7 @@ data class TupleDropLastPreimageSpace(
     }
     
     override fun traverser(context: TypeSpaceContext): SpaceTraverser<FoxType> {
-        val any = universe(context.bounds.maxHeight)
+        val any = universalTypeSpace()
         return if (!exact && prefix.arity == 0) {
             tupleRepeat(any, 0, count).traverser(context)
         } else {

@@ -2,7 +2,7 @@ package pers.hpcx.foxlang.type.space
 
 interface SpaceContext<T> : Comparator<T>
 
-interface Space<T, C : SpaceContext<T>> {
+sealed interface Space<T, C : SpaceContext<T>> {
     fun contains(that: T, context: C): Boolean
 }
 
@@ -16,7 +16,7 @@ interface SpaceTraverser<T> {
     fun seekCeilOf(that: T)
 }
 
-interface ProjectiveSpace<T, C : SpaceContext<T>> : Space<T, C> {
+interface ProjectionSpace<T, C : SpaceContext<T>> : Space<T, C> {
     
     val baseSpace: TraversableSpace<T, C>
     

@@ -5,7 +5,7 @@ import pers.hpcx.foxlang.ast.FoxType
 import pers.hpcx.foxlang.type.ConcreteTypeFamily
 import pers.hpcx.foxlang.type.family
 
-fun ref(referent: TraversableTypeSpace) = RefSpace(referent)
+fun refSpace(referent: TraversableTypeSpace) = RefSpace(referent)
 
 data class RefSpace(val referent: TraversableTypeSpace) : TraversableTypeSpace {
     
@@ -59,13 +59,11 @@ data class RefSpace(val referent: TraversableTypeSpace) : TraversableTypeSpace {
     }
 }
 
-fun refReferentOf(baseSpace: TraversableTypeSpace) = RefReferentProjectiveSpace(baseSpace)
+fun refReferentOf(baseSpace: TraversableTypeSpace) = RefReferentProjectionSpace(baseSpace)
 
-data class RefReferentProjectiveSpace(
-    override val baseSpace: TraversableTypeSpace,
-) : ProjectiveSpace<FoxType, TypeSpaceContext> {
+data class RefReferentProjectionSpace(override val baseSpace: TraversableTypeSpace) : ProjectionTypeSpace {
     
     override fun preimageOf(that: FoxType): TraversableTypeSpace {
-        return ref(singleSpace(that))
+        return refSpace(singleSpace(that))
     }
 }
