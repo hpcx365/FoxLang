@@ -93,6 +93,13 @@
             <artifactId>kotlin-stdlib</artifactId>
             <version>${kotlin.version}</version>
         </dependency>
+        <!-- Source: https://mvnrepository.com/artifact/dk.brics/automaton -->
+        <dependency>
+            <groupId>dk.brics</groupId>
+            <artifactId>automaton</artifactId>
+            <version>1.12-4</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
 </project>

@@ -4,7 +4,6 @@ import pers.hpcx.foxlang.parser.*
 import pers.hpcx.foxlang.runtime.*
 import pers.hpcx.foxlang.type.toFoxTupleType
 import pers.hpcx.foxlang.utils.*
-import java.util.*
 
 // Lexical nodes
 private val Word = node<String>().name("Word")
@@ -15,6 +14,8 @@ private val IdentifierColon = node<String>().name("IdentifierColon")
 private val TypeNameEqual = node<String>().name("TypeNameEqual")
 private val TypeNameColon = node<String>().name("TypeNameColon")
 private val Label = node<String>().name("Label")
+private val LineSeparator = node<Unit>().name("LineSeparator")
+private val LineBreaks = node<Unit>().name("LineBreaks")
 
 // Literal nodes
 private val BinInt = node<String>().name("BinInt")
@@ -27,50 +28,33 @@ private val DecFloat = node<String>().name("DecFloat")
 private val HexFloat = node<String>().name("HexFloat")
 private val DecDouble = node<String>().name("DecDouble")
 private val HexDouble = node<String>().name("HexDouble")
-private val FormattedStringTemplateLiteral = node<FormattedStringTemplate>().name("FormattedStringTemplateLiteral")
 
 // Parameter and generic nodes
 private val FormalParameter = node<String>().pair(node<FoxType>()).name("FormalParameter")
-private val RawFormalParameterList = node<String>().pair(node<FoxType>()).list().name("RawFormalParameterList")
 private val FormalParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalParameterList")
-
 private val ActualParameter = node<String>().optional().pair(node<FoxStatement>()).name("ActualParameter")
-private val ActualParameterList = ActualParameter.list().name("ActualParameterList")
-
+private val ActualParameterList = node<String>().optional().pair(node<FoxStatement>()).list().name("ActualParameterList")
 private val AnonymousActualParameterList = node<FoxStatement>().list().name("AnonymousActualParameterList")
-
 private val FormalGenericParameter = node<String>().pair(node<FoxType>()).name("FormalGenericParameter")
-private val RawFormalGenericParameterList = node<String>().pair(node<FoxType>()).list().name("RawFormalGenericParameterList")
 private val FormalGenericParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalGenericParameterList")
-
-private val RawFormalGenericParameterListWithoutConstraints = node<String>().list().name("RawFormalGenericParameterListWithoutConstraints")
 private val FormalGenericParameterListWithoutConstraints = node<String>().orderedSet().name("FormalGenericParameterListWithoutConstraints")
-
 private val ActualGenericParameter = node<String>().optional().pair(node<FoxType>()).name("ActualGenericParameter")
-private val ActualGenericParameterList = ActualGenericParameter.list().name("ActualGenericParameterList")
-
+private val ActualGenericParameterList = node<String>().optional().pair(node<FoxType>()).list().name("ActualGenericParameterList")
 private val NamedActualGenericParameter = node<String>().pair(node<FoxType>()).name("NamedActualGenericParameter")
-private val RawNamedActualGenericParameterList = node<String>().pair(node<FoxType>()).list().name("RawNamedActualGenericParameterList")
 private val NamedActualGenericParameterList = node<String>().map(node<FoxType>()).name("NamedActualGenericParameterList")
-
 private val AnonymousActualGenericParameterList = node<FoxType>().list().name("AnonymousActualGenericParameterList")
 private val TupleComponentParameter = node<FoxType>().pair(node<Int>()).name("TupleComponentParameter")
 private val TupleComponentParameterList = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterList")
-
 private val StructFieldParameter = node<String>().pair(node<FoxType>()).name("StructFieldParameter")
-private val RawStructFieldParameterList = node<String>().pair(node<FoxType>()).list().name("RawStructFieldParameterList")
 private val StructFieldParameterList = node<String>().orderedMap(node<FoxType>()).name("StructFieldParameterList")
-private val RawStructFieldNameList = node<String>().list().name("RawStructFieldNameList")
 private val StructFieldNameList = node<String>().orderedSet().name("StructFieldNameList")
 private val ObjectMemberParameterList = node<String>().map(node<FoxType>()).name("ObjectMemberParameterList")
 private val ObjectMemberNameSet = node<String>().set().name("ObjectMemberNameSet")
-private val MethodTypeArgument = node<ParsedMethodTypeArgument>().name("MethodTypeArgument")
-private val RawMethodTypeArgumentList = MethodTypeArgument.list().name("RawMethodTypeArgumentList")
-
 private val EnumItemParameter = node<String>().pair(node<FoxType>()).name("EnumItemParameter")
-private val RawEnumItemParameterList = node<String>().pair(node<FoxType>()).list().name("RawEnumItemParameterList")
 private val EnumItemParameterList = node<String>().map(node<FoxType>()).name("EnumItemParameterList")
 private val EnumItemNameList = node<String>().list().name("EnumItemNameList")
+private val MethodTypeArgument = node<ParsedMethodTypeArgument>().name("MethodTypeArgument")
+private val MethodTypeArgumentList = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentList")
 
 // Expression nodes
 private val StatementBlock = node<FoxStatement>().list().name("StatementBlock")
@@ -107,16 +91,15 @@ private val LogicalOrOperator = node<FoxBinaryOperator>().name("LogicalOrOperato
 private val WhenCaseConditionList = node<FoxStatement>().list().name("WhenCaseConditionList")
 private val WhenCase = node<FoxCase>().name("WhenCase")
 private val WhenCaseList = node<FoxCase>().list().name("WhenCaseList")
-private val IfCore = node<ParsedIfCore>().name("IfCore")
-private val WhileCore = node<ParsedWhileCore>().name("WhileCore")
-private val DoWhileCore = node<ParsedDoWhileCore>().name("DoWhileCore")
-private val WhenCore = node<ParsedWhenCore>().name("WhenCore")
+private val IfCore = node<FoxIf>().name("IfCore")
+private val WhileCore = node<FoxWhile>().name("WhileCore")
+private val DoWhileCore = node<FoxDoWhile>().name("DoWhileCore")
+private val WhenCore = node<FoxWhen>().name("WhenCore")
 
 // Top-level nodes
 private val ThisTypeQualifier = node<FoxType>().name("ThisTypeQualifier")
 private val ReturnTypeClause = node<FoxType>().name("ReturnTypeClause")
-private val MethodHead = node<ParsedMethodHead>().name("MethodHead")
-private val FileElementList = node<FoxFileElement>().list().name("FileElementList")
+private val MethodHead = node<FoxMethodDefinition>().name("MethodHead")
 
 private val ReservedKeywords = setOf(
     "const", "type", "def", "this", "if", "else", "when", "new", "yield", "return", "for", "in",
@@ -134,43 +117,52 @@ private val ReservedKeywords = setOf(
     "ElementOf", "ReferentOf", "MethodOf", "ThisOf", "ParametersOf", "ReturnOf",
 )
 
-private val FoxProductions = buildList {
-    addAll(tokenProductions())
-    addAll(nameProductions())
-    addAll(literalProductions())
-    addAll(parameterAndGenericProductions())
-    addAll(typeProductions())
-    addAll(expressionProductions())
-    addAll(controlFlowProductions())
-    addAll(topLevelProductions())
-}
-
-val FoxGrammar = Grammar(FoxProductions)
-val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
-
-private fun tokenProductions(): List<Production<*>> = buildList {
-    addAll(fixedTokens(*ReservedKeywords.toTypedArray()))
+val FoxGrammar = buildGrammar {
+    fun fixedTokens(vararg tokens: String) {
+        tokens.forEach { token -> target(token(token)) { fixed(token) { it.text } } }
+    }
     
-    addAll(
-        fixedTokens(
-            "(", ")", "[", "]", "{", "}", ".", ":", ";", ",",
-            "+", "-", "*", "/", "%", "`", "~", "?", "!", "@", "#", "$", "&", "|", "^",
-            "<", ">", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>", ">>>", "->",
-            "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
-        ),
+    fun <N> GrammarBuilder.ProductionListBuilder<N>.tokenValues(vararg mappings: Pair<String, N>) {
+        mappings.forEach { (text, value) ->
+            sequence(token(text)) { value }
+        }
+    }
+    
+    fun <N> regexValue(
+        source: NonTerminal<String>,
+        pattern: String,
+        result: NonTerminal<N>,
+        parser: (String) -> N,
+    ) {
+        target(source) { regex(Regex(pattern)) { it.text } }
+        target(result) {
+            sequence(source) {
+                try {
+                    parser(it)
+                } catch (e: Exception) {
+                    throw ParseException("Invalid token: $it, cause: ${e.message}")
+                }
+            }
+        }
+    }
+    
+    fixedTokens(*ReservedKeywords.toTypedArray())
+    fixedTokens(
+        "(", ")", "[", "]", "{", "}", ".", ":", ";", ",",
+        "+", "-", "*", "/", "%", "`", "~", "?", "!", "@", "#", "$", "&", "|", "^",
+        "<", ">", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>", ">>>", "->",
+        "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
     )
     
-    addAll(
+    target(node<FoxUnaryOperator>()) {
         tokenValues(
-            node<FoxUnaryOperator>(),
             "!" to FoxNotOperator,
             "-" to FoxNegOperator,
-        ),
-    )
+        )
+    }
     
-    addAll(
+    target(node<FoxBinaryOperator>()) {
         tokenValues(
-            node<FoxBinaryOperator>(),
             "+" to FoxAddOperator,
             "-" to FoxSubOperator,
             "*" to FoxMulOperator,
@@ -190,23 +182,11 @@ private fun tokenProductions(): List<Production<*>> = buildList {
             ">=" to FoxGeOperator,
             "&&" to FoxAndAndOperator,
             "||" to FoxOrOrOperator,
-        ),
-    )
+        )
+    }
     
-    addAll(tokenValues(MultiplicativeOperator, "*" to FoxMulOperator, "/" to FoxDivOperator, "%" to FoxRemOperator))
-    addAll(tokenValues(AdditiveOperator, "+" to FoxAddOperator, "-" to FoxSubOperator))
-    addAll(tokenValues(ShiftOperator, "<<" to FoxShlOperator, ">>" to FoxShrOperator, ">>>" to FoxUshrOperator))
-    addAll(tokenValues(ComparisonOperator, "<" to FoxLtOperator, ">" to FoxGtOperator, "<=" to FoxLeOperator, ">=" to FoxGeOperator))
-    addAll(tokenValues(EqualityOperator, "==" to FoxEqOperator, "!=" to FoxNeqOperator))
-    addAll(tokenValues(BitAndOperator, "&" to FoxAndOperator))
-    addAll(tokenValues(BitXorOperator, "^" to FoxXorOperator))
-    addAll(tokenValues(BitOrOperator, "|" to FoxOrOperator))
-    addAll(tokenValues(LogicalAndOperator, "&&" to FoxAndAndOperator))
-    addAll(tokenValues(LogicalOrOperator, "||" to FoxOrOrOperator))
-    
-    addAll(
+    target(node<FoxAssignOperator>()) {
         tokenValues(
-            node<FoxAssignOperator>(),
             "=" to FoxPlainAssignOperator,
             ":=" to FoxTypeBindingAssignOperator,
             "+=" to FoxAddAssignOperator,
@@ -222,143 +202,83 @@ private fun tokenProductions(): List<Production<*>> = buildList {
             ">>>=" to FoxUshrAssignOperator,
             "&&=" to FoxAndAndAssignOperator,
             "||=" to FoxOrOrAssignOperator,
-        ),
-    )
-}
-
-private fun nameProductions(): List<Production<*>> = buildList {
-    add(regex(Word, Regex("[a-zA-Z0-9_]+"), "word"))
-    add(
-        serial(Identifier, Word) {
+        )
+    }
+    
+    target(MultiplicativeOperator) {
+        tokenValues(
+            "*" to FoxMulOperator,
+            "/" to FoxDivOperator,
+            "%" to FoxRemOperator,
+        )
+    }
+    target(AdditiveOperator) {
+        tokenValues(
+            "+" to FoxAddOperator,
+            "-" to FoxSubOperator,
+        )
+    }
+    target(ShiftOperator) {
+        tokenValues(
+            "<<" to FoxShlOperator,
+            ">>" to FoxShrOperator,
+            ">>>" to FoxUshrOperator,
+        )
+    }
+    target(ComparisonOperator) {
+        tokenValues(
+            "<" to FoxLtOperator,
+            ">" to FoxGtOperator,
+            "<=" to FoxLeOperator,
+            ">=" to FoxGeOperator,
+        )
+    }
+    target(EqualityOperator) {
+        tokenValues(
+            "==" to FoxEqOperator,
+            "!=" to FoxNeqOperator,
+        )
+    }
+    target(BitAndOperator) {
+        tokenValues("&" to FoxAndOperator)
+    }
+    target(BitXorOperator) {
+        tokenValues("^" to FoxXorOperator)
+    }
+    target(BitOrOperator) {
+        tokenValues("|" to FoxOrOperator)
+    }
+    target(LogicalAndOperator) {
+        tokenValues("&&" to FoxAndAndOperator)
+    }
+    target(LogicalOrOperator) {
+        tokenValues("||" to FoxOrOrOperator)
+    }
+    
+    target(Word) { regex(Regex("[a-zA-Z0-9_]+")) { it.text } }
+    target(LineSeparator) { lineSeparator { } }
+    target(LineBreaks) { listLike(LineSeparator, LineSeparator, null, null) { } }
+    target(Identifier) {
+        sequence(Word) {
             if (it in ReservedKeywords) throw ParseException("'$it' is a reserved keyword")
             if (it[0] !in 'a'..'z') throw ParseException("'${it[0]}' is not a valid first character of an identifier")
             it
-        },
-    )
-    add(
-        serial(TypeName, Word) {
+        }
+    }
+    target(TypeName) {
+        sequence(Word) {
             if (it in ReservedKeywords) throw ParseException("'$it' is a reserved keyword")
             if (it[0] !in 'A'..'Z') throw ParseException("'${it[0]}' is not a valid first character of a type name")
             it
-        },
-    )
-    add(serial(IdentifierEqual, Identifier, token("=")) { it, _ -> it })
-    add(serial(IdentifierColon, Identifier, token(":")) { it, _ -> it })
-    add(serial(TypeNameEqual, TypeName, token("=")) { it, _ -> it })
-    add(serial(TypeNameColon, TypeName, token(":")) { it, _ -> it })
-}
-
-private fun literalProductions(): List<Production<*>> = buildList {
-    add(serial(node<Unit>(), token("unit")) { })
-    add(serial(node<Boolean>(), token("true")) { true })
-    add(serial(node<Boolean>(), token("false")) { false })
-    add(charLiteral(node<Char>()))
-    add(stringLiteral(node<String>()))
-    add(formattedStringLiteral(FormattedStringTemplateLiteral))
+        }
+    }
+    target(IdentifierEqual) { sequence(Identifier, token("=")) { it, _ -> it } }
+    target(IdentifierColon) { sequence(Identifier, token(":")) { it, _ -> it } }
+    target(TypeNameEqual) { sequence(TypeName, token("=")) { it, _ -> it } }
+    target(TypeNameColon) { sequence(TypeName, token(":")) { it, _ -> it } }
     
-    addAll(regexValue(BinInt, "0b[01]+(_[01]+)*", "integer literal", node<Int>()) { it.drop(2).replace("_", "").toInt(2) })
-    addAll(regexValue(DecInt, "(0|[1-9][0-9]*(_[0-9]+)*)", "integer literal", node<Int>()) { it.replace("_", "").toInt() })
-    addAll(regexValue(HexInt, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*", "integer literal", node<Int>()) { it.drop(2).replace("_", "").toInt(16) })
-    addAll(regexValue(BinLong, "0b[01]+(_[01]+)*L", "long literal", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(2) })
-    addAll(regexValue(DecLong, "(0|[1-9][0-9]*(_[0-9]+)*)L", "long literal", node<Long>()) { it.dropLast(1).replace("_", "").toLong() })
-    addAll(regexValue(HexLong, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L", "long literal", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(16) })
-    addAll(regexValue(DecFloat, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f", "number literal", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() })
-    addAll(regexValue(HexFloat, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f", "number literal", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() })
-    addAll(regexValue(DecDouble, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?", "number literal", node<Double>()) { it.replace("_", "").toDouble() })
-    addAll(regexValue(HexDouble, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+", "number literal", node<Double>()) { it.replace("_", "").toDouble() })
-    
-    add(serial(node<FoxEntityStatement>(), node<Unit>()) { FoxEntityStatement(FoxUnit) })
-    add(serial(node<FoxEntityStatement>(), node<Boolean>()) { FoxEntityStatement(FoxBool(it)) })
-    add(serial(node<FoxEntityStatement>(), node<Int>()) { FoxEntityStatement(FoxInt(it)) })
-    add(serial(node<FoxEntityStatement>(), node<Long>()) { FoxEntityStatement(FoxLong(it)) })
-    add(serial(node<FoxEntityStatement>(), node<Float>()) { FoxEntityStatement(FoxFloat(it)) })
-    add(serial(node<FoxEntityStatement>(), node<Double>()) { FoxEntityStatement(FoxDouble(it)) })
-    add(serial(node<FoxEntityStatement>(), node<Char>()) { FoxEntityStatement(FoxChar(it)) })
-    add(serial(node<FoxEntityStatement>(), node<String>()) { FoxEntityStatement(FoxString(it)) })
-}
-
-private fun parameterAndGenericProductions(): List<Production<*>> = buildList {
-    add(serial(FormalParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type })
-    add(listLike(RawFormalParameterList, token("("), FormalParameter, token(","), token(")")))
-    add(serial(FormalParameterList, RawFormalParameterList) { it.toOrderedMap("formal parameter") })
-    
-    add(serial(ActualParameter, node<FoxStatement>()) { null to it })
-    add(serial(ActualParameter, IdentifierEqual, node<FoxStatement>()) { name, value -> name to value })
-    add(listLike(ActualParameterList, token("("), ActualParameter, token(","), token(")")))
-    
-    add(listLike(AnonymousActualParameterList, token("("), node<FoxStatement>(), token(","), token(")")))
-    
-    add(serial(FormalGenericParameter, TypeName) { it to FoxAnyType })
-    add(serial(FormalGenericParameter, TypeName, token("="), node<FoxType>()) { name, _, constraint -> name to constraint })
-    add(listLike(RawFormalGenericParameterList, token("<"), FormalGenericParameter, token(","), token(">")))
-    add(serial(FormalGenericParameterList, RawFormalGenericParameterList) { it.toOrderedMap("formal generic parameter") })
-    
-    add(listLike(RawFormalGenericParameterListWithoutConstraints, token("<"), TypeName, token(","), token(">")))
-    add(
-        serial(FormalGenericParameterListWithoutConstraints, RawFormalGenericParameterListWithoutConstraints) {
-            it.toOrderedSet("formal generic parameter")
-        },
-    )
-    
-    add(serial(ActualGenericParameter, node<FoxType>()) { null to it })
-    add(serial(ActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
-    add(listLike(ActualGenericParameterList, token("<"), ActualGenericParameter, token(","), token(">")))
-    
-    add(serial(NamedActualGenericParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
-    add(listLike(RawNamedActualGenericParameterList, token("<"), NamedActualGenericParameter, token(","), token(">")))
-    add(serial(NamedActualGenericParameterList, RawNamedActualGenericParameterList) { it.toMap("actual generic parameter") })
-    
-    add(listLike(AnonymousActualGenericParameterList, token("<"), node<FoxType>(), token(","), token(">")))
-    
-    add(serial(TupleComponentParameter, node<FoxType>()) { it to 1 })
-    add(
-        serial(TupleComponentParameter, node<FoxType>(), token(":"), node<Int>()) { type, _, count ->
-            if (count <= 0) throw ParseException("Tuple component count must be positive")
-            type to count
-        },
-    )
-    add(listLike(TupleComponentParameterList, token("<"), TupleComponentParameter, token(","), token(">")))
-    
-    add(serial(StructFieldParameter, IdentifierColon, node<FoxType>()) { name, type -> name to type })
-    add(listLike(RawStructFieldParameterList, token("<"), StructFieldParameter, token(","), token(">")))
-    add(serial(StructFieldParameterList, RawStructFieldParameterList) { it.toOrderedMap("struct field parameter") })
-    add(serial(ObjectMemberParameterList, RawStructFieldParameterList) { it.toMap("object member parameter") })
-    
-    add(serial(EnumItemParameter, TypeNameEqual, node<FoxType>()) { name, type -> name to type })
-    add(listLike(RawEnumItemParameterList, token("<"), EnumItemParameter, token(","), token(">")))
-    add(serial(EnumItemParameterList, RawEnumItemParameterList) { it.toMap("enum item type parameter") })
-    add(listLike(RawStructFieldNameList, null, Identifier, token(","), null))
-    add(serial(StructFieldNameList, RawStructFieldNameList) { it.toOrderedSet("struct field name") })
-    add(serial(ObjectMemberNameSet, RawStructFieldNameList) { it.toSet("object member name") })
-    add(listLike(EnumItemNameList, null, TypeName, token(","), null))
-    
-    add(
-        serial(MethodTypeArgument, token("this"), token(":"), node<FoxType>()) { _, _, type ->
-            ParsedMethodTypeArgument.This(type)
-        },
-    )
-    add(
-        serial(MethodTypeArgument, token("return"), token(":"), node<FoxType>()) { _, _, type ->
-            ParsedMethodTypeArgument.Return(type)
-        },
-    )
-    add(
-        serial(MethodTypeArgument, FormalParameter) { (name, type) ->
-            ParsedMethodTypeArgument.Parameter(name, type)
-        },
-    )
-    add(
-        serial(MethodTypeArgument, node<FoxType>()) { type ->
-            ParsedMethodTypeArgument.AnonymousType(type)
-        },
-    )
-    add(listLike(RawMethodTypeArgumentList, token("<"), MethodTypeArgument, token(","), token(">")))
-}
-
-private fun typeProductions(): List<Production<*>> = buildList {
-    addAll(
+    target(node<FoxType>()) {
         tokenValues(
-            node<FoxType>(),
             "Void" to FoxVoidType,
             "Unit" to FoxUnitType,
             "Bool" to FoxBoolType,
@@ -375,613 +295,629 @@ private fun typeProductions(): List<Production<*>> = buildList {
             "AnyStruct" to FoxAnyStructType,
             "AnyObject" to FoxAnyObjectType,
             "AnyEnum" to FoxAnyEnumType,
-        ),
-    )
-    addAll(
-        listOf(
-            serial(node<FoxType>(), token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxAnyOfType(it)
-            },
-            serial(node<FoxType>(), token("AllOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxAllOfType(it)
-            },
-            serial(node<FoxType>(), token("NoneOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxNoneOfType(it)
-            },
-            serial(node<FoxType>(), token("Tuple"), TupleComponentParameterList) { _, it ->
-                it.toFoxTupleType()
-            },
-            serial(node<FoxType>(), token("AnyTupleOf"), AnonymousActualGenericParameterList) { _, it ->
-                if (it.size != 1) throw ParseException("AnyTupleOf type must have exactly one generic parameter")
-                FoxAnyTupleOfType(it.first())
-            },
-            serial(node<FoxType>(), token("Struct"), StructFieldParameterList) { _, it ->
-                FoxStructType(it)
-            },
-            serial(node<FoxType>(), token("AnyStructOf"), AnonymousActualGenericParameterList) { _, it ->
-                if (it.isEmpty()) throw ParseException("AnyStructOf type must have at least one generic parameter")
-                FoxAnyStructOfType(it)
-            },
-            serial(node<FoxType>(), token("Object"), ObjectMemberParameterList) { _, it ->
-                FoxObjectType(it)
-            },
-            serial(node<FoxType>(), token("Enum"), EnumItemParameterList) { _, it ->
-                FoxEnumType(it)
-            },
-            serial(node<FoxType>(), token("Array"), AnonymousActualGenericParameterList) { _, it ->
-                if (it.size != 1) throw ParseException("Array type must have exactly one generic parameter")
-                FoxArrayType(it.first())
-            },
-            serial(node<FoxType>(), token("Ref"), AnonymousActualGenericParameterList) { _, it ->
-                if (it.size != 1) throw ParseException("Ref type must have exactly one generic parameter")
-                FoxRefType(it.first())
-            },
-            serial(node<FoxType>(), token("Method"), RawMethodTypeArgumentList) { _, items ->
-                items.toFoxMethodType()
-            },
-            serial(node<FoxType>(), token("ComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
-                FoxTupleComponentAtType(type, index)
-            },
-            serial(node<FoxType>(), token("LastComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
-                FoxTupleLastComponentAtType(type, index)
-            },
-            serial(node<FoxType>(), token("FirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleFirstComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleExactFirstComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("LastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleLastComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleExactLastComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("DropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleDropFirstComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactDropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleExactDropFirstComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("DropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleDropLastComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactDropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxTupleExactDropLastComponentsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("MergeComponentsOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxTupleMergeComponentsOfType(it)
-            },
-            serial(node<FoxType>(), token("FieldOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
-                FoxStructFieldOfType(type, name)
-            },
-            serial(node<FoxType>(), token("FieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
-                FoxStructFieldAtType(type, index)
-            },
-            serial(node<FoxType>(), token("LastFieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
-                FoxStructLastFieldAtType(type, index)
-            },
-            serial(node<FoxType>(), token("FirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructFirstFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructExactFirstFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("LastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructLastFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructExactLastFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("DropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructDropFirstFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactDropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructExactDropFirstFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("DropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructDropLastFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("ExactDropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
-                FoxStructExactDropLastFieldsOfType(type, count)
-            },
-            serial(node<FoxType>(), token("FieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
-                FoxStructFieldsOfType(type, names)
-            },
-            serial(node<FoxType>(), token("DropFieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
-                FoxStructDropFieldsOfType(type, names.toSet())
-            },
-            serial(node<FoxType>(), token("MergeFieldsOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxStructMergeFieldsOfType(it)
-            },
-            serial(node<FoxType>(), token("MemberOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
-                FoxObjectMemberOfType(type, name)
-            },
-            serial(node<FoxType>(), token("MembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameSet, token(">")) { _, _, type, _, names, _ ->
-                FoxObjectMembersOfType(type, names)
-            },
-            serial(node<FoxType>(), token("DropMembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameSet, token(">")) { _, _, type, _, names, _ ->
-                FoxObjectDropMembersOfType(type, names)
-            },
-            serial(node<FoxType>(), token("MergeMembersOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxObjectMergeMembersOfType(it)
-            },
-            serial(node<FoxType>(), token("ItemOf"), token("<"), node<FoxType>(), token(","), TypeName, token(">")) { _, _, type, _, name, _ ->
-                FoxEnumItemOfType(type, name)
-            },
-            serial(node<FoxType>(), token("ItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
-                FoxEnumItemsOfType(type, names)
-            },
-            serial(node<FoxType>(), token("DropItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
-                FoxEnumDropItemsOfType(type, names)
-            },
-            serial(node<FoxType>(), token("MergeItemsOf"), AnonymousActualGenericParameterList) { _, it ->
-                FoxEnumMergeItemsOfType(it)
-            },
-            serial(node<FoxType>(), token("ElementOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
-                FoxArrayElementOfType(type)
-            },
-            serial(node<FoxType>(), token("ReferentOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
-                FoxRefReferentOfType(type)
-            },
-            serial(
-                node<FoxType>(),
-                token("MethodOf"),
-                token("<"),
-                node<FoxType>(),
-                token(","),
-                node<FoxType>(),
-                token(","),
-                node<FoxType>(),
-                token(">"),
-            ) { _, _, `this`, _, parameters, _, `return`, _ ->
-                FoxMethodOfType(`this`, parameters, `return`)
-            },
-            serial(node<FoxType>(), token("ThisOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
-                FoxMethodThisOfType(type)
-            },
-            serial(node<FoxType>(), token("ParametersOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
-                FoxMethodParametersOfType(type)
-            },
-            serial(node<FoxType>(), token("ReturnOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
-                FoxMethodReturnOfType(type)
-            },
-            serial(node<FoxType>(), TypeName) {
-                FoxUnresolvedType(it, null)
-            },
-            serial(node<FoxType>(), TypeName, AnonymousActualGenericParameterList) { name, it ->
-                FoxUnresolvedType(name, it)
-            },
-        ),
-    )
-}
-
-private fun expressionProductions(): List<Production<*>> = buildList {
-    add(serial(Label, token("#"), Identifier) { _, it -> it })
-    add(serial(ParenthesizedStatement, token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node })
+        )
+    }
     
-    add(serial(PrimaryExpression, token("this")) { FoxThis })
-    add(serial(PrimaryExpression, Identifier) { FoxSymbol(it) })
-    add(serial(PrimaryExpression, ParenthesizedStatement) { it })
-    add(serial(PrimaryExpression, node<FoxEntityStatement>()) { it })
-    add(
-        serial(PrimaryExpression, FormattedStringTemplateLiteral) { template ->
-            FoxFormattedString(
-                parts = template.parts.map { part ->
-                    when (part) {
-                        is FormattedTextPart -> FoxFormattedText(part.text)
-                        is FormattedExpressionPart -> FoxFormattedExpression(parseFormattedExpression(part.source))
-                    }
-                },
-                isRaw = template.isRaw,
-            )
-        },
-    )
+    target(node<Unit>()) { sequence(token("unit")) { } }
+    target(node<Boolean>()) { sequence(token("true")) { true } }
+    target(node<Boolean>()) { sequence(token("false")) { false } }
+    target(node<Char>()) { charLiteral { it.char } }
+    target(node<String>()) { stringLiteral { it.string } }
     
-    add(serial(PostfixExpression, PrimaryExpression) { it })
-    add(
-        serial(PostfixExpression, PostfixExpression, token("."), Identifier) { target, _, name ->
+    regexValue(BinInt, "0b[01]+(_[01]+)*", node<Int>()) { it.drop(2).replace("_", "").toInt(2) }
+    regexValue(DecInt, "(0|[1-9][0-9]*(_[0-9]+)*)", node<Int>()) { it.replace("_", "").toInt() }
+    regexValue(HexInt, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*", node<Int>()) { it.drop(2).replace("_", "").toInt(16) }
+    regexValue(BinLong, "0b[01]+(_[01]+)*L", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
+    regexValue(DecLong, "(0|[1-9][0-9]*(_[0-9]+)*)L", node<Long>()) { it.dropLast(1).replace("_", "").toLong() }
+    regexValue(HexLong, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
+    regexValue(DecFloat, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() }
+    regexValue(HexFloat, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() }
+    regexValue(DecDouble, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?", node<Double>()) { it.replace("_", "").toDouble() }
+    regexValue(HexDouble, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+", node<Double>()) { it.replace("_", "").toDouble() }
+    
+    target(node<FoxEntityStatement>()) {
+        sequence(node<Unit>()) { FoxEntityStatement(FoxUnit) }
+        sequence(node<Boolean>()) { FoxEntityStatement(FoxBool(it)) }
+        sequence(node<Int>()) { FoxEntityStatement(FoxInt(it)) }
+        sequence(node<Long>()) { FoxEntityStatement(FoxLong(it)) }
+        sequence(node<Float>()) { FoxEntityStatement(FoxFloat(it)) }
+        sequence(node<Double>()) { FoxEntityStatement(FoxDouble(it)) }
+        sequence(node<Char>()) { FoxEntityStatement(FoxChar(it)) }
+        sequence(node<String>()) { FoxEntityStatement(FoxString(it)) }
+    }
+    
+    target(node<FoxType>()) {
+        sequence(token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxAnyOfType(it)
+        }
+        sequence(token("AllOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxAllOfType(it)
+        }
+        sequence(token("NoneOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxNoneOfType(it)
+        }
+        sequence(token("Tuple"), TupleComponentParameterList) { _, it ->
+            it.toFoxTupleType()
+        }
+        sequence(token("AnyTupleOf"), AnonymousActualGenericParameterList) { _, it ->
+            if (it.size != 1) throw ParseException("AnyTupleOf type must have exactly one generic parameter")
+            FoxAnyTupleOfType(it.first())
+        }
+        sequence(token("Struct"), StructFieldParameterList) { _, it ->
+            FoxStructType(it)
+        }
+        sequence(token("AnyStructOf"), AnonymousActualGenericParameterList) { _, it ->
+            if (it.isEmpty()) throw ParseException("AnyStructOf type must have at least one generic parameter")
+            FoxAnyStructOfType(it)
+        }
+        sequence(token("Object"), ObjectMemberParameterList) { _, it ->
+            FoxObjectType(it)
+        }
+        sequence(token("Enum"), EnumItemParameterList) { _, it ->
+            FoxEnumType(it)
+        }
+        sequence(token("Array"), AnonymousActualGenericParameterList) { _, it ->
+            if (it.size != 1) throw ParseException("Array type must have exactly one generic parameter")
+            FoxArrayType(it.first())
+        }
+        sequence(token("Ref"), AnonymousActualGenericParameterList) { _, it ->
+            if (it.size != 1) throw ParseException("Ref type must have exactly one generic parameter")
+            FoxRefType(it.first())
+        }
+        sequence(token("Method"), MethodTypeArgumentList) { _, items ->
+            items.toFoxMethodType()
+        }
+        sequence(token("ComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+            FoxTupleComponentAtType(type, index)
+        }
+        sequence(token("LastComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+            FoxTupleLastComponentAtType(type, index)
+        }
+        sequence(token("FirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleFirstComponentsOfType(type, count)
+        }
+        sequence(token("ExactFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleExactFirstComponentsOfType(type, count)
+        }
+        sequence(token("LastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleLastComponentsOfType(type, count)
+        }
+        sequence(token("ExactLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleExactLastComponentsOfType(type, count)
+        }
+        sequence(token("DropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleDropFirstComponentsOfType(type, count)
+        }
+        sequence(token("ExactDropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleExactDropFirstComponentsOfType(type, count)
+        }
+        sequence(token("DropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleDropLastComponentsOfType(type, count)
+        }
+        sequence(token("ExactDropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxTupleExactDropLastComponentsOfType(type, count)
+        }
+        sequence(token("MergeComponentsOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxTupleMergeComponentsOfType(it)
+        }
+        sequence(token("FieldOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
+            FoxStructFieldOfType(type, name)
+        }
+        sequence(token("FieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+            FoxStructFieldAtType(type, index)
+        }
+        sequence(token("LastFieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+            FoxStructLastFieldAtType(type, index)
+        }
+        sequence(token("FirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructFirstFieldsOfType(type, count)
+        }
+        sequence(token("ExactFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructExactFirstFieldsOfType(type, count)
+        }
+        sequence(token("LastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructLastFieldsOfType(type, count)
+        }
+        sequence(token("ExactLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructExactLastFieldsOfType(type, count)
+        }
+        sequence(token("DropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructDropFirstFieldsOfType(type, count)
+        }
+        sequence(token("ExactDropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructExactDropFirstFieldsOfType(type, count)
+        }
+        sequence(token("DropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructDropLastFieldsOfType(type, count)
+        }
+        sequence(token("ExactDropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+            FoxStructExactDropLastFieldsOfType(type, count)
+        }
+        sequence(token("FieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
+            FoxStructFieldsOfType(type, names)
+        }
+        sequence(token("DropFieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
+            FoxStructDropFieldsOfType(type, names.toSet())
+        }
+        sequence(token("MergeFieldsOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxStructMergeFieldsOfType(it)
+        }
+        sequence(token("MemberOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
+            FoxObjectMemberOfType(type, name)
+        }
+        sequence(token("MembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameSet, token(">")) { _, _, type, _, names, _ ->
+            FoxObjectMembersOfType(type, names)
+        }
+        sequence(token("DropMembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameSet, token(">")) { _, _, type, _, names, _ ->
+            FoxObjectDropMembersOfType(type, names)
+        }
+        sequence(token("MergeMembersOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxObjectMergeMembersOfType(it)
+        }
+        sequence(token("ItemOf"), token("<"), node<FoxType>(), token(","), TypeName, token(">")) { _, _, type, _, name, _ ->
+            FoxEnumItemOfType(type, name)
+        }
+        sequence(token("ItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
+            FoxEnumItemsOfType(type, names)
+        }
+        sequence(token("DropItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
+            FoxEnumDropItemsOfType(type, names)
+        }
+        sequence(token("MergeItemsOf"), AnonymousActualGenericParameterList) { _, it ->
+            FoxEnumMergeItemsOfType(it)
+        }
+        sequence(token("ElementOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+            FoxArrayElementOfType(type)
+        }
+        sequence(token("ReferentOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+            FoxRefReferentOfType(type)
+        }
+        sequence(
+            token("MethodOf"),
+            token("<"),
+            node<FoxType>(),
+            token(","),
+            node<FoxType>(),
+            token(","),
+            node<FoxType>(),
+            token(">"),
+        ) { _, _, `this`, _, parameters, _, `return`, _ ->
+            FoxMethodOfType(`this`, parameters, `return`)
+        }
+        sequence(token("ThisOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+            FoxMethodThisOfType(type)
+        }
+        sequence(token("ParametersOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+            FoxMethodParametersOfType(type)
+        }
+        sequence(token("ReturnOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+            FoxMethodReturnOfType(type)
+        }
+        sequence(TypeName) {
+            FoxUnresolvedType(it, null)
+        }
+        sequence(TypeName, AnonymousActualGenericParameterList) { name, it ->
+            FoxUnresolvedType(name, it)
+        }
+    }
+    
+    target(FormalParameter) {
+        sequence(IdentifierColon, node<FoxType>()) { name, type -> name to type }
+    }
+    target(FormalParameterList) {
+        listLike(token("("), FormalParameter, token(","), token(")")) { it.toOrderedMap("formal parameter") }
+    }
+    target(ActualParameter) {
+        sequence(node<FoxStatement>()) { null to it }
+    }
+    target(ActualParameter) {
+        sequence(IdentifierEqual, node<FoxStatement>()) { name, value -> name to value }
+    }
+    target(ActualParameterList) {
+        listLike(token("("), ActualParameter, token(","), token(")")) { it }
+    }
+    target(AnonymousActualParameterList) {
+        listLike(token("("), node<FoxStatement>(), token(","), token(")")) { it }
+    }
+    target(FormalGenericParameter) {
+        sequence(TypeName) { it to FoxAnyType }
+    }
+    target(FormalGenericParameter) {
+        sequence(TypeName, token("="), node<FoxType>()) { name, _, constraint -> name to constraint }
+    }
+    target(FormalGenericParameterList) {
+        listLike(token("<"), FormalGenericParameter, token(","), token(">")) { it.toOrderedMap("formal generic parameter") }
+    }
+    target(FormalGenericParameterListWithoutConstraints) {
+        listLike(token("<"), TypeName, token(","), token(">")) { it.toOrderedSet("formal generic parameter") }
+    }
+    target(ActualGenericParameter) {
+        sequence(node<FoxType>()) { null to it }
+    }
+    target(ActualGenericParameter) {
+        sequence(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
+    }
+    target(ActualGenericParameterList) {
+        listLike(token("<"), ActualGenericParameter, token(","), token(">")) { it }
+    }
+    target(NamedActualGenericParameter) {
+        sequence(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
+    }
+    target(NamedActualGenericParameterList) {
+        listLike(token("<"), NamedActualGenericParameter, token(","), token(">")) { it.toMap("actual generic parameter") }
+    }
+    target(AnonymousActualGenericParameterList) {
+        listLike(token("<"), node<FoxType>(), token(","), token(">")) { it }
+    }
+    target(TupleComponentParameter) {
+        sequence(node<FoxType>()) { it to 1 }
+    }
+    target(TupleComponentParameter) {
+        sequence(node<FoxType>(), token(":"), node<Int>()) { type, _, count ->
+            if (count <= 0) throw ParseException("Tuple component count must be positive")
+            type to count
+        }
+    }
+    target(TupleComponentParameterList) {
+        listLike(token("<"), TupleComponentParameter, token(","), token(">")) { it }
+    }
+    target(StructFieldParameter) {
+        sequence(IdentifierColon, node<FoxType>()) { name, type -> name to type }
+    }
+    target(StructFieldParameterList) {
+        listLike(token("<"), StructFieldParameter, token(","), token(">")) { it.toOrderedMap("struct field parameter") }
+    }
+    target(ObjectMemberParameterList) {
+        listLike(token("<"), StructFieldParameter, token(","), token(">")) { it.toMap("object member parameter") }
+    }
+    target(EnumItemParameter) {
+        sequence(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
+    }
+    target(EnumItemParameterList) {
+        listLike(token("<"), EnumItemParameter, token(","), token(">")) { it.toMap("enum item type parameter") }
+    }
+    target(StructFieldNameList) {
+        listLike(null, Identifier, token(","), null) { it.toOrderedSet("struct field name") }
+    }
+    target(ObjectMemberNameSet) {
+        listLike(null, Identifier, token(","), null) { it.toSet("object member name") }
+    }
+    target(EnumItemNameList) {
+        listLike(null, TypeName, token(","), null) { it }
+    }
+    target(MethodTypeArgument) {
+        sequence(token("this"), token(":"), node<FoxType>()) { _, _, type ->
+            ParsedMethodTypeArgument.This(type)
+        }
+    }
+    target(MethodTypeArgument) {
+        sequence(token("return"), token(":"), node<FoxType>()) { _, _, type ->
+            ParsedMethodTypeArgument.Return(type)
+        }
+    }
+    target(MethodTypeArgument) {
+        sequence(FormalParameter) { (name, type) ->
+            ParsedMethodTypeArgument.Parameter(name, type)
+        }
+    }
+    target(MethodTypeArgument) {
+        sequence(node<FoxType>()) { type ->
+            ParsedMethodTypeArgument.AnonymousType(type)
+        }
+    }
+    target(MethodTypeArgumentList) { listLike(token("<"), MethodTypeArgument, token(","), token(">")) { it } }
+    
+    target(Label) { sequence(token("#"), Identifier) { _, it -> it } }
+    target(ParenthesizedStatement) { sequence(token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node } }
+    
+    target(PrimaryExpression) {
+        sequence(token("this")) { FoxThis }
+        sequence(Identifier) { FoxSymbol(it) }
+        sequence(ParenthesizedStatement) { it }
+        sequence(node<FoxEntityStatement>()) { it }
+    }
+    
+    target(PostfixExpression) {
+        sequence(PrimaryExpression) { it }
+        sequence(PostfixExpression, token("."), Identifier) { target, _, name ->
             FoxFieldAccess(target, name)
-        },
-    )
-    add(
-        serial(PostfixExpression, PostfixExpression, token("."), node<Int>()) { target, _, index ->
+        }
+        sequence(PostfixExpression, token("."), node<Int>()) { target, _, index ->
             FoxComponentAccess(target, index)
-        },
-    )
-    add(
-        serial(PostfixExpression, Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
+        }
+        sequence(Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
             FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, Identifier, ActualParameterList) { name, parameters ->
+        }
+        sequence(Identifier, ActualParameterList) { name, parameters ->
             FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
+        }
+        sequence(PostfixExpression, token("."), Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
             FoxCall(target, name, generics, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, PostfixExpression, token("."), Identifier, ActualParameterList) { target, _, name, parameters ->
+        }
+        sequence(PostfixExpression, token("."), Identifier, ActualParameterList) { target, _, name, parameters ->
             FoxCall(target, name, null, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, node<FoxType>(), ActualParameterList) { type, parameters ->
+        }
+        sequence(node<FoxType>(), ActualParameterList) { type, parameters ->
             FoxConstruct(type, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, ParenthesizedStatement, AnonymousActualParameterList) { method, parameters ->
+        }
+        sequence(ParenthesizedStatement, AnonymousActualParameterList) { method, parameters ->
             FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters)
-        },
-    )
-    add(
-        serial(PostfixExpression, PostfixExpression, token("."), ParenthesizedStatement, AnonymousActualParameterList) { target, _, method, parameters ->
+        }
+        sequence(PostfixExpression, token("."), ParenthesizedStatement, AnonymousActualParameterList) { target, _, method, parameters ->
             FoxIndirectCall(target, method, parameters)
-        },
-    )
+        }
+    }
     
-    add(serial(UnaryExpression, PostfixExpression) { it })
-    add(
-        serial(UnaryExpression, node<FoxUnaryOperator>(), UnaryExpression) { operator, node ->
+    target(UnaryExpression) {
+        sequence(PostfixExpression) { it }
+        sequence(node<FoxUnaryOperator>(), UnaryExpression) { operator, node ->
             FoxUnary(operator, node)
-        },
-    )
+        }
+    }
     
-    add(serial(MultiplicativeExpression, UnaryExpression) { it })
-    add(
-        serial(MultiplicativeExpression, MultiplicativeExpression, MultiplicativeOperator, UnaryExpression) { left, operator, right ->
+    target(MultiplicativeExpression) {
+        sequence(UnaryExpression) { it }
+        sequence(MultiplicativeExpression, MultiplicativeOperator, UnaryExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(AdditiveExpression, MultiplicativeExpression) { it })
-    add(
-        serial(AdditiveExpression, AdditiveExpression, AdditiveOperator, MultiplicativeExpression) { left, operator, right ->
+    target(AdditiveExpression) {
+        sequence(MultiplicativeExpression) { it }
+        sequence(AdditiveExpression, AdditiveOperator, MultiplicativeExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(ShiftExpression, AdditiveExpression) { it })
-    add(
-        serial(ShiftExpression, ShiftExpression, ShiftOperator, AdditiveExpression) { left, operator, right ->
+    target(ShiftExpression) {
+        sequence(AdditiveExpression) { it }
+        sequence(ShiftExpression, ShiftOperator, AdditiveExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(ComparisonExpression, ShiftExpression) { it })
-    add(
-        serial(ComparisonExpression, ComparisonExpression, ComparisonOperator, ShiftExpression) { left, operator, right ->
+    target(ComparisonExpression) {
+        sequence(ShiftExpression) { it }
+        sequence(ComparisonExpression, ComparisonOperator, ShiftExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(EqualityExpression, ComparisonExpression) { it })
-    add(
-        serial(EqualityExpression, EqualityExpression, EqualityOperator, ComparisonExpression) { left, operator, right ->
+    target(EqualityExpression) {
+        sequence(ComparisonExpression) { it }
+        sequence(EqualityExpression, EqualityOperator, ComparisonExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(BitAndExpression, EqualityExpression) { it })
-    add(
-        serial(BitAndExpression, BitAndExpression, BitAndOperator, EqualityExpression) { left, operator, right ->
+    target(BitAndExpression) {
+        sequence(EqualityExpression) { it }
+        sequence(BitAndExpression, BitAndOperator, EqualityExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(BitXorExpression, BitAndExpression) { it })
-    add(
-        serial(BitXorExpression, BitXorExpression, BitXorOperator, BitAndExpression) { left, operator, right ->
+    target(BitXorExpression) {
+        sequence(BitAndExpression) { it }
+        sequence(BitXorExpression, BitXorOperator, BitAndExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(BitOrExpression, BitXorExpression) { it })
-    add(
-        serial(BitOrExpression, BitOrExpression, BitOrOperator, BitXorExpression) { left, operator, right ->
+    target(BitOrExpression) {
+        sequence(BitXorExpression) { it }
+        sequence(BitOrExpression, BitOrOperator, BitXorExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(LogicalAndExpression, BitOrExpression) { it })
-    add(
-        serial(LogicalAndExpression, LogicalAndExpression, LogicalAndOperator, BitOrExpression) { left, operator, right ->
+    target(LogicalAndExpression) {
+        sequence(BitOrExpression) { it }
+        sequence(LogicalAndExpression, LogicalAndOperator, BitOrExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(LogicalOrExpression, LogicalAndExpression) { it })
-    add(
-        serial(LogicalOrExpression, LogicalOrExpression, LogicalOrOperator, LogicalAndExpression) { left, operator, right ->
+    target(LogicalOrExpression) {
+        sequence(LogicalAndExpression) { it }
+        sequence(LogicalOrExpression, LogicalOrOperator, LogicalAndExpression) { left, operator, right ->
             FoxBinary(left, operator, right)
-        },
-    )
+        }
+    }
     
-    add(serial(AssignableExpression, PostfixExpression) { it })
+    target(AssignableExpression) {
+        sequence(PostfixExpression) { it }
+    }
     
-    add(serial(AssignmentExpression, LogicalOrExpression) { it })
-    add(
-        serial(AssignmentExpression, AssignableExpression, node<FoxAssignOperator>(), node<FoxStatement>()) { left, operator, right ->
+    target(AssignmentExpression) {
+        sequence(LogicalOrExpression) { it }
+        sequence(AssignableExpression, node<FoxAssignOperator>(), node<FoxStatement>()) { left, operator, right ->
             FoxAssign(left, operator, right, beforeEvaluation = true)
-        },
-    )
+        }
+    }
     
-    add(serial(node<FoxStatement>(), AssignmentExpression) { it })
-    add(
-        serial(node<FoxStatement>(), Identifier, token(":"), node<FoxType>()) { name, _, type ->
-            FoxTypeBinding(name, type)
-        },
-    )
-}
-
-private fun controlFlowProductions(): List<Production<*>> = buildList {
-    add(serial(node<FoxStatement>(), token("break")) { FoxBreak(null) })
-    add(serial(node<FoxStatement>(), token("break"), Label) { _, label -> FoxBreak(label) })
-    add(serial(node<FoxStatement>(), token("continue")) { FoxContinue(null) })
-    add(serial(node<FoxStatement>(), token("continue"), Label) { _, label -> FoxContinue(label) })
-    add(serial(node<FoxStatement>(), token("return")) { FoxReturn(null) })
-    add(serial(node<FoxStatement>(), token("return"), node<FoxStatement>()) { _, value -> FoxReturn(value) })
-    add(serial(node<FoxStatement>(), token("yield"), node<FoxStatement>()) { _, value -> FoxYield(null, value) })
-    add(serial(node<FoxStatement>(), token("yield"), Label, node<FoxStatement>()) { _, label, value -> FoxYield(label, value) })
+    target(StatementBlock) {
+        listLike(token("{"), node<FoxStatement>(), null, token("}")) { it }
+    }
     
-    add(listLike(StatementBlock, token("{"), node<FoxStatement>(), null, token("}")))
-    add(serial(node<FoxStatement>(), StatementBlock) { FoxBlock(null, it) })
-    add(serial(node<FoxStatement>(), Label, StatementBlock) { label, it -> FoxBlock(label, it) })
+    target(node<FoxStatement>()) {
+        sequence(AssignmentExpression) { it }
+        sequence(Identifier, token(":"), node<FoxType>()) { name, _, type -> FoxTypeBinding(name, type) }
+        sequence(token("break")) { FoxBreak(null) }
+        sequence(token("break"), Label) { _, label -> FoxBreak(label) }
+        sequence(token("continue")) { FoxContinue(null) }
+        sequence(token("continue"), Label) { _, label -> FoxContinue(label) }
+        sequence(token("return")) { FoxReturn(null) }
+        sequence(token("return"), node<FoxStatement>()) { _, value -> FoxReturn(value) }
+        sequence(token("yield"), node<FoxStatement>()) { _, value -> FoxYield(null, value) }
+        sequence(token("yield"), Label, node<FoxStatement>()) { _, label, value -> FoxYield(label, value) }
+        sequence(node<FoxBlock>()) { it }
+        sequence(IfCore) { core -> FoxIf(null, core.condition, core.thenBody, core.elseBody) }
+        sequence(WhileCore) { core -> FoxWhile(null, core.condition, core.body) }
+        sequence(DoWhileCore) { core -> FoxDoWhile(null, core.body, core.condition) }
+        sequence(WhenCore) { core -> FoxWhen(null, core.value, core.cases) }
+        sequence(Label, IfCore) { label, core -> FoxIf(label, core.condition, core.thenBody, core.elseBody) }
+        sequence(Label, WhileCore) { label, core -> FoxWhile(label, core.condition, core.body) }
+        sequence(Label, DoWhileCore) { label, core -> FoxDoWhile(label, core.body, core.condition) }
+        sequence(Label, WhenCore) { label, core -> FoxWhen(label, core.value, core.cases) }
+    }
     
-    add(
-        serial(
-            IfCore,
+    target(node<FoxBlock>()) {
+        sequence(StatementBlock) { FoxBlock(null, it) }
+        sequence(Label, StatementBlock) { label, it -> FoxBlock(label, it) }
+    }
+    
+    target(IfCore) {
+        sequence(
             token("if"),
             ParenthesizedStatement,
             node<FoxStatement>(),
-        ) { _, condition, body -> ParsedIfCore(condition, body, null) },
-    )
-    add(
-        serial(
-            IfCore,
+        ) { _, condition, body -> FoxIf(null, condition, body, null) }
+        sequence(
             token("if"),
             ParenthesizedStatement,
             node<FoxStatement>(),
             token("else"),
             node<FoxStatement>(),
-        ) { _, condition, thenBody, _, elseBody -> ParsedIfCore(condition, thenBody, elseBody) },
-    )
-    add(
-        serial(node<FoxStatement>(), IfCore) { core ->
-            FoxIf(null, core.condition, core.thenBody, core.elseBody)
-        },
-    )
-    add(
-        serial(node<FoxStatement>(), Label, IfCore) { label, core ->
-            FoxIf(label, core.condition, core.thenBody, core.elseBody)
-        },
-    )
+        ) { _, condition, thenBody, _, elseBody -> FoxIf(null, condition, thenBody, elseBody) }
+    }
     
-    add(
-        serial(
-            WhileCore,
+    target(WhileCore) {
+        sequence(
             token("while"),
             ParenthesizedStatement,
             node<FoxStatement>(),
-        ) { _, condition, body -> ParsedWhileCore(condition, body) },
-    )
-    add(
-        serial(node<FoxStatement>(), WhileCore) { core ->
-            FoxWhile(null, core.condition, core.body)
-        },
-    )
-    add(
-        serial(node<FoxStatement>(), Label, WhileCore) { label, core ->
-            FoxWhile(label, core.condition, core.body)
-        },
-    )
+        ) { _, condition, body -> FoxWhile(null, condition, body) }
+    }
     
-    add(
-        serial(
-            DoWhileCore,
+    target(DoWhileCore) {
+        sequence(
             token("do"),
             node<FoxStatement>(),
             token("while"),
             ParenthesizedStatement,
-        ) { _, body, _, condition -> ParsedDoWhileCore(body, condition) },
-    )
-    add(
-        serial(node<FoxStatement>(), DoWhileCore) { core ->
-            FoxDoWhile(null, core.body, core.condition)
-        },
-    )
-    add(
-        serial(node<FoxStatement>(), Label, DoWhileCore) { label, core ->
-            FoxDoWhile(label, core.body, core.condition)
-        },
-    )
+        ) { _, body, _, condition -> FoxDoWhile(null, body, condition) }
+    }
     
-    add(
+    target(WhenCaseConditionList) {
         listLike(
-            WhenCaseConditionList,
             null,
             node<FoxStatement>(),
             token(","),
             token("->"),
-        ),
-    )
-    add(
-        serial(
-            WhenCase,
+        ) { it }
+    }
+    
+    target(WhenCase) {
+        sequence(
             WhenCaseConditionList,
             node<FoxStatement>(),
-        ) { conditions, body -> FoxCase(conditions, body) },
-    )
-    add(
-        serial(
-            WhenCase,
+        ) { conditions, body -> FoxCase(conditions, body) }
+        sequence(
             token("else"),
             token("->"),
             node<FoxStatement>(),
-        ) { _, _, body -> FoxCase(emptyList(), body) },
-    )
-    add(
+        ) { _, _, body -> FoxCase(emptyList(), body) }
+    }
+    
+    target(WhenCaseList) {
         listLike(
-            WhenCaseList,
             token("{"),
             WhenCase,
             null,
             token("}"),
-        ),
-    )
-    add(
-        serial(
-            WhenCore,
+        ) { it }
+    }
+    
+    target(WhenCore) {
+        sequence(
             token("when"),
             WhenCaseList,
-        ) { _, cases -> ParsedWhenCore(null, cases) },
-    )
-    add(
-        serial(
-            WhenCore,
+        ) { _, cases -> FoxWhen(null, null, cases) }
+        sequence(
             token("when"),
             ParenthesizedStatement,
             WhenCaseList,
-        ) { _, value, cases -> ParsedWhenCore(value, cases) },
-    )
-    add(
-        serial(node<FoxStatement>(), WhenCore) { core ->
-            FoxWhen(null, core.value, core.cases)
-        },
-    )
-    add(
-        serial(node<FoxStatement>(), Label, WhenCore) { label, core ->
-            FoxWhen(label, core.value, core.cases)
-        },
-    )
-}
-
-private fun topLevelProductions(): List<Production<*>> = buildList {
-    add(serial(ThisTypeQualifier, node<FoxType>(), token(".")) { type, _ -> type })
-    add(serial(ReturnTypeClause, token(":"), node<FoxType>()) { _, type -> type })
+        ) { _, value, cases -> FoxWhen(null, value, cases) }
+    }
     
-    add(
-        serial(
-            node<FoxTypeAlias>(),
+    target(node<FoxTypeAlias>()) {
+        sequence(
             token("type"),
             TypeName,
             FormalGenericParameterListWithoutConstraints,
             token("="),
             node<FoxType>(),
-        ) { _, name, generics, _, type -> FoxTypeAlias(name, generics, type) },
-    )
-    add(
-        serial(
-            node<FoxTypeAlias>(),
+        ) { _, name, generics, _, type -> FoxTypeAlias(name, generics, type) }
+        sequence(
             token("type"),
             TypeName,
             token("="),
             node<FoxType>(),
-        ) { _, name, _, type -> FoxTypeAlias(name, emptyOrderedSet(), type) },
-    )
+        ) { _, name, _, type -> FoxTypeAlias(name, emptyOrderedSet(), type) }
+    }
     
-    add(
-        serial(
-            MethodHead,
+    target(ThisTypeQualifier) { sequence(node<FoxType>(), token(".")) { type, _ -> type } }
+    target(ReturnTypeClause) { sequence(token(":"), node<FoxType>()) { _, type -> type } }
+    
+    target(MethodHead) {
+        sequence(
             token("def"),
             FormalGenericParameterList,
             ThisTypeQualifier,
             Identifier,
             FormalParameterList,
         ) { _, generics, thisType, name, parameters ->
-            ParsedMethodHead(generics, thisType, name, parameters)
-        },
-    )
-    add(
-        serial(
-            MethodHead,
+            FoxMethodDefinition(generics, thisType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+        }
+        sequence(
             token("def"),
             FormalGenericParameterList,
             Identifier,
             FormalParameterList,
         ) { _, generics, name, parameters ->
-            ParsedMethodHead(generics, FoxUnitType, name, parameters)
-        },
-    )
-    add(
-        serial(
-            MethodHead,
+            FoxMethodDefinition(generics, FoxUnitType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+        }
+        sequence(
             token("def"),
             ThisTypeQualifier,
             Identifier,
             FormalParameterList,
         ) { _, thisType, name, parameters ->
-            ParsedMethodHead(emptyOrderedMap(), thisType, name, parameters)
-        },
-    )
-    add(
-        serial(
-            MethodHead,
+            FoxMethodDefinition(emptyOrderedMap(), thisType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+        }
+        sequence(
             token("def"),
             Identifier,
             FormalParameterList,
         ) { _, name, parameters ->
-            ParsedMethodHead(emptyOrderedMap(), FoxUnitType, name, parameters)
-        },
-    )
-    add(
-        serial(
-            node<FoxMethodDefinition>(),
+            FoxMethodDefinition(emptyOrderedMap(), FoxUnitType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+        }
+    }
+    
+    target(node<FoxMethodDefinition>()) {
+        sequence(
             MethodHead,
             ReturnTypeClause,
-            node<FoxStatement>(),
-        ) { head, returnType, body ->
-            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, returnType, body)
-        },
-    )
-    add(
-        serial(
-            node<FoxMethodDefinition>(),
+            node<FoxBlock>(),
+        ) { head, returnType, body -> FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, returnType, body) }
+        sequence(
             MethodHead,
-            node<FoxStatement>(),
-        ) { head, body ->
-            FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, FoxUnitType, body)
-        },
-    )
+            node<FoxBlock>(),
+        ) { head, body -> FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, FoxUnitType, body) }
+    }
     
-    add(serial(node<FoxFileElement>(), node<FoxTypeAlias>()) { it })
-    add(serial(node<FoxFileElement>(), node<FoxMethodDefinition>()) { it })
-    add(listLike(FileElementList, null, node<FoxFileElement>(), null, null))
-    add(serial(node<FoxFile>(), FileElementList) { FoxFile(it) })
+    target(node<FoxFileElement>()) {
+        sequence(node<FoxTypeAlias>()) { it }
+        sequence(node<FoxMethodDefinition>()) { it }
+    }
+    
+    target(node<FoxFile>()) {
+        listLike(null, node<FoxFileElement>(), null, null) { FoxFile(it) }
+    }
 }
 
-private data class ParsedIfCore(
-    val condition: FoxStatement,
-    val thenBody: FoxStatement,
-    val elseBody: FoxStatement?,
-)
-
-private data class ParsedWhileCore(
-    val condition: FoxStatement,
-    val body: FoxStatement,
-)
-
-private data class ParsedDoWhileCore(
-    val body: FoxStatement,
-    val condition: FoxStatement,
-)
-
-private data class ParsedWhenCore(
-    val value: FoxStatement?,
-    val cases: List<FoxCase>,
-)
-
-private data class ParsedMethodHead(
-    val generics: OrderedMap<String, FoxType>,
-    val thisType: FoxType,
-    val name: String,
-    val parameters: OrderedMap<String, FoxType>,
-)
+val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
 
 private sealed interface ParsedMethodTypeArgument {
     data class This(val type: FoxType) : ParsedMethodTypeArgument
@@ -989,32 +925,6 @@ private sealed interface ParsedMethodTypeArgument {
     data class Parameter(val name: String, val type: FoxType) : ParsedMethodTypeArgument
     data class AnonymousType(val type: FoxType) : ParsedMethodTypeArgument
 }
-
-private fun fixedTokens(vararg texts: String): List<Production<*>> = texts.map { fixed(token(it), it) }
-
-private fun <N> tokenValues(
-    result: NonTerminal<N>,
-    vararg mappings: Pair<String, N>,
-): List<Production<*>> = mappings.map { (text, value) ->
-    serial(result, token(text)) { value }
-}
-
-private fun <N> regexValue(
-    source: NonTerminal<String>,
-    pattern: String,
-    expectation: String,
-    result: NonTerminal<N>,
-    parser: (String) -> N,
-): List<Production<*>> = listOf(
-    regex(source, Regex(pattern), expectation),
-    serial(result, source) {
-        try {
-            parser(it)
-        } catch (e: Exception) {
-            throw ParseException("Invalid number: $it, cause: ${e.message}")
-        }
-    },
-)
 
 private fun List<String>.toSet(itemName: String): Set<String> {
     val result = LinkedHashSet<String>()
@@ -1115,18 +1025,4 @@ private fun List<ParsedMethodTypeArgument>.toFoxMethodType(): FoxMethodType {
         }
     }
     return FoxMethodType(thisType, parameters, returnType)
-}
-
-private val formattedExpressionCache = Collections.synchronizedMap(HashMap<String, FoxStatement>())
-
-private fun parseFormattedExpression(source: String): FoxStatement {
-    formattedExpressionCache[source]?.let { return it }
-    val parser = Parser(FoxGrammar, node<FoxStatement>())
-    val report = parser.parse(source)
-    val success = report.result as? Success<FoxStatement>
-    if (success != null && success.interval.end.fragIndex == report.context.fragments.size) {
-        formattedExpressionCache[source] = success.node
-        return success.node
-    }
-    throw ParseException("Invalid formatted string expression '$source': ${report.stop}")
 }

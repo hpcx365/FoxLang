@@ -15,7 +15,9 @@ fun <N> NonTerminal<N>.orderedSet(): NonTerminal<OrderedSet<N>> = OrderedSetNonT
 fun <K, V> NonTerminal<K>.orderedMap(value: NonTerminal<V>): NonTerminal<OrderedMap<K, V>> = OrderedMapNonTerminal(this, value)
 fun <N> NonTerminal<N>.name(name: String): NonTerminal<N> = NamedNonTerminal(this, name)
 
-sealed interface NonTerminal<N>
+sealed interface NonTerminal<N> {
+    override fun toString(): String
+}
 
 data class ClassNonTerminal<N : Any>(val clazz: KClass<N>) : NonTerminal<N> {
     override fun toString() = clazz.simpleName ?: clazz.toString()

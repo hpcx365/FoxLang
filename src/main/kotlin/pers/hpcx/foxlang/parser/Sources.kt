@@ -1,25 +1,26 @@
 package pers.hpcx.foxlang.parser
 
 @JvmInline
-value class Cursor(val fragIndex: Int) : Comparable<Cursor> {
+value class SourcePosition(val fragIndex: Int) : Comparable<SourcePosition> {
+    
     init {
         require(fragIndex >= 0) { "Fragment index must be non-negative: $fragIndex" }
     }
     
-    operator fun plus(other: Int) = Cursor(fragIndex + other)
-    override fun compareTo(other: Cursor) = fragIndex.compareTo(other.fragIndex)
+    operator fun plus(other: Int) = SourcePosition(fragIndex + other)
+    override fun compareTo(other: SourcePosition) = fragIndex.compareTo(other.fragIndex)
 }
 
-data class Interval(val begin: Cursor, val end: Cursor) : Comparable<Interval> {
+data class SourceSpan(val begin: SourcePosition, val end: SourcePosition) : Comparable<SourceSpan> {
+    
     init {
         require(begin <= end) { "Begin must be less than or equal to end: $begin, $end" }
     }
     
     fun isEmpty() = begin == end
-    
     fun isNotEmpty() = begin < end
     
-    override fun compareTo(other: Interval): Int {
+    override fun compareTo(other: SourceSpan): Int {
         check(begin == other.begin) { "Begin must be equal: $begin, ${other.begin}" }
         return end.compareTo(other.end)
     }
@@ -28,6 +29,7 @@ data class Interval(val begin: Cursor, val end: Cursor) : Comparable<Interval> {
 sealed interface SourceFragment
 
 data class PlainFragment(val line: Int, val column: Int, val text: String) : SourceFragment {
+    
     init {
         require(line >= 0) { "Line number must be non-negative: $line" }
         require(column >= 0) { "Column must be non-negative: $column" }
@@ -35,64 +37,44 @@ data class PlainFragment(val line: Int, val column: Int, val text: String) : Sou
         require(text.none { it.isWhitespace() }) { "Text must not contain whitespace: $text" }
     }
     
-    override fun toString(): String {
-        return "line ${line + 1}, column ${column + 1}: $text"
-    }
+    override fun toString() = "line ${line + 1}, column ${column + 1}: <plain-text> $text"
+}
+
+data class LineSeparatorFragment(val line: Int, val column: Int) : SourceFragment {
+    
+    override fun toString() = "line ${line + 1}, column ${column + 1}: <line-separator>"
 }
 
 data class CharFragment(val line: Int, val column: Int, val char: Char) : SourceFragment {
+    
     init {
         require(line >= 0) { "Line number must be non-negative: $line" }
         require(column >= 0) { "Column must be non-negative: $column" }
     }
     
-    override fun toString(): String {
-        return "line ${line + 1}, column ${column + 1}: '${
-            when (char) {
-                '\b' -> "\\b"
-                '\t' -> "\\t"
-                '\n' -> "\\n"
-                '\r' -> "\\r"
-                '\\' -> "\\\\"
-                '\'' -> "\\'"
-                '\"' -> "\\\""
-                else -> char
-            }
-        }'"
-    }
+    override fun toString() = "line ${line + 1}, column ${column + 1}: <char-literal> '${
+        when (char) {
+            '\b' -> "\\b"
+            '\t' -> "\\t"
+            '\n' -> "\\n"
+            '\r' -> "\\r"
+            '\\' -> "\\\\"
+            '\'' -> "\\'"
+            '\"' -> "\\\""
+            else -> char
+        }
+    }'"
 }
 
 data class StringFragment(val line: Int, val column: Int, val string: String) : SourceFragment {
+    
     init {
         require(line >= 0) { "Line number must be non-negative: $line" }
         require(column >= 0) { "Column must be non-negative: $column" }
     }
     
-    override fun toString(): String {
-        return "line ${line + 1}, column ${column + 1}: \"$string\""
-    }
+    override fun toString() = "line ${line + 1}, column ${column + 1}: <string-literal> $string"
 }
-
-data class FormattedStringFragment(
-    val line: Int,
-    val column: Int,
-    val isRaw: Boolean,
-    val parts: List<FormattedStringPart>,
-) : SourceFragment {
-    init {
-        require(line >= 0) { "Line number must be non-negative: $line" }
-        require(column >= 0) { "Column must be non-negative: $column" }
-    }
-    
-    override fun toString(): String {
-        return "line ${line + 1}, column ${column + 1}: formatted string"
-    }
-}
-
-sealed interface FormattedStringPart
-data class FormattedTextPart(val text: String) : FormattedStringPart
-data class FormattedExpressionPart(val source: String) : FormattedStringPart
-data class FormattedStringTemplate(val isRaw: Boolean, val parts: List<FormattedStringPart>)
 
 fun String.toFragments(): List<SourceFragment> {
     val lines = lines()
@@ -122,6 +104,10 @@ fun String.toFragments(): List<SourceFragment> {
         val lineText = lines[line]
         val text = lineText.substring(begin, end)
         return PlainFragment(line, begin, text)
+    }
+    
+    fun fragmentLineSeparator(line: Int, begin: Int): LineSeparatorFragment {
+        return LineSeparatorFragment(line, begin)
     }
     
     fun fragmentChar(line: Int, begin: Int, end: Int): CharFragment {
@@ -210,124 +196,11 @@ fun String.toFragments(): List<SourceFragment> {
         return StringFragment(line, begin, builder.toString())
     }
     
-    fun fragmentFormattedString(
-        line: Int,
-        begin: Int,
-        end: Int,
-        prefixLength: Int,
-        isRaw: Boolean,
-    ): FormattedStringFragment {
-        val text = lines[line].substring(begin + prefixLength, end - 1)
-        val parts = mutableListOf<FormattedStringPart>()
-        val builder = StringBuilder()
-        var i = 0
-        var literalBraceDepth = 0
-        
-        fun flushText() {
-            if (builder.isNotEmpty()) {
-                parts += FormattedTextPart(builder.toString())
-                builder.setLength(0)
-            }
-        }
-        
-        while (i < text.length) {
-            when (val char = text[i++]) {
-                '\\' -> {
-                    if (isRaw) {
-                        if (i >= text.length) {
-                            builder.append('\\')
-                            continue
-                        }
-                        when (text[i]) {
-                            '"' -> {
-                                builder.append('"')
-                                i++
-                            }
-                            '\\' -> {
-                                if (i + 1 == text.length) {
-                                    builder.append('\\')
-                                    i++
-                                } else {
-                                    builder.append('\\')
-                                }
-                            }
-                            '{' -> {
-                                builder.append('{')
-                                literalBraceDepth++
-                                i++
-                            }
-                            '}' -> {
-                                builder.append('}')
-                                i++
-                            }
-                            else -> builder.append('\\')
-                        }
-                    } else {
-                        if (i >= text.length) throw ParseException("Unterminated escape sequence in formatted string literal")
-                        val nextChar = text[i++]
-                        when (nextChar) {
-                            't' -> builder.append('\t')
-                            'b' -> builder.append('\b')
-                            'n' -> builder.append('\n')
-                            'r' -> builder.append('\r')
-                            '\\' -> builder.append('\\')
-                            '"' -> builder.append('"')
-                            '{' -> {
-                                builder.append('{')
-                                literalBraceDepth++
-                            }
-                            '}' -> builder.append('}')
-                            'u' -> {
-                                if (i + 3 >= text.length) {
-                                    throw ParseException("Unterminated unicode escape sequence in formatted string literal")
-                                }
-                                builder.append(text.substring(i, i + 4).toInt(16).toChar())
-                                i += 4
-                            }
-                            else -> throw ParseException("Invalid escape sequence in formatted string literal")
-                        }
-                    }
-                }
-                
-                '{' -> {
-                    if (literalBraceDepth > 0) {
-                        builder.append('{')
-                        literalBraceDepth++
-                        continue
-                    }
-                    flushText()
-                    val endIndex = findFormattedExpressionEnd(text, i)
-                    val expressionSource = text.substring(i, endIndex).trim()
-                    if (expressionSource.isEmpty()) {
-                        throw ParseException("Empty expression in formatted string literal")
-                    }
-                    parts += FormattedExpressionPart(expressionSource)
-                    i = endIndex + 1
-                }
-                
-                '}' -> {
-                    if (literalBraceDepth > 0) {
-                        builder.append('}')
-                        literalBraceDepth--
-                    } else {
-                        throw ParseException("Unexpected '}' in formatted string literal")
-                    }
-                }
-                else -> builder.append(char)
-            }
-        }
-        
-        if (literalBraceDepth != 0) {
-            throw ParseException("Unterminated escaped brace section in formatted string literal")
-        }
-        flushText()
-        return FormattedStringFragment(line, begin, isRaw, parts)
-    }
-    
     val result = mutableListOf<SourceFragment>()
     
     while (line < lines.size) {
         if (column >= lines[line].length) {
+            result += fragmentLineSeparator(line, lines[line].length)
             move(0)
             continue
         }
@@ -361,32 +234,12 @@ fun String.toFragments(): List<SourceFragment> {
             continue
         }
         
-        if (lines[line].startsWith("rf\"", column)) {
-            val begin = column
-            val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 3, '"')
-                ?: throw ParseException("Unterminated raw formatted string at line ${line + 1}, column ${begin + 1}")
-            result += fragmentFormattedString(line, begin, index + 1, prefixLength = 3, isRaw = true)
-            move(index - column + 1)
-            continue
-        }
-        
         if (lines[line].startsWith("r\"", column)) {
             val begin = column
             val lineText = lines[line]
             val index = findClosingQuote(lineText, begin + 2, '"')
                 ?: throw ParseException("Unterminated raw string at line ${line + 1}, column ${begin + 1}")
             result += fragmentRawString(line, begin, index + 1)
-            move(index - column + 1)
-            continue
-        }
-        
-        if (lines[line].startsWith("f\"", column)) {
-            val begin = column
-            val lineText = lines[line]
-            val index = findClosingQuote(lineText, begin + 2, '"')
-                ?: throw ParseException("Unterminated formatted string at line ${line + 1}, column ${begin + 1}")
-            result += fragmentFormattedString(line, begin, index + 1, prefixLength = 2, isRaw = false)
             move(index - column + 1)
             continue
         }
@@ -431,51 +284,6 @@ fun String.toFragments(): List<SourceFragment> {
 
 fun Char.isWordChar(): Boolean {
     return this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '_'
-}
-
-private fun findFormattedExpressionEnd(
-    text: String,
-    start: Int,
-): Int {
-    var index = start
-    var braceDepth = 0
-    var parenDepth = 0
-    var bracketDepth = 0
-    while (index < text.length) {
-        when (text[index]) {
-            '\'' -> index = skipQuoted(text, index, '\'')
-            '"' -> index = skipQuoted(text, index, '"')
-            '(' -> parenDepth++
-            ')' -> if (parenDepth > 0) parenDepth--
-            '[' -> bracketDepth++
-            ']' -> if (bracketDepth > 0) bracketDepth--
-            '{' -> braceDepth++
-            '}' -> {
-                if (braceDepth == 0 && parenDepth == 0 && bracketDepth == 0) return index
-                if (braceDepth > 0) braceDepth--
-            }
-        }
-        index++
-    }
-    throw ParseException("Unterminated expression in formatted string literal")
-}
-
-private fun skipQuoted(
-    text: String,
-    begin: Int,
-    quote: Char,
-): Int {
-    var index = begin + 1
-    while (index < text.length) {
-        val char = text[index]
-        if (char == '\\') {
-            index += 2
-            continue
-        }
-        if (char == quote) return index
-        index++
-    }
-    throw ParseException("Unterminated quoted literal in formatted string expression")
 }
 
 private fun findClosingQuote(

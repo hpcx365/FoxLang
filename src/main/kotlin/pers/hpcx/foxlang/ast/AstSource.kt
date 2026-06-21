@@ -17,781 +17,627 @@ enum class AstSourceStyle {
     CANONICAL,
 }
 
-val DefaultAstSourcePrinter = AstSourcePrinter()
+val DefaultAstSourceContext = AstSourceContext()
 
-fun FoxFile.toSource() = DefaultAstSourcePrinter.render(this)
-fun FoxFileElement.toSource() = DefaultAstSourcePrinter.render(this)
-fun FoxType.toSource() = DefaultAstSourcePrinter.render(this)
-fun FoxStatement.toSource() = DefaultAstSourcePrinter.render(this)
+fun FoxFile.toSource() = with(DefaultAstSourceContext) { printToString { printFile(this@toSource) } }
+fun FoxFileElement.toSource() = with(DefaultAstSourceContext) { printToString { printFileElement(this@toSource) } }
+fun FoxType.toSource() = with(DefaultAstSourceContext) { printToString { printType(this@toSource) } }
+fun FoxStatement.toSource() = with(DefaultAstSourceContext) { printToString { printStatement(this@toSource) } }
 
-class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
+private fun printToString(block: PrintWriter.() -> Unit): String {
+    val result = StringWriter()
+    PrintWriter(result).block()
+    return result.toString()
+}
+
+class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     
     private val indentUnit = options.indent
     private val canonical = options.style == AstSourceStyle.CANONICAL
     private val fileSeparator = if (options.compact) "\n" else "\n\n"
     
-    // File elements
-    fun render(file: FoxFile) = writeToString { render(file, it) }
-    
-    fun render(file: FoxFile, writer: PrintWriter) {
+    fun PrintWriter.printFile(file: FoxFile) {
         file.elements.forEachIndexed { index, element ->
-            if (index > 0) writer.print(fileSeparator)
-            render(element, writer)
+            if (index > 0) print(fileSeparator)
+            printFileElement(element)
         }
     }
     
-    fun render(element: FoxFileElement) = writeToString { render(element, it) }
-    
-    fun render(element: FoxFileElement, writer: PrintWriter) {
+    fun PrintWriter.printFileElement(element: FoxFileElement) {
         when (element) {
-            is FoxTypeAlias -> renderTypeAlias(element, writer)
-            is FoxMethodDefinition -> renderMethodDefinition(element, writer)
+            is FoxTypeAlias -> printTypeAlias(element)
+            is FoxMethodDefinition -> printMethodDefinition(element)
         }
     }
     
-    // Types
-    fun render(type: FoxType) = writeToString { render(type, it) }
-    
-    fun render(type: FoxType, writer: PrintWriter) {
+    fun PrintWriter.printType(type: FoxType) {
         when (type) {
-            is FoxPrimitiveType -> writer.print(primitiveTypeText(type))
-            is FoxWildcardType -> renderWildcardType(type, writer)
-            is FoxBuiltInType -> renderBuiltInType(type, writer)
-            is FoxTransformType -> renderTransformType(type, writer)
-            is FoxUnresolvedType -> renderUnresolvedType(type, writer)
-            is FoxPlaceholderType -> error("Placeholder type should not be rendered")
+            is FoxPrimitiveType -> printPrimitiveType(type)
+            is FoxWildcardType -> printWildcardType(type)
+            is FoxBuiltInType -> printBuiltInType(type)
+            is FoxTransformType -> printTransformType(type)
+            is FoxUnresolvedType -> printUnresolvedType(type)
+            is FoxPlaceholderType -> error("Placeholder type should not be printed")
         }
     }
     
-    // Statements
-    fun render(statement: FoxStatement) = writeToString { render(statement, it) }
-    
-    fun render(statement: FoxStatement, writer: PrintWriter) {
-        render(statement, writer, 0, Standalone)
+    fun PrintWriter.printStatement(statement: FoxStatement) {
+        printStatement(statement, 0, Standalone)
     }
     
-    private fun renderTypeAlias(
-        element: FoxTypeAlias,
-        writer: PrintWriter,
-    ) {
-        writer.print("type ")
-        writer.print(element.name)
-        writeTypeParameterNames(element.generics, writer)
-        writer.print(" = ")
-        render(element.alias, writer)
+    fun PrintWriter.printTypeAlias(element: FoxTypeAlias) {
+        print("type ")
+        print(element.name)
+        printTypeParameterNames(element.generics)
+        print(" = ")
+        printType(element.alias)
     }
     
-    private fun renderMethodDefinition(
-        element: FoxMethodDefinition,
-        writer: PrintWriter,
-    ) {
-        writer.print("def ")
+    fun PrintWriter.printMethodDefinition(element: FoxMethodDefinition) {
+        print("def ")
         if (canonical || element.generics.isNotEmpty()) {
-            writeFormalGenerics(element.generics, writer)
-            writer.print(' ')
+            printFormalGenerics(element.generics)
+            print(' ')
         }
         if (canonical || element.thisType != FoxUnitType) {
-            render(element.thisType, writer)
-            writer.print('.')
+            printType(element.thisType)
+            print('.')
         }
-        writer.print(element.name)
-        writeFormalParameters(element.parameters, writer)
+        print(element.name)
+        printFormalParameters(element.parameters)
         if (canonical || element.returnType != FoxUnitType) {
-            writer.print(": ")
-            render(element.returnType, writer)
+            print(": ")
+            printType(element.returnType)
         }
-        writer.print(' ')
-        renderMethodBody(element.body, writer)
+        print(' ')
+        printMethodBody(element.body)
     }
     
-    private fun primitiveTypeText(type: FoxPrimitiveType) = when (type) {
-        FoxVoidType -> "Void"
-        FoxUnitType -> "Unit"
-        FoxBoolType -> "Bool"
-        FoxByteType -> "Byte"
-        FoxShortType -> "Short"
-        FoxIntType -> "Int"
-        FoxLongType -> "Long"
-        FoxFloatType -> "Float"
-        FoxDoubleType -> "Double"
-        FoxCharType -> "Char"
-        FoxStringType -> "String"
-    }
-    
-    private fun wildcardTypeText(type: FoxWildcardType) = when (type) {
-        FoxAnyType -> "Any"
-        is FoxAnyOfType -> error("Parameterized wildcard type should not be rendered as plain text")
-        is FoxAllOfType -> error("Parameterized wildcard type should not be rendered as plain text")
-        is FoxNoneOfType -> error("Parameterized wildcard type should not be rendered as plain text")
-        FoxAnyTupleType -> "AnyTuple"
-        is FoxAnyTupleOfType -> error("Parameterized wildcard type should not be rendered as plain text")
-        FoxAnyStructType -> "AnyStruct"
-        is FoxAnyStructOfType -> error("Parameterized wildcard type should not be rendered as plain text")
-        FoxAnyObjectType -> "AnyObject"
-        FoxAnyEnumType -> "AnyEnum"
-    }
-    
-    private fun renderWildcardType(
-        type: FoxWildcardType,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printPrimitiveType(type: FoxPrimitiveType) {
         when (type) {
-            is FoxAnyOfType -> renderTypeListArgument("AnyOf", type.types, writer)
-            is FoxAllOfType -> renderTypeListArgument("AllOf", type.types, writer)
-            is FoxNoneOfType -> renderTypeListArgument("NoneOf", type.types, writer)
-            is FoxAnyTupleOfType -> renderSingleTypeArgument("AnyTupleOf", type.component, writer)
-            is FoxAnyStructOfType -> renderTypeListArgument("AnyStructOf", type.fields, writer)
-            else -> writer.print(wildcardTypeText(type))
+            FoxVoidType -> print("Void")
+            FoxUnitType -> print("Unit")
+            FoxBoolType -> print("Bool")
+            FoxByteType -> print("Byte")
+            FoxShortType -> print("Short")
+            FoxIntType -> print("Int")
+            FoxLongType -> print("Long")
+            FoxFloatType -> print("Float")
+            FoxDoubleType -> print("Double")
+            FoxCharType -> print("Char")
+            FoxStringType -> print("String")
         }
     }
     
-    private fun renderBuiltInType(
-        type: FoxBuiltInType,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printWildcardType(type: FoxWildcardType) {
         when (type) {
-            is FoxTupleType -> renderTupleType(type, writer)
-            is FoxStructType -> renderStructType(type, writer)
-            is FoxObjectType -> renderObjectType(type, writer)
-            is FoxEnumType -> renderEnumType(type, writer)
-            is FoxArrayType -> renderSingleTypeArgument("Array", type.element, writer)
-            is FoxRefType -> renderSingleTypeArgument("Ref", type.referent, writer)
-            is FoxMethodType -> renderMethodType(type, writer)
+            FoxAnyType -> print("Any")
+            FoxAnyTupleType -> print("AnyTuple")
+            FoxAnyStructType -> print("AnyStruct")
+            FoxAnyObjectType -> print("AnyObject")
+            FoxAnyEnumType -> print("AnyEnum")
+            is FoxAnyOfType -> printTypeListArgument("AnyOf", type.types)
+            is FoxAllOfType -> printTypeListArgument("AllOf", type.types)
+            is FoxNoneOfType -> printTypeListArgument("NoneOf", type.types)
+            is FoxAnyTupleOfType -> printSingleTypeArgument("AnyTupleOf", type.component)
+            is FoxAnyStructOfType -> printTypeListArgument("AnyStructOf", type.fields)
         }
     }
     
-    private fun renderTransformType(
-        type: FoxTransformType,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printBuiltInType(type: FoxBuiltInType) {
         when (type) {
-            is FoxTupleComponentAtType -> renderTypeAndIntArgument("ComponentAt", type.type, type.index, writer)
-            is FoxTupleLastComponentAtType -> renderTypeAndIntArgument("LastComponentAt", type.type, type.index, writer)
-            is FoxTupleFirstComponentsOfType -> renderTypeAndIntArgument("FirstComponentsOf", type.type, type.count, writer)
-            is FoxTupleExactFirstComponentsOfType -> renderTypeAndIntArgument("ExactFirstComponentsOf", type.type, type.count, writer)
-            is FoxTupleLastComponentsOfType -> renderTypeAndIntArgument("LastComponentsOf", type.type, type.count, writer)
-            is FoxTupleExactLastComponentsOfType -> renderTypeAndIntArgument("ExactLastComponentsOf", type.type, type.count, writer)
-            is FoxTupleDropFirstComponentsOfType -> renderTypeAndIntArgument("DropFirstComponentsOf", type.type, type.count, writer)
-            is FoxTupleExactDropFirstComponentsOfType -> renderTypeAndIntArgument("ExactDropFirstComponentsOf", type.type, type.count, writer)
-            is FoxTupleDropLastComponentsOfType -> renderTypeAndIntArgument("DropLastComponentsOf", type.type, type.count, writer)
-            is FoxTupleExactDropLastComponentsOfType -> renderTypeAndIntArgument("ExactDropLastComponentsOf", type.type, type.count, writer)
-            is FoxTupleMergeComponentsOfType -> renderTypeListArgument("MergeComponentsOf", type.types, writer)
-            is FoxStructFieldOfType -> renderTypeAndNameArgument("FieldOf", type.type, type.name, writer)
-            is FoxStructFieldAtType -> renderTypeAndIntArgument("FieldAt", type.type, type.index, writer)
-            is FoxStructLastFieldAtType -> renderTypeAndIntArgument("LastFieldAt", type.type, type.index, writer)
-            is FoxStructFirstFieldsOfType -> renderTypeAndIntArgument("FirstFieldsOf", type.type, type.count, writer)
-            is FoxStructExactFirstFieldsOfType -> renderTypeAndIntArgument("ExactFirstFieldsOf", type.type, type.count, writer)
-            is FoxStructLastFieldsOfType -> renderTypeAndIntArgument("LastFieldsOf", type.type, type.count, writer)
-            is FoxStructExactLastFieldsOfType -> renderTypeAndIntArgument("ExactLastFieldsOf", type.type, type.count, writer)
-            is FoxStructDropFirstFieldsOfType -> renderTypeAndIntArgument("DropFirstFieldsOf", type.type, type.count, writer)
-            is FoxStructExactDropFirstFieldsOfType -> renderTypeAndIntArgument("ExactDropFirstFieldsOf", type.type, type.count, writer)
-            is FoxStructDropLastFieldsOfType -> renderTypeAndIntArgument("DropLastFieldsOf", type.type, type.count, writer)
-            is FoxStructExactDropLastFieldsOfType -> renderTypeAndIntArgument("ExactDropLastFieldsOf", type.type, type.count, writer)
-            is FoxStructFieldsOfType -> renderTypeAndNamesArgument("FieldsOf", type.type, type.names, writer)
-            is FoxStructDropFieldsOfType -> renderTypeAndNamesArgument("DropFieldsOf", type.type, type.names, writer)
-            is FoxStructMergeFieldsOfType -> renderTypeListArgument("MergeFieldsOf", type.types, writer)
-            is FoxObjectMemberOfType -> renderTypeAndNameArgument("MemberOf", type.type, type.name, writer)
-            is FoxObjectMembersOfType -> renderTypeAndNamesArgument("MembersOf", type.type, type.names, writer)
-            is FoxObjectDropMembersOfType -> renderTypeAndNamesArgument("DropMembersOf", type.type, type.names, writer)
-            is FoxObjectMergeMembersOfType -> renderTypeListArgument("MergeMembersOf", type.types, writer)
-            is FoxEnumItemOfType -> renderTypeAndNameArgument("ItemOf", type.type, type.name, writer)
-            is FoxEnumItemsOfType -> renderTypeAndNamesArgument("ItemsOf", type.type, type.names, writer)
-            is FoxEnumDropItemsOfType -> renderTypeAndNamesArgument("DropItemsOf", type.type, type.names, writer)
-            is FoxEnumMergeItemsOfType -> renderTypeListArgument("MergeItemsOf", type.types, writer)
-            is FoxArrayElementOfType -> renderSingleTypeArgument("ElementOf", type.type, writer)
-            is FoxRefReferentOfType -> renderSingleTypeArgument("ReferentOf", type.type, writer)
-            is FoxMethodOfType -> renderTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`), writer)
-            is FoxMethodThisOfType -> renderSingleTypeArgument("ThisOf", type.type, writer)
-            is FoxMethodParametersOfType -> renderSingleTypeArgument("ParametersOf", type.type, writer)
-            is FoxMethodReturnOfType -> renderSingleTypeArgument("ReturnOf", type.type, writer)
+            is FoxTupleType -> printTupleType(type)
+            is FoxStructType -> printStructType(type)
+            is FoxObjectType -> printObjectType(type)
+            is FoxEnumType -> printEnumType(type)
+            is FoxArrayType -> printSingleTypeArgument("Array", type.element)
+            is FoxRefType -> printSingleTypeArgument("Ref", type.referent)
+            is FoxMethodType -> printMethodType(type)
         }
     }
     
-    private fun renderTupleType(
-        type: FoxTupleType,
-        writer: PrintWriter,
-    ) {
-        writer.print("Tuple<")
+    private fun PrintWriter.printTransformType(type: FoxTransformType) {
+        when (type) {
+            is FoxTupleComponentAtType -> printTypeAndIntArgument("ComponentAt", type.type, type.index)
+            is FoxTupleLastComponentAtType -> printTypeAndIntArgument("LastComponentAt", type.type, type.index)
+            is FoxTupleFirstComponentsOfType -> printTypeAndIntArgument("FirstComponentsOf", type.type, type.count)
+            is FoxTupleExactFirstComponentsOfType -> printTypeAndIntArgument("ExactFirstComponentsOf", type.type, type.count)
+            is FoxTupleLastComponentsOfType -> printTypeAndIntArgument("LastComponentsOf", type.type, type.count)
+            is FoxTupleExactLastComponentsOfType -> printTypeAndIntArgument("ExactLastComponentsOf", type.type, type.count)
+            is FoxTupleDropFirstComponentsOfType -> printTypeAndIntArgument("DropFirstComponentsOf", type.type, type.count)
+            is FoxTupleExactDropFirstComponentsOfType -> printTypeAndIntArgument("ExactDropFirstComponentsOf", type.type, type.count)
+            is FoxTupleDropLastComponentsOfType -> printTypeAndIntArgument("DropLastComponentsOf", type.type, type.count)
+            is FoxTupleExactDropLastComponentsOfType -> printTypeAndIntArgument("ExactDropLastComponentsOf", type.type, type.count)
+            is FoxTupleMergeComponentsOfType -> printTypeListArgument("MergeComponentsOf", type.types)
+            is FoxStructFieldOfType -> printTypeAndNameArgument("FieldOf", type.type, type.name)
+            is FoxStructFieldAtType -> printTypeAndIntArgument("FieldAt", type.type, type.index)
+            is FoxStructLastFieldAtType -> printTypeAndIntArgument("LastFieldAt", type.type, type.index)
+            is FoxStructFirstFieldsOfType -> printTypeAndIntArgument("FirstFieldsOf", type.type, type.count)
+            is FoxStructExactFirstFieldsOfType -> printTypeAndIntArgument("ExactFirstFieldsOf", type.type, type.count)
+            is FoxStructLastFieldsOfType -> printTypeAndIntArgument("LastFieldsOf", type.type, type.count)
+            is FoxStructExactLastFieldsOfType -> printTypeAndIntArgument("ExactLastFieldsOf", type.type, type.count)
+            is FoxStructDropFirstFieldsOfType -> printTypeAndIntArgument("DropFirstFieldsOf", type.type, type.count)
+            is FoxStructExactDropFirstFieldsOfType -> printTypeAndIntArgument("ExactDropFirstFieldsOf", type.type, type.count)
+            is FoxStructDropLastFieldsOfType -> printTypeAndIntArgument("DropLastFieldsOf", type.type, type.count)
+            is FoxStructExactDropLastFieldsOfType -> printTypeAndIntArgument("ExactDropLastFieldsOf", type.type, type.count)
+            is FoxStructFieldsOfType -> printTypeAndNamesArgument("FieldsOf", type.type, type.names)
+            is FoxStructDropFieldsOfType -> printTypeAndNamesArgument("DropFieldsOf", type.type, type.names)
+            is FoxStructMergeFieldsOfType -> printTypeListArgument("MergeFieldsOf", type.types)
+            is FoxObjectMemberOfType -> printTypeAndNameArgument("MemberOf", type.type, type.name)
+            is FoxObjectMembersOfType -> printTypeAndNamesArgument("MembersOf", type.type, type.names)
+            is FoxObjectDropMembersOfType -> printTypeAndNamesArgument("DropMembersOf", type.type, type.names)
+            is FoxObjectMergeMembersOfType -> printTypeListArgument("MergeMembersOf", type.types)
+            is FoxEnumItemOfType -> printTypeAndNameArgument("ItemOf", type.type, type.name)
+            is FoxEnumItemsOfType -> printTypeAndNamesArgument("ItemsOf", type.type, type.names)
+            is FoxEnumDropItemsOfType -> printTypeAndNamesArgument("DropItemsOf", type.type, type.names)
+            is FoxEnumMergeItemsOfType -> printTypeListArgument("MergeItemsOf", type.types)
+            is FoxArrayElementOfType -> printSingleTypeArgument("ElementOf", type.type)
+            is FoxRefReferentOfType -> printSingleTypeArgument("ReferentOf", type.type)
+            is FoxMethodOfType -> printTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`))
+            is FoxMethodThisOfType -> printSingleTypeArgument("ThisOf", type.type)
+            is FoxMethodParametersOfType -> printSingleTypeArgument("ParametersOf", type.type)
+            is FoxMethodReturnOfType -> printSingleTypeArgument("ReturnOf", type.type)
+        }
+    }
+    
+    private fun PrintWriter.printTupleType(type: FoxTupleType) {
+        print("Tuple<")
         var first = true
         var current: FoxType? = null
         var count = 0
-        fun flushCurrent(out: PrintWriter) {
+        fun flushCurrent() {
             val value = current ?: return
-            if (!first) out.print(", ")
+            if (!first) print(", ")
             first = false
-            render(value, out)
+            printType(value)
             if (count > 1) {
-                out.print(':')
-                out.print(count)
+                print(':')
+                print(count)
             }
         }
         type.components.forEach { component ->
             if (current == component) {
                 count++
             } else {
-                flushCurrent(writer)
+                flushCurrent()
                 current = component
                 count = 1
             }
         }
-        flushCurrent(writer)
-        writer.print('>')
+        flushCurrent()
+        print('>')
     }
     
-    private fun renderStructType(
-        type: FoxStructType,
-        writer: PrintWriter,
-    ) {
-        writer.print("Struct<")
-        writeCommaSeparated(type.fields.entries, writer) { field, out ->
-            out.print(field.key)
-            out.print(": ")
-            render(field.value, out)
+    private fun PrintWriter.printStructType(type: FoxStructType) {
+        print("Struct<")
+        printCommaSeparated(type.fields.entries) { field ->
+            print(field.key)
+            print(": ")
+            printType(field.value)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun renderObjectType(
-        type: FoxObjectType,
-        writer: PrintWriter,
-    ) {
-        writer.print("Object<")
-        writeCommaSeparated(type.members.entries, writer) { member, out ->
-            out.print(member.key)
-            out.print(": ")
-            render(member.value, out)
+    private fun PrintWriter.printObjectType(type: FoxObjectType) {
+        print("Object<")
+        printCommaSeparated(type.members.entries) { member ->
+            print(member.key)
+            print(": ")
+            printType(member.value)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun renderEnumType(
-        type: FoxEnumType,
-        writer: PrintWriter,
-    ) {
-        writer.print("Enum<")
-        writeCommaSeparated(type.items.entries, writer) { item, out ->
-            out.print(item.key)
-            out.print(" = ")
-            render(item.value, out)
+    private fun PrintWriter.printEnumType(type: FoxEnumType) {
+        print("Enum<")
+        printCommaSeparated(type.items.entries) { item ->
+            print(item.key)
+            print(" = ")
+            printType(item.value)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun renderMethodType(
-        type: FoxMethodType,
-        writer: PrintWriter,
-    ) {
-        writer.print("Method<")
-        render(type.`this`, writer)
-        writer.print(", ")
+    private fun PrintWriter.printMethodType(type: FoxMethodType) {
+        print("Method<")
+        printType(type.`this`)
+        print(", ")
         type.parameters.forEach {
-            writer.print(it.key)
-            writer.print(": ")
-            render(it.value, writer)
-            writer.print(", ")
+            print(it.key)
+            print(": ")
+            printType(it.value)
+            print(", ")
         }
-        render(type.`return`, writer)
-        writer.print('>')
+        printType(type.`return`)
+        print('>')
     }
     
-    private fun renderUnresolvedType(
-        type: FoxUnresolvedType,
-        writer: PrintWriter,
-    ) {
-        writer.print(type.name)
+    private fun PrintWriter.printUnresolvedType(type: FoxUnresolvedType) {
+        print(type.name)
         type.parameters?.let { parameters ->
-            writer.print('<')
-            writeCommaSeparated(parameters, writer) { parameter, out ->
-                render(parameter, out)
+            print('<')
+            printCommaSeparated(parameters) { parameter ->
+                printType(parameter)
             }
-            writer.print('>')
+            print('>')
         }
     }
     
-    private fun renderSingleTypeArgument(
-        keyword: String,
-        type: FoxType,
-        writer: PrintWriter,
-    ) {
-        writer.print(keyword)
-        writer.print('<')
-        render(type, writer)
-        writer.print('>')
+    private fun PrintWriter.printSingleTypeArgument(keyword: String, type: FoxType) {
+        print(keyword)
+        print('<')
+        printType(type)
+        print('>')
     }
     
-    private fun renderTypeAndIntArgument(
-        keyword: String,
-        type: FoxType,
-        value: Int,
-        writer: PrintWriter,
-    ) {
-        writer.print(keyword)
-        writer.print('<')
-        render(type, writer)
-        writer.print(", ")
-        writer.print(value)
-        writer.print('>')
+    private fun PrintWriter.printTypeAndIntArgument(keyword: String, type: FoxType, value: Int) {
+        print(keyword)
+        print('<')
+        printType(type)
+        print(", ")
+        print(value)
+        print('>')
     }
     
-    private fun renderTypeAndNameArgument(
-        keyword: String,
-        type: FoxType,
-        name: String,
-        writer: PrintWriter,
-    ) {
-        writer.print(keyword)
-        writer.print('<')
-        render(type, writer)
-        writer.print(", ")
-        writer.print(name)
-        writer.print('>')
+    private fun PrintWriter.printTypeAndNameArgument(keyword: String, type: FoxType, name: String) {
+        print(keyword)
+        print('<')
+        printType(type)
+        print(", ")
+        print(name)
+        print('>')
     }
     
-    private fun renderTypeAndNamesArgument(
-        keyword: String,
-        type: FoxType,
-        names: Iterable<String>,
-        writer: PrintWriter,
-    ) {
-        writer.print(keyword)
-        writer.print('<')
-        render(type, writer)
-        writer.print(", ")
-        writeCommaSeparated(names, writer) { name, out ->
-            out.print(name)
+    private fun PrintWriter.printTypeAndNamesArgument(keyword: String, type: FoxType, names: Iterable<String>) {
+        print(keyword)
+        print('<')
+        printType(type)
+        print(", ")
+        printCommaSeparated(names) { name ->
+            print(name)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun renderTypeListArgument(
-        keyword: String,
-        types: Iterable<FoxType>,
-        writer: PrintWriter,
-    ) {
-        writer.print(keyword)
-        writer.print('<')
-        writeCommaSeparated(types, writer) { type, out ->
-            render(type, out)
+    private fun PrintWriter.printTypeListArgument(keyword: String, types: Iterable<FoxType>) {
+        print(keyword)
+        print('<')
+        printCommaSeparated(types) { type ->
+            printType(type)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun render(
-        statement: FoxStatement,
-        writer: PrintWriter,
-        indentLevel: Int,
-        position: StatementPosition,
-    ) {
+    private fun PrintWriter.printStatement(statement: FoxStatement, indentLevel: Int, position: StatementPosition) {
         val precedence = precedenceOf(statement)
-        if (needsParentheses(statement, precedence, position)) writer.print('(')
-        renderRawStatement(statement, writer, indentLevel)
-        if (needsParentheses(statement, precedence, position)) writer.print(')')
+        if (needsParentheses(statement, precedence, position)) print('(')
+        printRawStatement(statement, indentLevel)
+        if (needsParentheses(statement, precedence, position)) print(')')
     }
     
-    private fun renderRawStatement(
-        statement: FoxStatement,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
+    private fun PrintWriter.printRawStatement(statement: FoxStatement, indentLevel: Int) {
         when (statement) {
-            FoxThis -> writer.print("this")
-            is FoxSymbol -> writer.print(statement.name)
-            is FoxEntityStatement -> renderEntity(statement.value, writer)
-            is FoxFormattedString -> renderFormattedString(statement, writer)
-            is FoxBlock -> renderBlock(statement, writer, indentLevel)
-            is FoxUnary -> renderUnary(statement, writer, indentLevel)
-            is FoxBinary -> renderBinary(statement, writer, indentLevel)
-            is FoxAssign -> renderAssign(statement, writer, indentLevel)
+            FoxThis -> print("this")
+            is FoxSymbol -> print(statement.name)
+            is FoxEntityStatement -> printEntity(statement.value)
+            is FoxFormattedString -> printFormattedString(statement)
+            is FoxBlock -> printBlock(statement, indentLevel)
+            is FoxUnary -> printUnary(statement, indentLevel)
+            is FoxBinary -> printBinary(statement, indentLevel)
+            is FoxAssign -> printAssign(statement, indentLevel)
             is FoxTypeBinding -> {
-                writer.print(statement.name)
-                writer.print(": ")
-                render(statement.type, writer)
+                print(statement.name)
+                print(": ")
+                printType(statement.type)
             }
             is FoxFieldAccess -> {
-                render(statement.target, writer, indentLevel, PostfixTarget)
-                writer.print('.')
-                writer.print(statement.name)
+                printStatement(statement.target, indentLevel, PostfixTarget)
+                print('.')
+                print(statement.name)
             }
             is FoxComponentAccess -> {
-                render(statement.target, writer, indentLevel, PostfixTarget)
-                writer.print('.')
-                writer.print(statement.index)
+                printStatement(statement.target, indentLevel, PostfixTarget)
+                print('.')
+                print(statement.index)
             }
-            is FoxCall -> renderCall(statement, writer, indentLevel)
+            is FoxCall -> printCall(statement, indentLevel)
             is FoxConstruct -> {
-                render(statement.type, writer)
-                writeActualParameters(statement.parameters, writer, indentLevel)
+                printType(statement.type)
+                printActualParameters(statement.parameters, indentLevel)
             }
-            is FoxIndirectCall -> renderIndirectCall(statement, writer, indentLevel)
-            is FoxIf -> renderIf(statement, writer, indentLevel)
-            is FoxWhen -> renderWhen(statement, writer, indentLevel)
-            is FoxWhile -> renderWhile(statement, writer, indentLevel)
-            is FoxDoWhile -> renderDoWhile(statement, writer, indentLevel)
+            is FoxIndirectCall -> printIndirectCall(statement, indentLevel)
+            is FoxIf -> printIf(statement, indentLevel)
+            is FoxWhen -> printWhen(statement, indentLevel)
+            is FoxWhile -> printWhile(statement, indentLevel)
+            is FoxDoWhile -> printDoWhile(statement, indentLevel)
             is FoxBreak -> {
-                writer.print("break")
+                print("break")
                 statement.label?.let {
-                    writer.print(" #")
-                    writer.print(it)
+                    print(" #")
+                    print(it)
                 }
             }
             is FoxContinue -> {
-                writer.print("continue")
+                print("continue")
                 statement.label?.let {
-                    writer.print(" #")
-                    writer.print(it)
+                    print(" #")
+                    print(it)
                 }
             }
             is FoxYield -> {
-                writer.print("yield")
+                print("yield")
                 statement.label?.let {
-                    writer.print(" #")
-                    writer.print(it)
+                    print(" #")
+                    print(it)
                 }
-                writer.print(' ')
-                render(statement.value, writer, indentLevel, Standalone)
+                print(' ')
+                printStatement(statement.value, indentLevel, Standalone)
             }
             is FoxReturn -> {
-                writer.print("return")
+                print("return")
                 statement.value?.let {
-                    writer.print(' ')
-                    render(it, writer, indentLevel, Standalone)
+                    print(' ')
+                    printStatement(it, indentLevel, Standalone)
                 }
             }
         }
     }
     
-    private fun renderBlock(
-        block: FoxBlock,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writeLabelPrefix(block.label, writer)
+    private fun PrintWriter.printBlock(block: FoxBlock, indentLevel: Int) {
+        printLabelPrefix(block.label)
         if (block.statements.isEmpty()) {
-            writer.print("{}")
+            print("{}")
             return
         }
-        writer.print("{\n")
+        print("{\n")
         block.statements.forEachIndexed { index, statement ->
-            writer.print(indent(indentLevel + 1))
-            render(statement, writer, indentLevel + 1, Standalone)
-            if (index != block.statements.lastIndex) writer.print('\n')
+            print(indent(indentLevel + 1))
+            printStatement(statement, indentLevel + 1, Standalone)
+            if (index != block.statements.lastIndex) print('\n')
         }
-        writer.print('\n')
-        writer.print(indent(indentLevel))
-        writer.print('}')
+        print('\n')
+        print(indent(indentLevel))
+        print('}')
     }
     
-    private fun renderUnary(
-        statement: FoxUnary,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writer.print(unaryOperatorText(statement.operator))
-        render(statement.right, writer, indentLevel, UnaryOperand)
+    private fun PrintWriter.printUnary(statement: FoxUnary, indentLevel: Int) {
+        print(unaryOperatorText(statement.operator))
+        printStatement(statement.right, indentLevel, UnaryOperand)
     }
     
-    private fun renderBinary(
-        statement: FoxBinary,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
+    private fun PrintWriter.printBinary(statement: FoxBinary, indentLevel: Int) {
         val precedence = binaryPrecedence(statement.operator)
-        render(statement.left, writer, indentLevel, BinaryLeft(precedence))
-        writer.print(' ')
-        writer.print(binaryOperatorText(statement.operator))
-        writer.print(' ')
-        render(statement.right, writer, indentLevel, BinaryRight(precedence))
+        printStatement(statement.left, indentLevel, BinaryLeft(precedence))
+        print(' ')
+        print(binaryOperatorText(statement.operator))
+        print(' ')
+        printStatement(statement.right, indentLevel, BinaryRight(precedence))
     }
     
-    private fun renderAssign(
-        statement: FoxAssign,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        render(statement.left, writer, indentLevel, AssignLeft)
-        writer.print(' ')
-        writer.print(assignOperatorText(statement.operator))
-        writer.print(' ')
-        render(statement.right, writer, indentLevel, AssignRight)
+    private fun PrintWriter.printAssign(statement: FoxAssign, indentLevel: Int) {
+        printStatement(statement.left, indentLevel, AssignLeft)
+        print(' ')
+        print(assignOperatorText(statement.operator))
+        print(' ')
+        printStatement(statement.right, indentLevel, AssignRight)
     }
     
-    private fun renderCall(
-        statement: FoxCall,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
+    private fun PrintWriter.printCall(statement: FoxCall, indentLevel: Int) {
         if (canonical || statement.target != FoxUnit) {
-            render(statement.target, writer, indentLevel, PostfixTarget)
-            writer.print('.')
+            printStatement(statement.target, indentLevel, PostfixTarget)
+            print('.')
         }
-        writer.print(statement.name)
-        statement.generics?.let { writeActualTypeArguments(it, writer) }
-        writeActualParameters(statement.parameters, writer, indentLevel)
+        print(statement.name)
+        statement.generics?.let { printActualTypeArguments(it) }
+        printActualParameters(statement.parameters, indentLevel)
     }
     
-    private fun renderIndirectCall(
-        statement: FoxIndirectCall,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
+    private fun PrintWriter.printIndirectCall(statement: FoxIndirectCall, indentLevel: Int) {
         if (canonical || statement.target != FoxUnit) {
-            render(statement.target, writer, indentLevel, PostfixTarget)
-            writer.print('.')
+            printStatement(statement.target, indentLevel, PostfixTarget)
+            print('.')
         }
-        writer.print('(')
-        render(statement.method, writer, indentLevel, Standalone)
-        writer.print(')')
-        writer.print('(')
-        writeCommaSeparated(statement.parameters, writer) { parameter, out ->
-            render(parameter, out, indentLevel, Standalone)
+        print('(')
+        printStatement(statement.method, indentLevel, Standalone)
+        print(')')
+        print('(')
+        printCommaSeparated(statement.parameters) { parameter ->
+            printStatement(parameter, indentLevel, Standalone)
         }
-        writer.print(')')
+        print(')')
     }
     
-    private fun renderIf(
-        statement: FoxIf,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writeLabelPrefix(statement.label, writer)
-        writer.print("if (")
-        render(statement.condition, writer, indentLevel, Standalone)
-        writer.print(") ")
-        renderControlBody(statement.thenBody, writer, indentLevel)
+    private fun PrintWriter.printIf(statement: FoxIf, indentLevel: Int) {
+        printLabelPrefix(statement.label)
+        print("if (")
+        printStatement(statement.condition, indentLevel, Standalone)
+        print(") ")
+        printControlBody(statement.thenBody, indentLevel)
         statement.elseBody?.let {
-            writer.print(" else ")
-            renderControlBody(it, writer, indentLevel, allowElseIfChain = true)
+            print(" else ")
+            printControlBody(it, indentLevel, allowElseIfChain = true)
         }
     }
     
-    private fun renderWhen(
-        statement: FoxWhen,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writeLabelPrefix(statement.label, writer)
-        writer.print("when")
+    private fun PrintWriter.printWhen(statement: FoxWhen, indentLevel: Int) {
+        printLabelPrefix(statement.label)
+        print("when")
         statement.value?.let {
-            writer.print(" (")
-            render(it, writer, indentLevel, Standalone)
-            writer.print(')')
+            print(" (")
+            printStatement(it, indentLevel, Standalone)
+            print(')')
         }
         if (statement.cases.isEmpty()) {
-            writer.print(" {}")
+            print(" {}")
             return
         }
-        writer.print(" {\n")
+        print(" {\n")
         statement.cases.forEachIndexed { index, case ->
-            writer.print(indent(indentLevel + 1))
+            print(indent(indentLevel + 1))
             if (case.conditions.isEmpty()) {
-                writer.print("else")
+                print("else")
             } else {
-                writeCommaSeparated(case.conditions, writer) { condition, out ->
-                    render(condition, out, indentLevel + 1, Standalone)
+                printCommaSeparated(case.conditions) { condition ->
+                    printStatement(condition, indentLevel + 1, Standalone)
                 }
             }
-            writer.print(" -> ")
-            renderControlBody(case.body, writer, indentLevel + 1)
-            if (index != statement.cases.lastIndex) writer.print('\n')
+            print(" -> ")
+            printControlBody(case.body, indentLevel + 1)
+            if (index != statement.cases.lastIndex) print('\n')
         }
-        writer.print('\n')
-        writer.print(indent(indentLevel))
-        writer.print('}')
+        print('\n')
+        print(indent(indentLevel))
+        print('}')
     }
     
-    private fun renderWhile(
-        statement: FoxWhile,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writeLabelPrefix(statement.label, writer)
-        writer.print("while (")
-        render(statement.condition, writer, indentLevel, Standalone)
-        writer.print(") ")
-        renderControlBody(statement.body, writer, indentLevel)
+    private fun PrintWriter.printWhile(statement: FoxWhile, indentLevel: Int) {
+        printLabelPrefix(statement.label)
+        print("while (")
+        printStatement(statement.condition, indentLevel, Standalone)
+        print(") ")
+        printControlBody(statement.body, indentLevel)
     }
     
-    private fun renderDoWhile(
-        statement: FoxDoWhile,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writeLabelPrefix(statement.label, writer)
-        writer.print("do ")
-        renderControlBody(statement.body, writer, indentLevel)
-        writer.print(" while (")
-        render(statement.condition, writer, indentLevel, Standalone)
-        writer.print(')')
+    private fun PrintWriter.printDoWhile(statement: FoxDoWhile, indentLevel: Int) {
+        printLabelPrefix(statement.label)
+        print("do ")
+        printControlBody(statement.body, indentLevel)
+        print(" while (")
+        printStatement(statement.condition, indentLevel, Standalone)
+        print(')')
     }
     
-    private fun renderMethodBody(
-        statement: FoxStatement,
-        writer: PrintWriter,
-    ) {
-        if (canonical) renderBlockBody(statement, writer, 0)
-        else render(statement, writer, 0, Standalone)
+    private fun PrintWriter.printMethodBody(statement: FoxStatement) {
+        if (canonical) printBlockBody(statement, 0)
+        else printStatement(statement, 0, Standalone)
     }
     
-    private fun renderControlBody(
-        statement: FoxStatement,
-        writer: PrintWriter,
-        indentLevel: Int,
-        allowElseIfChain: Boolean = false,
-    ) {
+    private fun PrintWriter.printControlBody(statement: FoxStatement, indentLevel: Int, allowElseIfChain: Boolean = false) {
         when {
             canonical && statement is FoxIf && allowElseIfChain ->
-                render(statement, writer, indentLevel, Standalone)
+                printStatement(statement, indentLevel, Standalone)
             
-            canonical -> renderBlockBody(statement, writer, indentLevel)
-            else -> render(statement, writer, indentLevel, Standalone)
+            canonical -> printBlockBody(statement, indentLevel)
+            else -> printStatement(statement, indentLevel, Standalone)
         }
     }
     
-    private fun renderBlockBody(
-        statement: FoxStatement,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
+    private fun PrintWriter.printBlockBody(statement: FoxStatement, indentLevel: Int) {
         if (statement is FoxBlock) {
-            renderBlock(statement, writer, indentLevel)
+            printBlock(statement, indentLevel)
             return
         }
-        writer.print("{\n")
-        writer.print(indent(indentLevel + 1))
-        render(statement, writer, indentLevel + 1, Standalone)
-        writer.print('\n')
-        writer.print(indent(indentLevel))
-        writer.print('}')
+        print("{\n")
+        print(indent(indentLevel + 1))
+        printStatement(statement, indentLevel + 1, Standalone)
+        print('\n')
+        print(indent(indentLevel))
+        print('}')
     }
     
-    private fun writeLabelPrefix(
-        label: String?,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printLabelPrefix(label: String?) {
         label?.let {
-            writer.print('#')
-            writer.print(it)
-            writer.print(' ')
+            print('#')
+            print(it)
+            print(' ')
         }
     }
     
-    private fun writeTypeParameterNames(
-        generics: OrderedSet<String>,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printTypeParameterNames(generics: OrderedSet<String>) {
         if (canonical || generics.isNotEmpty()) {
-            writer.print('<')
-            writeCommaSeparated(generics, writer) { name, out -> out.print(name) }
-            writer.print('>')
+            print('<')
+            printCommaSeparated(generics) { name -> print(name) }
+            print('>')
         }
     }
     
-    private fun writeFormalGenerics(
-        generics: OrderedMap<String, FoxType>,
-        writer: PrintWriter,
-    ) {
-        writer.print('<')
-        writeCommaSeparated(generics.entries, writer) { (name, pattern), out ->
-            out.print(name)
-            out.print(" = ")
-            render(pattern, out)
+    private fun PrintWriter.printFormalGenerics(generics: OrderedMap<String, FoxType>) {
+        print('<')
+        printCommaSeparated(generics.entries) { (name, pattern) ->
+            print(name)
+            print(" = ")
+            printType(pattern)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun writeFormalParameters(
-        parameters: OrderedMap<String, FoxType>,
-        writer: PrintWriter,
-    ) {
-        writer.print('(')
-        writeCommaSeparated(parameters.entries, writer) { parameter, out ->
-            out.print(parameter.key)
-            out.print(": ")
-            render(parameter.value, out)
+    private fun PrintWriter.printFormalParameters(parameters: OrderedMap<String, FoxType>) {
+        print('(')
+        printCommaSeparated(parameters.entries) { parameter ->
+            print(parameter.key)
+            print(": ")
+            printType(parameter.value)
         }
-        writer.print(')')
+        print(')')
     }
     
-    private fun writeActualParameters(
-        parameters: List<Pair<String?, FoxStatement>>,
-        writer: PrintWriter,
-        indentLevel: Int,
-    ) {
-        writer.print('(')
-        writeCommaSeparated(parameters, writer) { (name, value), out ->
+    private fun PrintWriter.printActualParameters(parameters: List<Pair<String?, FoxStatement>>, indentLevel: Int) {
+        print('(')
+        printCommaSeparated(parameters) { (name, value) ->
             if (name != null) {
-                out.print(name)
-                out.print(" = ")
+                print(name)
+                print(" = ")
             }
-            render(value, out, indentLevel, Standalone)
+            printStatement(value, indentLevel, Standalone)
         }
-        writer.print(')')
+        print(')')
     }
     
-    private fun writeActualTypeArguments(
-        generics: List<Pair<String?, FoxType>>,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printActualTypeArguments(generics: List<Pair<String?, FoxType>>) {
         if (generics.isEmpty()) return
-        writer.print('<')
-        writeCommaSeparated(generics, writer) { (name, type), out ->
+        print('<')
+        printCommaSeparated(generics) { (name, type) ->
             if (name != null) {
-                out.print(name)
-                out.print(" = ")
+                print(name)
+                print(" = ")
             }
-            render(type, out)
+            printType(type)
         }
-        writer.print('>')
+        print('>')
     }
     
-    private fun renderFormattedString(
-        statement: FoxFormattedString,
-        writer: PrintWriter,
-    ) {
-        writer.print(if (statement.isRaw) "rf\"" else "f\"")
+    private fun PrintWriter.printFormattedString(statement: FoxFormattedString) {
+        print(if (statement.isRaw) "rf\"" else "f\"")
         statement.parts.forEach { part ->
             when (part) {
                 is FoxFormattedText ->
-                    writer.print(if (statement.isRaw) escapeRawFormattedText(part.text) else escapeFormattedText(part.text))
+                    print(if (statement.isRaw) escapeRawFormattedText(part.text) else escapeFormattedText(part.text))
                 
                 is FoxFormattedExpression -> {
-                    writer.print('{')
-                    render(part.expression, writer, 0, Standalone)
-                    writer.print('}')
+                    print('{')
+                    printStatement(part.expression, 0, Standalone)
+                    print('}')
                 }
             }
         }
-        writer.print('"')
+        print('"')
     }
     
-    private fun renderEntity(
-        entity: FoxEntity,
-        writer: PrintWriter,
-    ) {
+    private fun PrintWriter.printEntity(entity: FoxEntity) {
         when (entity) {
-            FoxUnit -> writer.print("unit")
-            is FoxBool -> writer.print(entity.value)
-            is FoxByte -> writer.print(entity.value)
-            is FoxShort -> writer.print(entity.value)
-            is FoxInt -> writer.print(entity.value)
+            FoxUnit -> print("unit")
+            is FoxBool -> print(entity.value)
+            is FoxByte -> print(entity.value)
+            is FoxShort -> print(entity.value)
+            is FoxInt -> print(entity.value)
             is FoxLong -> {
-                writer.print(entity.value)
-                writer.print('L')
+                print(entity.value)
+                print('L')
             }
             is FoxFloat -> {
-                writer.print(entity.value)
-                writer.print('f')
+                print(entity.value)
+                print('f')
             }
-            is FoxDouble -> writer.print(entity.value)
+            is FoxDouble -> print(entity.value)
             is FoxChar -> {
-                writer.print('\'')
-                writer.print(escapeChar(entity.value))
-                writer.print('\'')
+                print('\'')
+                print(escapeChar(entity.value))
+                print('\'')
             }
             is FoxString -> {
-                writer.print('"')
-                writer.print(escapeString(entity.value))
-                writer.print('"')
+                print('"')
+                print(escapeString(entity.value))
+                print('"')
             }
             is FoxArray -> TODO()
             is FoxTuple -> TODO()
@@ -981,26 +827,16 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun indent(level: Int) = indentUnit.repeat(level)
-    
-    private fun <T> writeCommaSeparated(
-        values: Iterable<T>,
-        writer: PrintWriter,
-        block: (T, PrintWriter) -> Unit,
-    ) {
+    private fun <T> PrintWriter.printCommaSeparated(values: Iterable<T>, block: PrintWriter.(T) -> Unit) {
         var first = true
         values.forEach { value ->
-            if (!first) writer.print(", ")
+            if (!first) print(", ")
             first = false
-            block(value, writer)
+            block(value)
         }
     }
     
-    private fun writeToString(block: (PrintWriter) -> Unit): String {
-        val target = StringWriter()
-        PrintWriter(target).use(block)
-        return target.toString()
-    }
+    private fun indent(level: Int) = indentUnit.repeat(level)
 }
 
 private sealed class StatementPosition(val parentPrecedence: Int)

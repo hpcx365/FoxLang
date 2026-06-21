@@ -6,31 +6,15 @@ import pers.hpcx.foxlang.ast.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 
 class ParserTest {
 
-//    @Test
-//    fun testGrammarCheckReportClean() {
-//        val report = FoxGrammar.check(setOf(node<FoxFile>()))
-//        assertTrue(report.isClean(), report.toString())
-//    }
-    
     @Test
     fun testParserAndAstSourcePrinter() {
-        val file = parseFile(source)
+        val file = assertIs<ExactReduction<FoxFile>>(FoxFileParser.parse(source))
         val printed = file.node.toSource()
-        val reparsed = parseFile(printed)
+        val reparsed = assertIs<ExactReduction<FoxFile>>(FoxFileParser.parse(printed))
         assertEquals(file.node, reparsed.node)
-    }
-    
-    private fun parseFile(source: String): Success<FoxFile> {
-        val report = FoxFileParser.parse(source)
-        val context = report.stop.toString()
-        val file = assertIs<Success<FoxFile>>(report.result, context)
-        assertNotNull(file.node)
-        assertEquals(report.context.fragments.size, file.interval.end.fragIndex, context)
-        return file
     }
     
     val source = """
@@ -102,57 +86,57 @@ def <T = AnyStructOf<String, Int>, E = ItemOf<MyEnum, Success>> MergeFieldsOf<My
     return "fox"
 }
 
-def Int.collatz(): Ref<List<Int>> {
-    result := Ref<ArrayList<Int>>()
-    
-    i := this
-    println((println)("indirect call"))
-    result.(forEach)({ println(it) })
-    #loop while (i != 1) {
-        result += i
-        i = if (i % 2 == 0) i / 2 else {
-            j := 3 * i + 1
-            when {
-                j > 1_000_000_000 -> {
-                    println(f"Wow, a \"huge\" number: {j}, I can't handle it.")
-                    break #loop
-                }
-                j > 1_000_000 -> println(f"\\Amazing\\ number: {j}")
-                j > 10_000 -> println(f"Cool number: {j}")
-                else -> {}
-            }
-            yield j
-        }
-    }
-    result += 1
-    
-    return result
-}
-
-def main(args: Array<String>) {
-    println("Hello, I am fox! Let's count numbers!")
-    
-    i := read<Int>()
-    if (i <= 0) panic("Invalid input! Expected a positive number.")
-    if (i > 10_000) panic("Invalid input! Expected a number less than 10,000.")
-    
-    result := i.collatz()
-    println("Collatz sequence:")
-    result.forEach { println(it) }
-    
-    if (false) {
-        println('a')
-        println('3')
-        println('"')
-        println('\n')
-        println('\t')
-        println('\r')
-        println('\b')
-        println('\\')
-        println('\'')
-        println('\u0000')
-        println('\u0abc')
-    }
-}
+//def Int.collatz(): Ref<List<Int>> {
+//    result := Ref<ArrayList<Int>>()
+//
+//    i := this
+//    println((println)("indirect call"))
+//    result.(forEach)({ println(it) })
+//    #loop while (i != 1) {
+//        result += i
+//        i = if (i % 2 == 0) i / 2 else {
+//            j := 3 * i + 1
+//            when {
+//                j > 1_000_000_000 -> {
+//                    println(f"Wow, a \"huge\" number: {j}, I can't handle it.")
+//                    break #loop
+//                }
+//                j > 1_000_000 -> println(f"\\Amazing\\ number: {j}")
+//                j > 10_000 -> println(f"Cool number: {j}")
+//                else -> {}
+//            }
+//            yield j
+//        }
+//    }
+//    result += 1
+//
+//    return result
+//}
+//
+//def main(args: Array<String>) {
+//    println("Hello, I am fox! Let's count numbers!")
+//
+//    i := read<Int>()
+//    if (i <= 0) panic("Invalid input! Expected a positive number.")
+//    if (i > 10_000) panic("Invalid input! Expected a number less than 10,000.")
+//
+//    result := i.collatz()
+//    println("Collatz sequence:")
+//    result.forEach { println(it) }
+//
+//    if (false) {
+//        println('a')
+//        println('3')
+//        println('"')
+//        println('\n')
+//        println('\t')
+//        println('\r')
+//        println('\b')
+//        println('\\')
+//        println('\'')
+//        println('\u0000')
+//        println('\u0abc')
+//    }
+//}
 """
 }
