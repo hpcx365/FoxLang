@@ -146,6 +146,7 @@ private val FoxProductions = buildList {
 }
 
 val FoxGrammar = Grammar(FoxProductions)
+val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
 
 private fun tokenProductions(): List<Production<*>> = buildList {
     addAll(fixedTokens(*ReservedKeywords.toTypedArray()))

@@ -4,13 +4,13 @@ interface MutableOrderedMap<K, V> : OrderedMap<K, V> {
     override val entries: MutableList<MutableMap.MutableEntry<K, V>>
     override val keys: MutableOrderedSet<K>
     override val values: MutableList<V>
-
+    
     operator fun set(key: K, value: V) {
         put(key, value)
     }
-
+    
     fun put(key: K, value: V): V?
-
+    
     fun putAt(index: Int, key: K, value: V): V?
     
     fun putAll(entries: Iterable<Pair<K, V>>) {
@@ -30,7 +30,7 @@ interface MutableOrderedMap<K, V> : OrderedMap<K, V> {
     override fun entryAt(index: Int): MutableMap.MutableEntry<K, V>
     
     fun removeAt(index: Int): MutableMap.MutableEntry<K, V>
-
+    
     fun clear()
     
     fun copy(): MutableOrderedMap<K, V>

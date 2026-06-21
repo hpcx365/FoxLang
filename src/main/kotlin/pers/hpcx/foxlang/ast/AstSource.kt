@@ -212,13 +212,29 @@ class AstSourcePrinter(options: AstSourceOptions = AstSourceOptions()) {
         writer: PrintWriter,
     ) {
         writer.print("Tuple<")
-        writeCommaSeparated(type.components, writer) { component, out ->
-            render(component.first, out)
-            if (component.second > 1) {
+        var first = true
+        var current: FoxType? = null
+        var count = 0
+        fun flushCurrent(out: PrintWriter) {
+            val value = current ?: return
+            if (!first) out.print(", ")
+            first = false
+            render(value, out)
+            if (count > 1) {
                 out.print(':')
-                out.print(component.second)
+                out.print(count)
             }
         }
+        type.components.forEach { component ->
+            if (current == component) {
+                count++
+            } else {
+                flushCurrent(writer)
+                current = component
+                count = 1
+            }
+        }
+        flushCurrent(writer)
         writer.print('>')
     }
     

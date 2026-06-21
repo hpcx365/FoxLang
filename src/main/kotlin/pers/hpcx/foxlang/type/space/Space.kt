@@ -1,30 +1,57 @@
 package pers.hpcx.foxlang.type.space
 
-interface SpaceContext<T> : Comparator<T>
-
-sealed interface Space<T, C : SpaceContext<T>> {
-    fun contains(that: T, context: C): Boolean
+sealed interface Space<T> {
+    operator fun contains(that: T): Boolean
 }
 
-interface TraversableSpace<T, C : SpaceContext<T>> : Space<T, C> {
-    fun traverser(context: C): SpaceTraverser<T>
-}
-
-interface SpaceTraverser<T> {
-    fun current(): T?
-    fun seekNext()
-    fun seekCeilOf(that: T)
-}
-
-interface ProjectionSpace<T, C : SpaceContext<T>> : Space<T, C> {
-    
-    val baseSpace: TraversableSpace<T, C>
-    
-    fun preimageOf(that: T): TraversableSpace<T, C>
-    
-    override fun contains(that: T, context: C): Boolean {
-        val base = baseSpace
-        val preimage = preimageOf(that)
-        return intersect(base, preimage).traverser(context).current() != null
+sealed interface PlaceHolderSpace<T> : Space<T> {
+    override fun contains(that: T): Boolean {
+        error("Placeholder space cannot be used")
     }
+}
+
+fun <T> emptySpace() = @Suppress("UNCHECKED_CAST") (EmptySpace as Space<T>)
+
+data object EmptySpace : Space<Any?> {
+    
+    override fun contains(that: Any?) = false
+}
+
+fun <T> singleSpace(single: T): Space<T> = SingleSpace(single)
+
+data class SingleSpace<T>(val single: T) : Space<T> {
+    
+    override fun contains(that: T) = single == that
+}
+
+fun <T> universalSpace() = @Suppress("UNCHECKED_CAST") (UniversalSpace as Space<T>)
+
+data object UniversalSpace : Space<Any?> {
+    
+    override fun contains(that: Any?) = true
+}
+
+fun <T> intersect(vararg spaces: Space<T>) = intersect(spaces.toList())
+
+fun <T> intersect(spaces: Iterable<Space<T>>) = IntersectSpace(spaces)
+
+data class IntersectSpace<T>(val parts: Iterable<Space<T>>) : Space<T> {
+    
+    override fun contains(that: T) = parts.all { it.contains(that) }
+}
+
+fun <T> union(vararg spaces: Space<T>) = union(spaces.toList())
+
+fun <T> union(spaces: Iterable<Space<T>>) = UnionSpace(spaces)
+
+data class UnionSpace<T>(val parts: Iterable<Space<T>>) : Space<T> {
+    
+    override fun contains(that: T) = parts.any { it.contains(that) }
+}
+
+fun <T> subtract(base: Space<T>, removed: Space<T>) = SubtractSpace(base, removed)
+
+data class SubtractSpace<T>(val base: Space<T>, val removed: Space<T>) : Space<T> {
+    
+    override fun contains(that: T) = base.contains(that) && !removed.contains(that)
 }

@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.pass
+package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.*
@@ -265,7 +265,7 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
                 else -> return familyMismatch(FoxTupleMergeComponentsOfType(normalizedTypes), "Tuple", normalizedType)
             }
         }
-        return tuples.flatMap { it.components }.toFoxTupleType()
+        return tuples.mergeTupleComponents()
     }
     
     fun normalizeMergeStruct(types: List<FoxType>): FoxType {
@@ -318,7 +318,7 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
             is FoxPrimitiveType -> currentType
             is FoxWildcardType -> error("unreachable")
             is FoxPlaceholderType -> error("unreachable")
-            is FoxTupleType -> currentType.components.map { normalizeType(it.first) to it.second }.toFoxTupleType()
+            is FoxTupleType -> currentType.components.map(normalizeType).toFoxTupleType()
             is FoxStructType -> FoxStructType(currentType.fields.mapValues { normalizeType(it.value) })
             is FoxObjectType -> FoxObjectType(currentType.members.mapValues { normalizeType(it.value) })
             is FoxEnumType -> FoxEnumType(currentType.items.mapValues { normalizeType(it.value) })

@@ -10,13 +10,13 @@ class ArrayHashOrderedMap<K, V> private constructor(
     private val indexByKey = HashMap<K, Int>(orderedKeys.size)
     private var hashCodeDirty = true
     private var cachedHashCode = 1
-
+    
     constructor() : this(mutableListOf(), mutableMapOf())
-
+    
     constructor(entries: Iterable<Pair<K, V>>) : this() {
         putAll(entries)
     }
-
+    
     constructor(map: Map<K, V>) : this(map.entries.map { it.key to it.value })
     
     override val entries: MutableList<MutableMap.MutableEntry<K, V>> = EntriesView()
@@ -24,7 +24,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
     override val keys: MutableOrderedSet<K> = KeysView()
     
     override val values: MutableList<V> = ValuesView()
-
+    
     init {
         require(orderedKeys.size == orderedKeys.toSet().size) { "Ordered keys contain duplicates" }
         require(orderedKeys.size == valuesByKey.size) {
@@ -35,18 +35,18 @@ class ArrayHashOrderedMap<K, V> private constructor(
         }
         rebuildIndices()
     }
-
+    
     override val size: Int
         get() = orderedKeys.size
     
     override fun containsKey(key: K): Boolean = indexByKey.containsKey(key)
-
+    
     override fun containsValue(value: V): Boolean = valuesByKey.containsValue(value)
-
+    
     override fun get(key: K): V? = valuesByKey[key]
-
+    
     override fun getValue(key: K): V = valuesByKey.getValue(key)
-
+    
     override fun keyAt(index: Int): K = orderedKeys[index]
     
     override fun valueAt(index: Int): V = valuesByKey.getValue(orderedKeys[index])
@@ -54,7 +54,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
     override fun entryAt(index: Int): MutableMap.MutableEntry<K, V> = EntryView(orderedKeys[index])
     
     override fun indexOfKey(key: K): Int = indexByKey[key] ?: -1
-
+    
     override fun put(key: K, value: V): V? {
         val existingIndex = indexByKey[key]
         if (existingIndex == null) {
@@ -69,7 +69,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
         markChanged()
         return previous
     }
-
+    
     override fun putAt(index: Int, key: K, value: V): V? {
         require(index in 0..size) { "Index out of bounds: $index, size=$size" }
         
@@ -95,7 +95,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
         markChanged()
         return previous
     }
-
+    
     override fun getOrPut(key: K, defaultValue: () -> V): V {
         if (indexByKey.containsKey(key)) return valuesByKey.getValue(key)
         val value = defaultValue()
@@ -105,7 +105,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
         markChanged()
         return value
     }
-
+    
     override fun move(key: K, index: Int) {
         require(index in 0 until size) { "Index out of bounds: $index, size=$size" }
         val oldIndex = indexByKey[key] ?: error("Key does not exist: $key")
@@ -233,7 +233,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
     private inner class KeysView : AbstractMutableList<K>(), MutableOrderedSet<K> {
         override val elements: MutableList<K>
             get() = this
-
+        
         override val size: Int
             get() = this@ArrayHashOrderedMap.size
         
@@ -242,7 +242,7 @@ class ArrayHashOrderedMap<K, V> private constructor(
         override fun iterator(): MutableIterator<K> = super<AbstractMutableList>.iterator()
         
         override fun contains(element: K): Boolean = containsKey(element)
-
+        
         override fun get(index: Int): K = keyAt(index)
         
         override fun elementAt(index: Int): K = keyAt(index)

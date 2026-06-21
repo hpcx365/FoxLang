@@ -1,12 +1,22 @@
 package pers.hpcx.foxlang.ast
 
 import pers.hpcx.foxlang.type.*
+import pers.hpcx.foxlang.utils.RleArrayList
 import pers.hpcx.foxlang.utils.orderedMapOf
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.*
 
 class TypeShapeUtilsTest {
+    @Test
+    fun tupleFactoryChoosesStorageByCompressionBenefit() {
+        val plainTuple = listOf(FoxIntType, FoxStringType).toFoxTupleType()
+        val packedTuple = listOf(FoxIntType, FoxIntType, FoxStringType).toFoxTupleType()
+        val countedTuple = listOf(FoxIntType to 3, FoxStringType to 1).toFoxTupleType()
+        
+        assertFalse(plainTuple.components is RleArrayList<*>)
+        assertTrue(packedTuple.components is RleArrayList<*>)
+        assertTrue(countedTuple.components is RleArrayList<*>)
+    }
+    
     @Test
     fun reverseIndexHelpersWork() {
         val tuple = listOf(FoxStringType, FoxIntType, FoxDoubleType).toFoxTupleType()
@@ -25,7 +35,7 @@ class TypeShapeUtilsTest {
         assertFailsWith<IllegalArgumentException> { tuple.lastComponentAt(-1) }
         assertFailsWith<IllegalArgumentException> { struct.lastFieldAt(-1) }
     }
-
+    
     @Test
     fun structFieldOrderHelpersWork() {
         val struct = FoxStructType(
@@ -128,5 +138,29 @@ class TypeShapeUtilsTest {
             ),
             listOf(left, right).mergeObjectMembers(),
         )
+    }
+    
+    @Test
+    fun enumSelectionDropAndMergePreserveRequestedNames() {
+        val left = FoxEnumType(
+            linkedMapOf(
+                "A" to FoxIntType,
+                "B" to FoxStringType,
+                "C" to FoxDoubleType,
+            ),
+        )
+        val right = FoxEnumType(
+            linkedMapOf(
+                "B" to FoxBoolType,
+                "D" to FoxUnitType,
+            ),
+        )
+        
+        assertEquals(FoxStringType, left.item("B"))
+        assertEquals(listOf("C", "A"), left.selectItems(listOf("C", "A")).items.keys.toList())
+        assertEquals(listOf("A", "C"), left.dropItems(listOf("B")).items.keys.toList())
+        val merged = listOf(left, right).mergeEnumItems()
+        assertEquals(listOf("A", "B", "C", "D"), merged.items.keys.toList())
+        assertEquals(FoxBoolType, merged.items.getValue("B"))
     }
 }

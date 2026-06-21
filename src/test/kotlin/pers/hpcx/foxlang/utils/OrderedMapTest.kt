@@ -11,7 +11,7 @@ class OrderedMapTest {
     private fun <K, V> entryOf(key: K, value: V): MutableMap.MutableEntry<K, V> {
         return SimpleEntry(key, value)
     }
-
+    
     @Test
     fun preservesInsertionOrder() {
         val map = mutableOrderedMapOf<String, Int>()
@@ -23,13 +23,13 @@ class OrderedMapTest {
         assertEquals(listOf(2, 1, 3), map.values)
         assertEquals(listOf(entryOf("b", 2), entryOf("a", 1), entryOf("c", 3)), map.entries)
     }
-
+    
     @Test
     fun updatingExistingKeyKeepsOrder() {
         val map = mutableOrderedMapOf("a" to 1, "b" to 2)
-
+        
         val previous = map.put("a", 3)
-
+        
         assertEquals(1, previous)
         assertEquals(listOf("a", "b"), map.keys.elements)
         assertEquals(listOf(3, 2), map.values)

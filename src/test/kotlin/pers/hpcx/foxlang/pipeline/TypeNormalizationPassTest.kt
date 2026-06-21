@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.pass
+package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.utils.orderedMapOf
@@ -13,13 +13,13 @@ class TypeNormalizationPassTest {
     fun normalizesNestedTupleTransformsAndCompressesComponents() {
         val type = FoxTupleMergeComponentsOfType(
             listOf(
-                FoxTupleType(listOf(FoxIntType to 2)),
+                FoxTupleType(listOf(FoxIntType, FoxIntType)),
                 FoxTupleType(
                     listOf(
                         FoxTupleComponentAtType(
-                            FoxTupleType(listOf(FoxFloatType to 1, FoxIntType to 1, FoxDoubleType to 1)),
+                            FoxTupleType(listOf(FoxFloatType, FoxIntType, FoxDoubleType)),
                             1,
-                        ) to 1,
+                        ),
                     ),
                 ),
             ),
@@ -27,7 +27,7 @@ class TypeNormalizationPassTest {
         
         val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
         
-        assertEquals(FoxTupleType(listOf(FoxIntType to 3)), result.type)
+        assertEquals(FoxTupleType(listOf(FoxIntType, FoxIntType, FoxIntType)), result.type)
     }
     
     @Test
@@ -38,8 +38,8 @@ class TypeNormalizationPassTest {
                 listOf(
                     FoxTupleMergeComponentsOfType(
                         listOf(
-                            FoxTupleType(listOf(FoxIntType to 1)),
-                            FoxTupleType(listOf(FoxIntType to 1)),
+                            FoxTupleType(listOf(FoxIntType)),
+                            FoxTupleType(listOf(FoxIntType)),
                         ),
                     ),
                 ),
@@ -53,7 +53,7 @@ class TypeNormalizationPassTest {
             FoxTupleComponentAtType(
                 FoxUnresolvedType(
                     "Box",
-                    listOf(FoxTupleType(listOf(FoxIntType to 2))),
+                    listOf(FoxTupleType(listOf(FoxIntType, FoxIntType))),
                 ),
                 0,
             ),
@@ -69,8 +69,8 @@ class TypeNormalizationPassTest {
                 orderedMapOf(
                     "left" to FoxTupleMergeComponentsOfType(
                         listOf(
-                            FoxTupleType(listOf(FoxStringType to 1)),
-                            FoxTupleType(listOf(FoxStringType to 1)),
+                            FoxTupleType(listOf(FoxStringType)),
+                            FoxTupleType(listOf(FoxStringType)),
                         ),
                     ),
                     "right" to FoxArrayElementOfType(FoxArrayType(FoxDoubleType)),
@@ -79,7 +79,7 @@ class TypeNormalizationPassTest {
                     FoxMethodType(
                         FoxUnitType,
                         orderedMapOf(),
-                        FoxTupleType(listOf(FoxBoolType to 1)),
+                        FoxTupleType(listOf(FoxBoolType)),
                     ),
                 ),
             ),
@@ -90,7 +90,7 @@ class TypeNormalizationPassTest {
         assertEquals(
             FoxStructType(
                 orderedMapOf(
-                    "left" to FoxTupleType(listOf(FoxStringType to 2)),
+                    "left" to FoxTupleType(listOf(FoxStringType, FoxStringType)),
                     "right" to FoxDoubleType,
                 ),
             ),
@@ -117,7 +117,7 @@ class TypeNormalizationPassTest {
     @Test
     fun detectsIndexOutOfBounds() {
         val type = FoxTupleLastComponentAtType(
-            FoxTupleType(listOf(FoxIntType to 1, FoxFloatType to 1)),
+            FoxTupleType(listOf(FoxIntType, FoxFloatType)),
             2,
         )
         
@@ -196,8 +196,8 @@ class TypeNormalizationPassTest {
                     listOf(
                         FoxTupleMergeComponentsOfType(
                             listOf(
-                                FoxTupleType(listOf(FoxIntType to 1)),
-                                FoxTupleType(listOf(FoxIntType to 1)),
+                                FoxTupleType(listOf(FoxIntType)),
+                                FoxTupleType(listOf(FoxIntType)),
                             ),
                         ),
                     ),
@@ -211,7 +211,7 @@ class TypeNormalizationPassTest {
             FoxStructMergeFieldsOfType(
                 listOf(
                     FoxStructType(orderedMapOf("name" to FoxStringType)),
-                    FoxUnresolvedType("Other", listOf(FoxTupleType(listOf(FoxIntType to 2)))),
+                    FoxUnresolvedType("Other", listOf(FoxTupleType(listOf(FoxIntType, FoxIntType)))),
                 ),
             ),
             result.type,

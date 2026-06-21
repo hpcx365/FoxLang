@@ -1,12 +1,10 @@
 package pers.hpcx.foxlang.type
 
 import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.utils.emptyOrderedMap
-import pers.hpcx.foxlang.utils.mapValues
-import pers.hpcx.foxlang.utils.mutableOrderedMapOf
+import pers.hpcx.foxlang.utils.*
 
 val FoxTupleType.arity: Int
-    get() = components.fold(0) { acc, component -> Math.addExact(acc, component.second) }
+    get() = components.size
 
 val FoxStructType.arity: Int
     get() = fields.size
@@ -19,12 +17,7 @@ val FoxEnumType.arity: Int
 
 fun FoxTupleType.componentAt(index: Int): FoxType {
     require(index in 0 until arity) { "Tuple component index out of bounds: $index, size=$arity" }
-    var offset = index
-    components.forEach { component ->
-        if (offset < component.second) return component.first
-        offset -= component.second
-    }
-    error("Unreachable")
+    return components[index]
 }
 
 fun FoxTupleType.lastComponentAt(index: Int): FoxType {
@@ -37,21 +30,7 @@ fun FoxTupleType.sliceComponents(beginIndex: Int, endIndex: Int): FoxTupleType {
     require(endIndex >= beginIndex) { "Tuple slice end index must be >= begin index: $endIndex < $beginIndex" }
     require(endIndex <= arity) { "Tuple slice end index out of bounds: $endIndex, size=$arity" }
     if (beginIndex == endIndex) return FoxTupleType(emptyList())
-    
-    val result = mutableListOf<Pair<FoxType, Int>>()
-    var currentIndex = 0
-    components.forEach { component ->
-        val componentBegin = currentIndex
-        val componentEnd = Math.addExact(currentIndex, component.second)
-        currentIndex = componentEnd
-        
-        if (componentEnd <= beginIndex || componentBegin >= endIndex) return@forEach
-        
-        val overlapBegin = maxOf(componentBegin, beginIndex)
-        val overlapEnd = minOf(componentEnd, endIndex)
-        result += component.first to (overlapEnd - overlapBegin)
-    }
-    return result.toFoxTupleType()
+    return components.subList(beginIndex, endIndex).toFoxTupleType()
 }
 
 fun FoxTupleType.firstComponents(count: Int): FoxTupleType {
@@ -78,10 +57,6 @@ fun FoxTupleType.dropLastComponents(count: Int): FoxTupleType {
     return sliceComponents(0, arity - count)
 }
 
-fun FoxTupleType.mergeComponents(other: FoxTupleType): FoxTupleType {
-    return (components + other.components).toFoxTupleType()
-}
-
 fun Iterable<FoxTupleType>.mergeTupleComponents(): FoxTupleType {
     return flatMap { it.components }.toFoxTupleType()
 }
@@ -89,22 +64,33 @@ fun Iterable<FoxTupleType>.mergeTupleComponents(): FoxTupleType {
 @JvmName("tupleComponentListToFoxTupleType")
 fun List<Pair<FoxType, Int>>.toFoxTupleType(): FoxTupleType {
     if (isEmpty()) return FoxTupleType(emptyList())
-    if (size == 1) return FoxTupleType(listOf(first()))
-    val compressed = mutableListOf<Pair<FoxType, Int>>()
-    forEach { component ->
-        val last = compressed.lastOrNull()
-        if (last != null && last.first == component.first) {
-            compressed[compressed.lastIndex] = last.first to Math.addExact(last.second, component.second)
-        } else {
-            compressed += component
-        }
+    val expandedSize = fold(0) { acc, (_, count) ->
+        require(count > 0) { "Tuple component count must be positive: $count" }
+        Math.addExact(acc, count)
     }
-    return FoxTupleType(compressed)
+    val result = ArrayList<FoxType>(expandedSize)
+    var previous: FoxType? = null
+    var hasPrevious = false
+    var shouldUseRle = false
+    forEach { (type, count) ->
+        if (count > 1 || hasPrevious && previous == type) {
+            shouldUseRle = true
+        }
+        repeat(count) {
+            result += type
+        }
+        previous = type
+        hasPrevious = true
+    }
+    return FoxTupleType(if (shouldUseRle) toRleArrayListFromRuns() else result)
 }
 
 @JvmName("typeListToFoxTupleType")
 fun List<FoxType>.toFoxTupleType(): FoxTupleType {
-    return map { it to 1 }.toFoxTupleType()
+    if (isEmpty()) return FoxTupleType(emptyList())
+    val copied = toList()
+    val shouldUseRle = copied.zipWithNext().any { (left, right) -> left == right }
+    return FoxTupleType(if (shouldUseRle) copied.toRleArrayList() else copied)
 }
 
 fun FoxStructType.fieldAt(index: Int): Map.Entry<String, FoxType> {
@@ -261,7 +247,7 @@ fun FoxType.visitTypes(filter: (FoxType) -> Boolean, visitor: (FoxType) -> Unit)
             is FoxAnyStructOfType -> fields.forEach { it.visitTypes(filter, visitor) }
         }
         is FoxBuiltInType -> when (this) {
-            is FoxTupleType -> components.forEach { it.first.visitTypes(filter, visitor) }
+            is FoxTupleType -> components.forEach { it.visitTypes(filter, visitor) }
             is FoxStructType -> fields.values.forEach { it.visitTypes(filter, visitor) }
             is FoxObjectType -> members.values.forEach { it.visitTypes(filter, visitor) }
             is FoxEnumType -> items.values.forEach { it.visitTypes(filter, visitor) }
@@ -345,7 +331,7 @@ fun FoxType.mapTypes(filter: (FoxType) -> Boolean, mapper: (FoxType) -> FoxType)
             is FoxAnyStructOfType -> FoxAnyStructOfType(fields.map { it.mapTypes(filter, mapper) })
         }
         is FoxBuiltInType -> when (this) {
-            is FoxTupleType -> FoxTupleType(components.map { it.first.mapTypes(filter, mapper) to it.second })
+            is FoxTupleType -> components.map { it.mapTypes(filter, mapper) }.toFoxTupleType()
             is FoxStructType -> FoxStructType(fields.mapValues { it.value.mapTypes(filter, mapper) })
             is FoxObjectType -> FoxObjectType(members.mapValues { it.value.mapTypes(filter, mapper) })
             is FoxEnumType -> FoxEnumType(items.mapValues { it.value.mapTypes(filter, mapper) })

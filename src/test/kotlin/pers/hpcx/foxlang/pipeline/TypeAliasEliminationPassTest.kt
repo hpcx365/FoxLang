@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.pass
+package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.runtime.FoxUnit
@@ -50,7 +50,7 @@ class TypeAliasEliminationPassTest {
                 FoxTypeAlias(
                     "Pair",
                     orderedSetOf("A", "B"),
-                    FoxTupleType(listOf(FoxUnresolvedType("A", null) to 1, FoxUnresolvedType("B", null) to 1)),
+                    FoxTupleType(listOf(FoxUnresolvedType("A", null), FoxUnresolvedType("B", null))),
                 ),
                 FoxTypeAlias("RefInt", emptyOrderedSet(), FoxRefType(FoxIntType)),
                 method,
@@ -66,7 +66,7 @@ class TypeAliasEliminationPassTest {
             name = "wrap",
             parameters = orderedMapOf(
                 "value" to FoxArrayType(FoxUnresolvedType("T", null)),
-                "pair" to FoxTupleType(listOf(FoxIntType to 1, FoxUnresolvedType("T", null) to 1)),
+                "pair" to FoxTupleType(listOf(FoxIntType, FoxUnresolvedType("T", null))),
             ),
             returnType = FoxArrayType(FoxIntType),
             body = FoxBlock(
@@ -74,7 +74,7 @@ class TypeAliasEliminationPassTest {
                 listOf(
                     FoxTypeBinding("local", FoxArrayType(FoxUnresolvedType("T", null))),
                     FoxConstruct(
-                        FoxTupleType(listOf(FoxIntType to 1, FoxUnresolvedType("T", null) to 1)),
+                        FoxTupleType(listOf(FoxIntType, FoxUnresolvedType("T", null))),
                         emptyList(),
                     ),
                     FoxCall(
@@ -226,7 +226,7 @@ class TypeAliasEliminationPassTest {
                 FoxTypeAlias(
                     "Pair",
                     orderedSetOf("A", "B"),
-                    FoxTupleType(listOf(FoxUnresolvedType("A", null) to 1, FoxUnresolvedType("B", null) to 1)),
+                    FoxTupleType(listOf(FoxUnresolvedType("A", null), FoxUnresolvedType("B", null))),
                 ),
                 method,
             ),

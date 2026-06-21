@@ -5,6 +5,9 @@ data class GrammarCheckReport(
     val unreachableNonTerminals: Set<NonTerminal<*>>,
     val emptyResults: Set<NonTerminal<*>>,
 ) {
+    
+    fun isClean() = undefinedNonTerminals.isEmpty() && unreachableNonTerminals.isEmpty() && emptyResults.isEmpty()
+    
     override fun toString() = buildString {
         appendLine("undefined: ${undefinedNonTerminals.joinToString()}")
         appendLine("unreachable: ${unreachableNonTerminals.joinToString()}")

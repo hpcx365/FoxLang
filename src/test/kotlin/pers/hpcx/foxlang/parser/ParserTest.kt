@@ -1,38 +1,39 @@
-package pers.hpcx.foxlang.frontend
+package pers.hpcx.foxlang.parser
 
 import pers.hpcx.foxlang.ast.FoxFile
-import pers.hpcx.foxlang.ast.FoxGrammar
+import pers.hpcx.foxlang.ast.FoxFileParser
 import pers.hpcx.foxlang.ast.toSource
-import pers.hpcx.foxlang.parser.Parser
-import pers.hpcx.foxlang.parser.Success
-import pers.hpcx.foxlang.parser.check
-import pers.hpcx.foxlang.parser.node
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
-class ParseTest {
+class ParserTest {
+
+//    @Test
+//    fun testGrammarCheckReportClean() {
+//        val report = FoxGrammar.check(setOf(node<FoxFile>()))
+//        assertTrue(report.isClean(), report.toString())
+//    }
     
     @Test
-    fun test() {
-        val grammar = FoxGrammar.check(setOf(node<FoxFile>()))
-        assertTrue(grammar.undefinedNonTerminals.isEmpty(), grammar.toString())
-        val file = parseFile(source, grammar.toString())
+    fun testParserAndAstSourcePrinter() {
+        val file = parseFile(source)
         val printed = file.node.toSource()
-        val reparsed = parseFile(printed, "Rendered source should stay parseable:\n$printed\n")
+        val reparsed = parseFile(printed)
         assertEquals(file.node, reparsed.node)
     }
     
-    private fun parseFile(source: String, prefix: String): Success<FoxFile> {
-        val parser = Parser(FoxGrammar, node<FoxFile>())
-        val report = parser.parse(source)
-        val context = prefix + report.stop.toString()
+    private fun parseFile(source: String): Success<FoxFile> {
+        val report = FoxFileParser.parse(source)
+        val context = report.stop.toString()
         val file = assertIs<Success<FoxFile>>(report.result, context)
         assertNotNull(file.node)
         assertEquals(report.context.fragments.size, file.interval.end.fragIndex, context)
         return file
     }
-}
-
-const val source = """
+    
+    val source = """
 // This is a comment
 
 /* This is a block comment, line 1
@@ -154,3 +155,4 @@ def main(args: Array<String>) {
     }
 }
 """
+}

@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.pass
+package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.mapTypes

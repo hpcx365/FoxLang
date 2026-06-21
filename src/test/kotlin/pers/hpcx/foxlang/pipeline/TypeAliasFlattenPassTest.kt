@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.pass
+package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.visitTypes
@@ -40,8 +40,8 @@ class TypeAliasFlattenPassTest {
                     orderedSetOf("A", "B"),
                     FoxTupleType(
                         listOf(
-                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("A", null))) to 1,
-                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("B", null))) to 1,
+                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("A", null))),
+                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("B", null))),
                         ),
                     ),
                 ),
@@ -64,8 +64,8 @@ class TypeAliasFlattenPassTest {
         assertEquals(
             FoxTupleType(
                 listOf(
-                    FoxArrayType(FoxUnresolvedType("A", null)) to 1,
-                    FoxArrayType(FoxUnresolvedType("B", null)) to 1,
+                    FoxArrayType(FoxUnresolvedType("A", null)),
+                    FoxArrayType(FoxUnresolvedType("B", null)),
                 ),
             ),
             aliases.getValue("PairBox").alias,
@@ -74,8 +74,8 @@ class TypeAliasFlattenPassTest {
         assertEquals(
             FoxTupleType(
                 listOf(
-                    FoxArrayType(FoxIntType) to 1,
-                    FoxArrayType(FoxFloatType) to 1,
+                    FoxArrayType(FoxIntType),
+                    FoxArrayType(FoxFloatType),
                 ),
             ),
             aliases.getValue("Concrete").alias,
@@ -233,7 +233,7 @@ class TypeAliasFlattenPassTest {
         val alias = FoxTypeAlias(
             "Pair",
             orderedSetOf("A", "B"),
-            FoxTupleType(listOf(FoxUnresolvedType("A", null) to 1, FoxUnresolvedType("B", null) to 1)),
+            FoxTupleType(listOf(FoxUnresolvedType("A", null), FoxUnresolvedType("B", null))),
         )
         val reference = FoxUnresolvedType("Pair", listOf(FoxIntType))
         val referrer = FoxTypeAlias("Use", emptyOrderedSet(), reference)

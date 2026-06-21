@@ -31,7 +31,7 @@ object FoxAnyObjectType : FoxWildcardType
 object FoxAnyEnumType : FoxWildcardType
 
 sealed interface FoxBuiltInType : FoxType
-data class FoxTupleType(val components: List<Pair<FoxType, Int>>) : FoxBuiltInType
+data class FoxTupleType(val components: List<FoxType>) : FoxBuiltInType
 data class FoxStructType(val fields: OrderedMap<String, FoxType>) : FoxBuiltInType
 data class FoxObjectType(val members: Map<String, FoxType>) : FoxBuiltInType
 data class FoxEnumType(val items: Map<String, FoxType>) : FoxBuiltInType
