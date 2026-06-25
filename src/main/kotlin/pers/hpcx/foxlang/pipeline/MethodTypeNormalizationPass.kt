@@ -66,7 +66,7 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
         is FoxIndirectCall -> FoxIndirectCall(
             normalizeStatement(method, statement.target),
             normalizeStatement(method, statement.method),
-            statement.parameters.map { normalizeStatement(method, it) },
+            statement.parameters.map { (name, value) -> name to normalizeStatement(method, value) },
         )
         is FoxBlock -> FoxBlock(statement.label, statement.statements.map { normalizeStatement(method, it) })
         is FoxIf -> FoxIf(

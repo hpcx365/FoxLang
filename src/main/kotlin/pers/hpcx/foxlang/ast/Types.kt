@@ -70,8 +70,8 @@ data class FoxObjectMembersOfType(val type: FoxType, val names: Set<String>) : F
 data class FoxObjectDropMembersOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
 data class FoxObjectMergeMembersOfType(val types: List<FoxType>) : FoxTransformType
 data class FoxEnumItemOfType(val type: FoxType, val name: String) : FoxTransformType
-data class FoxEnumItemsOfType(val type: FoxType, val names: List<String>) : FoxTransformType
-data class FoxEnumDropItemsOfType(val type: FoxType, val names: List<String>) : FoxTransformType
+data class FoxEnumItemsOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class FoxEnumDropItemsOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
 data class FoxEnumMergeItemsOfType(val types: List<FoxType>) : FoxTransformType
 data class FoxArrayElementOfType(val type: FoxType) : FoxTransformType
 data class FoxRefReferentOfType(val type: FoxType) : FoxTransformType

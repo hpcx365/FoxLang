@@ -42,7 +42,7 @@ data class FoxCall(
 data class FoxIndirectCall(
     val target: FoxStatement,
     val method: FoxStatement,
-    val parameters: List<FoxStatement>,
+    val parameters: List<Pair<String?, FoxStatement>>,
 ) : FoxStatement
 
 data class FoxBlock(val label: String?, val statements: List<FoxStatement>) : FoxStatement

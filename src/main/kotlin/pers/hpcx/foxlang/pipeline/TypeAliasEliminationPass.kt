@@ -93,7 +93,7 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
     is FoxIndirectCall -> FoxIndirectCall(
         target.mapTypes(transform),
         method.mapTypes(transform),
-        parameters.map { it.mapTypes(transform) },
+        parameters.map { (name, parameter) -> name to parameter.mapTypes(transform) },
     )
     is FoxBlock -> FoxBlock(
         label,

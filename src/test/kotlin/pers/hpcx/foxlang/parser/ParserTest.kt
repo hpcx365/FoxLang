@@ -1,20 +1,19 @@
 package pers.hpcx.foxlang.parser
 
-import pers.hpcx.foxlang.ast.FoxFile
 import pers.hpcx.foxlang.ast.FoxFileParser
 import pers.hpcx.foxlang.ast.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class ParserTest {
-
+    
     @Test
     fun testParserAndAstSourcePrinter() {
-        val file = assertIs<ExactReduction<FoxFile>>(FoxFileParser.parse(source))
-        val printed = file.node.toSource()
-        val reparsed = assertIs<ExactReduction<FoxFile>>(FoxFileParser.parse(printed))
-        assertEquals(file.node, reparsed.node)
+        val file = assertNotNull(FoxFileParser.parse(source))
+        val printed = file.toSource()
+        val reparsed = assertNotNull(FoxFileParser.parse(printed))
+        assertEquals(file, reparsed)
     }
     
     val source = """

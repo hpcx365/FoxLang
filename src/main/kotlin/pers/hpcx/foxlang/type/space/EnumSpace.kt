@@ -166,10 +166,10 @@ fun enumItem(generic: String, name: String) = EnumItemProjectionSpace(generic, n
 
 data class EnumItemProjectionSpace(val generic: String, val name: String) : PlaceHolderSpace<FoxType>
 
-fun enumItemsOf(generic: String, names: List<String>) = EnumItemsProjectionSpace(generic, names)
+fun enumItemsOf(generic: String, names: Set<String>) = EnumItemsProjectionSpace(generic, names)
 
-data class EnumItemsProjectionSpace(val generic: String, val names: List<String>) : PlaceHolderSpace<FoxType>
+data class EnumItemsProjectionSpace(val generic: String, val names: Set<String>) : PlaceHolderSpace<FoxType>
 
-fun enumDropItemsOf(generic: String, names: List<String>) = EnumDropItemsProjectionSpace(generic, names)
+fun enumDropItemsOf(generic: String, names: Set<String>) = EnumDropItemsProjectionSpace(generic, names)
 
-data class EnumDropItemsProjectionSpace(val generic: String, val names: List<String>) : PlaceHolderSpace<FoxType>
+data class EnumDropItemsProjectionSpace(val generic: String, val names: Set<String>) : PlaceHolderSpace<FoxType>

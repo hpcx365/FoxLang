@@ -441,9 +441,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printStatement(statement.method, indentLevel, Standalone)
         print(')')
         print('(')
-        printCommaSeparated(statement.parameters) { parameter ->
-            printStatement(parameter, indentLevel, Standalone)
-        }
+        printActualParameters(statement.parameters, indentLevel)
         print(')')
     }
     

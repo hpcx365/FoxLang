@@ -4,6 +4,7 @@ import dk.brics.automaton.Automaton
 import dk.brics.automaton.RegExp
 import dk.brics.automaton.Transition
 import java.util.*
+import kotlin.math.abs
 
 fun stringStringSimilarity(string1: String, string2: String): Double {
     val maxLen = maxOf(string1.length, string2.length)
@@ -232,7 +233,7 @@ fun regexRegexSimilarity(regex1: String, regex2: String, maxLen: Int): Double {
     val interCount = countAcceptedUpToLength(intersection, maxLen)
     val unionCount = countAcceptedUpToLength(union, maxLen)
     
-    return if (unionCount == 0L) 1.0 else interCount.toDouble() / unionCount.toDouble()
+    return if (unionCount == 0L) 1.0 else interCount.toDouble() / unionCount
 }
 
 private fun countAcceptedUpToLength(automaton: Automaton, maxLen: Int): Long {
@@ -272,4 +273,177 @@ private fun countAcceptedUpToLength(automaton: Automaton, maxLen: Int): Long {
     }
     
     return total
+}
+
+class SymbolSimilarity internal constructor(
+    val symbols: List<Symbol<*>>,
+    private val index: Map<Symbol<*>, Int>,
+    private val values: Array<DoubleArray>,
+) {
+    
+    operator fun get(left: Symbol<*>, right: Symbol<*>): Double {
+        val leftIndex = index[left] ?: return if (left == right) 1.0 else 0.0
+        val rightIndex = index[right] ?: return if (left == right) 1.0 else 0.0
+        return values[leftIndex][rightIndex]
+    }
+}
+
+fun Grammar.computeSymbolSimilarities(
+    iterations: Int = 10,
+    defaultWeight: Int = 10,
+    regexMaxLength: Int = 10,
+): SymbolSimilarity {
+    require(iterations > 0) { "Iteration count must be positive: $iterations" }
+    require(defaultWeight > 0) { "Default weight must be positive: $defaultWeight" }
+    require(regexMaxLength > 0) { "Regex max length must be positive: $regexMaxLength" }
+    
+    val symbols = allSymbols()
+    val index = symbols.withIndex().associate { it.value to it.index }
+    val values = Array(symbols.size) { DoubleArray(symbols.size) }
+    val leafRules = symbols.associateWith { symbol ->
+        rules[symbol].orEmpty().filterIsInstance<LeafRule<*>>()
+    }
+    val alternatives = symbols.associateWith { symbol ->
+        similarityAlternatives(symbol)
+    }
+    
+    symbols.forEachIndexed { i, left ->
+        symbols.forEachIndexed { j, right ->
+            var best = if (left == right) 1.0 else 0.0
+            leafRules.getValue(left).forEach { leftRule ->
+                leafRules.getValue(right).forEach { rightRule ->
+                    best = maxOf(best, leafSimilarity(leftRule, rightRule, regexMaxLength))
+                }
+            }
+            values[i][j] = best.coerceIn(0.0, 1.0)
+        }
+    }
+    
+    repeat(iterations) {
+        symbols.forEachIndexed { i, left ->
+            for (j in 0..i) {
+                val right = symbols[j]
+                var best = maxOf(values[i][j], values[j][i])
+                alternatives.getValue(left).forEach { leftSequence ->
+                    alternatives.getValue(right).forEach { rightSequence ->
+                        best = maxOf(
+                            best,
+                            sequenceSimilarity(
+                                leftSequence,
+                                rightSequence,
+                                index,
+                                values,
+                                defaultWeight,
+                            ),
+                        )
+                    }
+                }
+                alternatives.getValue(right).forEach { rightSequence ->
+                    alternatives.getValue(left).forEach { leftSequence ->
+                        best = maxOf(
+                            best,
+                            sequenceSimilarity(
+                                rightSequence,
+                                leftSequence,
+                                index,
+                                values,
+                                defaultWeight,
+                            ),
+                        )
+                    }
+                }
+                best = best.coerceIn(0.0, 1.0)
+                values[i][j] = best
+                values[j][i] = best
+            }
+        }
+    }
+    
+    return SymbolSimilarity(symbols, index, values)
+}
+
+private fun Grammar.allSymbols(): List<Symbol<*>> {
+    val result = mutableSetOf<Symbol<*>>()
+    rules.forEach { (target, rules) ->
+        result += target
+        rules.filterIsInstance<NonLeafRule<*>>().forEach { rule ->
+            result += rule.components
+        }
+    }
+    result += weights.keys
+    return result.toList()
+}
+
+private fun Grammar.similarityAlternatives(symbol: Symbol<*>): List<List<Symbol<*>>> {
+    val rules = rules[symbol].orEmpty()
+    val result = mutableListOf<List<Symbol<*>>>()
+    rules.filterIsInstance<NonLeafRule<*>>().forEach { rule ->
+        result += rule.components
+    }
+    if (rules.any { it is LeafRule<*> }) {
+        result += listOf(symbol)
+    }
+    return result
+}
+
+private fun leafSimilarity(
+    left: LeafRule<*>,
+    right: LeafRule<*>,
+    regexMaxLength: Int,
+): Double = when (left) {
+    is FixedRule<*> if right is FixedRule<*> ->
+        stringStringSimilarity(left.string, right.string)
+    is FixedRule<*> if right is RegexRule<*> ->
+        stringRegexSimilarity(left.string, right.regex.pattern)
+    is RegexRule<*> if right is FixedRule<*> ->
+        stringRegexSimilarity(right.string, left.regex.pattern)
+    is RegexRule<*> if right is RegexRule<*> ->
+        regexRegexSimilarity(left.regex.pattern, right.regex.pattern, regexMaxLength)
+    is NewlineRule<*> if right is NewlineRule<*> -> 1.0
+    is CharLiteralRule<*> if right is CharLiteralRule<*> -> 1.0
+    is StringLiteralRule<*> if right is StringLiteralRule<*> -> 1.0
+    else -> 0.0
+}
+
+private fun Grammar.sequenceSimilarity(
+    left: List<Symbol<*>>,
+    right: List<Symbol<*>>,
+    index: Map<Symbol<*>, Int>,
+    values: Array<DoubleArray>,
+    defaultWeight: Int,
+): Double {
+    val leftWeights = left.map { weightOf(it, defaultWeight) }
+    val rightWeights = right.map { weightOf(it, defaultWeight) }
+    val leftTotalWeight = leftWeights.sum()
+    val rightTotalWeight = rightWeights.sum()
+    var result = 0.0
+    
+    var leftBegin = 0.0
+    left.forEachIndexed { i, leftSymbol ->
+        val leftEnd = leftBegin + leftWeights[i].toDouble() / leftTotalWeight
+        var rightBegin = 0.0
+        right.forEachIndexed { j, rightSymbol ->
+            val rightEnd = rightBegin + rightWeights[j].toDouble() / rightTotalWeight
+            val overlap = minOf(leftEnd, rightEnd) - maxOf(leftBegin, rightBegin)
+            if (overlap > 0.0) {
+                result += overlap * values[index.getValue(leftSymbol)][index.getValue(rightSymbol)]
+            }
+            rightBegin = rightEnd
+        }
+        leftBegin = leftEnd
+    }
+    
+    return result * weightSimilarity(leftTotalWeight, rightTotalWeight)
+}
+
+private fun Grammar.weightOf(
+    symbol: Symbol<*>,
+    defaultWeight: Int,
+): Int {
+    return weights[symbol] ?: defaultWeight
+}
+
+private fun weightSimilarity(weight1: Int, weight2: Int): Double {
+    val ratio = abs(weight1 - weight2).toDouble() / (weight1 + weight2)
+    return 1.0 - ratio * ratio
 }

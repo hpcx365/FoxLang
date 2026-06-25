@@ -212,12 +212,12 @@ class TypeCompileTest {
             compileType(FoxEnumItemOfType(base, "Ok")),
         )
         assertEquals(
-            EnumItemsProjectionSpace("E", listOf("Err", "Ok")),
-            compileType(FoxEnumItemsOfType(base, listOf("Err", "Ok"))),
+            EnumItemsProjectionSpace("E", setOf("Err", "Ok")),
+            compileType(FoxEnumItemsOfType(base, setOf("Err", "Ok"))),
         )
         assertEquals(
-            EnumDropItemsProjectionSpace("E", listOf("Err")),
-            compileType(FoxEnumDropItemsOfType(base, listOf("Err"))),
+            EnumDropItemsProjectionSpace("E", setOf("Err")),
+            compileType(FoxEnumDropItemsOfType(base, setOf("Err"))),
         )
     }
     
