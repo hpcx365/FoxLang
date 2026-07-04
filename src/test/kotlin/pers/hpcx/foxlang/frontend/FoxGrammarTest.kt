@@ -1,12 +1,13 @@
-package pers.hpcx.foxlang.parser
+package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.FoxFileParser
-import pers.hpcx.foxlang.ast.toSource
+import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.runtime.FoxInt
+import pers.hpcx.foxlang.runtime.FoxString
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-class ParserTest {
+class FoxGrammarTest {
     
     @Test
     fun testParserAndAstSourcePrinter() {
@@ -14,6 +15,83 @@ class ParserTest {
         val printed = file.toSource()
         val reparsed = assertNotNull(FoxFileParser.parse(printed))
         assertEquals(file, reparsed)
+    }
+    
+    @Test
+    fun testStatementMustEndWithLineBreak() {
+        val file = assertNotNull(
+            FoxFileParser.parse(
+                """
+def main() {
+    return "fox"
+}
+""",
+            ),
+        )
+        
+        val method = file.elements.single() as FoxMethodDefinition
+        val body = method.body as FoxBlock
+        assertEquals(
+            listOf(FoxReturn(FoxEntityStatement(FoxString("fox")))),
+            body.statements,
+        )
+    }
+    
+    @Test
+    fun testDotAbsorbsLineBreakInPostfixExpression() {
+        val file = assertNotNull(
+            FoxFileParser.parse(
+                """
+def main() {
+    list
+    .add("fox")
+}
+""",
+            ),
+        )
+        
+        val method = file.elements.single() as FoxMethodDefinition
+        val body = method.body as FoxBlock
+        assertEquals(
+            listOf(
+                FoxCall(
+                    FoxSymbol("list"),
+                    "add",
+                    null,
+                    listOf(null to FoxEntityStatement(FoxString("fox"))),
+                ),
+            ),
+            body.statements,
+        )
+    }
+    
+    @Test
+    fun testBinaryOperatorAbsorbsFollowingLineBreak() {
+        val file = assertNotNull(
+            FoxFileParser.parse(
+                """
+def main() {
+    return 1 +
+    2
+}
+""",
+            ),
+        )
+        
+        val method = file.elements.single() as FoxMethodDefinition
+        val body = method.body as FoxBlock
+        assertEquals(
+            listOf(
+                FoxReturn(
+                    FoxBinary(
+                        FoxEntityStatement(FoxInt(1)),
+                        FoxAddOperator,
+                        FoxEntityStatement(FoxInt(2)),
+                    ),
+                ),
+            ),
+            body.statements,
+        )
     }
     
     val source = """
@@ -85,57 +163,57 @@ def <T = AnyStructOf<String, Int>, E = ItemOf<MyEnum, Success>> MergeFieldsOf<My
     return "fox"
 }
 
-//def Int.collatz(): Ref<List<Int>> {
-//    result := Ref<ArrayList<Int>>()
-//
-//    i := this
-//    println((println)("indirect call"))
+def Int.collatz(): Ref<List<Int>> {
+    result := Ref<ArrayList<Int>>()
+
+    i := this
+    println((println)("indirect call"))
 //    result.(forEach)({ println(it) })
-//    #loop while (i != 1) {
-//        result += i
-//        i = if (i % 2 == 0) i / 2 else {
-//            j := 3 * i + 1
-//            when {
-//                j > 1_000_000_000 -> {
+    #loop while (i != 1) {
+        result += i
+        i = if (i % 2 == 0) i / 2 else {
+            j := 3 * i + 1
+            when {
+                j > 1_000_000_000 -> {
 //                    println(f"Wow, a \"huge\" number: {j}, I can't handle it.")
-//                    break #loop
-//                }
+                    break #loop
+                }
 //                j > 1_000_000 -> println(f"\\Amazing\\ number: {j}")
 //                j > 10_000 -> println(f"Cool number: {j}")
-//                else -> {}
-//            }
-//            yield j
-//        }
-//    }
-//    result += 1
-//
-//    return result
-//}
-//
-//def main(args: Array<String>) {
-//    println("Hello, I am fox! Let's count numbers!")
-//
-//    i := read<Int>()
-//    if (i <= 0) panic("Invalid input! Expected a positive number.")
-//    if (i > 10_000) panic("Invalid input! Expected a number less than 10,000.")
-//
-//    result := i.collatz()
-//    println("Collatz sequence:")
+                else -> {}
+            }
+            yield j
+        }
+    }
+    result += 1
+
+    return result
+}
+
+def main(args: Array<String>) {
+    println("Hello, I am fox! Let's count numbers!")
+
+    i := read<Int>()
+    if (i <= 0) panic("Invalid input! Expected a positive number.")
+    if (i > 10_000) panic("Invalid input! Expected a number less than 10,000.")
+
+    result := i.collatz()
+    println("Collatz sequence:")
 //    result.forEach { println(it) }
-//
-//    if (false) {
-//        println('a')
-//        println('3')
-//        println('"')
-//        println('\n')
-//        println('\t')
-//        println('\r')
-//        println('\b')
-//        println('\\')
-//        println('\'')
-//        println('\u0000')
-//        println('\u0abc')
-//    }
-//}
+
+    if (false) {
+        println('a')
+        println('3')
+        println('"')
+        println('\n')
+        println('\t')
+        println('\r')
+        println('\b')
+        println('\\')
+        println('\'')
+        println('\u0000')
+        println('\u0abc')
+    }
+}
 """
 }

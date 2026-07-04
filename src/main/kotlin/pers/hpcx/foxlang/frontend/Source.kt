@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.parser
+package pers.hpcx.foxlang.frontend
 
 @JvmInline
 value class SourcePosition(val fragIndex: Int) : Comparable<SourcePosition> {
@@ -42,8 +42,6 @@ data class PlainFragment(
 ) : SourceFragment {
     
     init {
-        require(line >= 0) { "Line number must be non-negative: $line" }
-        require(column >= 0) { "Column must be non-negative: $column" }
         require(text.isNotEmpty()) { "Text must not be empty: $text" }
         require(text.none { it.isWhitespace() }) { "Text must not contain whitespace: $text" }
     }
@@ -51,7 +49,7 @@ data class PlainFragment(
     override fun toString() = "line ${line + 1}, column ${column + 1}: <plain-text> $text"
 }
 
-data class NewlineFragment(
+data class LineBreakFragment(
     override val line: Int,
     override val column: Int,
 ) : SourceFragment {
@@ -64,11 +62,6 @@ data class CharLiteralFragment(
     override val column: Int,
     val char: Char,
 ) : SourceFragment {
-    
-    init {
-        require(line >= 0) { "Line number must be non-negative: $line" }
-        require(column >= 0) { "Column must be non-negative: $column" }
-    }
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <char-literal> '${
         when (char) {
@@ -90,11 +83,6 @@ data class StringLiteralFragment(
     val string: String,
 ) : SourceFragment {
     
-    init {
-        require(line >= 0) { "Line number must be non-negative: $line" }
-        require(column >= 0) { "Column must be non-negative: $column" }
-    }
-    
     override fun toString() = "line ${line + 1}, column ${column + 1}: <string-literal> $string"
 }
 
@@ -102,27 +90,6 @@ class SourceFragmentationException(message: String) : Exception(message)
 
 fun String.toFragments(): List<SourceFragment> {
     val lines = lines()
-    var line = 0
-    var column = 0
-    
-    fun move(numChars: Int) {
-        require(numChars >= 0) { "Cannot move negative characters: $numChars" }
-        require(line < lines.size) { "Line index out of bounds: $line >= ${lines.size}" }
-        
-        val lineText = lines[line]
-        val newColumn = column + numChars
-        
-        require(newColumn <= lineText.length) {
-            "Cannot move beyond line end: column=$column, move=$numChars, line length=${lineText.length}"
-        }
-        
-        if (newColumn < lineText.length) {
-            column = newColumn
-        } else {
-            line++
-            column = 0
-        }
-    }
     
     fun fragmentPlain(line: Int, begin: Int, end: Int): PlainFragment {
         val lineText = lines[line]
@@ -130,8 +97,8 @@ fun String.toFragments(): List<SourceFragment> {
         return PlainFragment(line, begin, text)
     }
     
-    fun fragmentNewline(line: Int, begin: Int): NewlineFragment {
-        return NewlineFragment(line, begin)
+    fun fragmentLineBreak(line: Int, begin: Int): LineBreakFragment {
+        return LineBreakFragment(line, begin)
     }
     
     fun fragmentCharLiteral(line: Int, begin: Int, end: Int): CharLiteralFragment {
@@ -221,10 +188,33 @@ fun String.toFragments(): List<SourceFragment> {
     }
     
     val result = mutableListOf<SourceFragment>()
+    var line = 0
+    var column = 0
+    
+    fun move(numChars: Int) {
+        require(numChars >= 0) { "Cannot move negative characters: $numChars" }
+        require(line < lines.size) { "Line index out of bounds: $line >= ${lines.size}" }
+        
+        val lineText = lines[line]
+        val newColumn = column + numChars
+        
+        require(newColumn <= lineText.length) {
+            "Cannot move beyond line end: column=$column, move=$numChars, line length=${lineText.length}"
+        }
+        
+        if (newColumn < lineText.length) {
+            column = newColumn
+        } else {
+            if (line + 1 < lines.size && result.isNotEmpty() && result.last() !is LineBreakFragment) {
+                result += fragmentLineBreak(line, lineText.length)
+            }
+            line++
+            column = 0
+        }
+    }
     
     while (line < lines.size) {
         if (column >= lines[line].length) {
-            result += fragmentNewline(line, lines[line].length)
             move(0)
             continue
         }

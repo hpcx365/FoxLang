@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.parser
+package pers.hpcx.foxlang.frontend
 
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.Test
@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
-class ParserSmokeTest {
+class ParserTest {
     
     @Test
     fun testSingleComponentSequenceRule() {

@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.parser
+package pers.hpcx.foxlang.frontend
 
 import dk.brics.automaton.RegExp
 import dk.brics.automaton.RunAutomaton
@@ -8,7 +8,6 @@ import kotlin.reflect.KClass
 
 data class Grammar(
     val rules: Map<Symbol<*>, Set<Rule<*>>>,
-    val weights: Map<Symbol<*>, Int> = emptyMap(),
 ) {
     
     val dependencyGraph: Map<Symbol<*>, Set<Symbol<*>>> =
@@ -36,42 +35,39 @@ fun buildGrammar(block: GrammarBuilder.() -> Unit): Grammar {
 
 class GrammarBuilder {
     
-    private val rules = mutableMapOf<Symbol<*>, MutableSet<Rule<*>>>()
-    private val weights = mutableMapOf<Symbol<*>, Int>()
+    private val rules = mutableMapOf<Symbol<*>, Set<Rule<*>>>()
     
-    fun build() = Grammar(rules, weights)
-    
-    fun <N> weight(symbol: Symbol<N>, weight: Int) {
-        require(weight > 0) { "weight must be positive: $weight" }
-        weights[symbol] = weight
-    }
+    fun build() = Grammar(rules)
     
     @Suppress("UNCHECKED_CAST")
-    fun <N> rules(symbol: Symbol<N>, block: RuleListBuilder<N>.() -> Unit) {
-        val set = rules.getOrPut(symbol) { mutableSetOf() }
-        RuleListBuilder(set as MutableSet<Rule<N>>).block()
+    fun <N> rules(symbol: Symbol<N>, block: RuleSetBuilder<N>.() -> Unit) {
+        val builder = RuleSetBuilder<N>()
+        builder.block()
+        rules[symbol] = builder.set
     }
     
-    class RuleListBuilder<N>(internal val list: MutableSet<Rule<N>>) {
+    class RuleSetBuilder<N> {
+        
+        val set = mutableSetOf<Rule<N>>()
         
         fun fixed(string: String, factory: (PlainFragment) -> N) {
-            list += FixedRule(string, factory)
+            set += FixedRule(string, factory)
         }
         
         fun regex(regex: Regex, factory: (PlainFragment) -> N) {
-            list += RegexRule(regex, factory)
+            set += RegexRule(regex, factory)
         }
         
-        fun newline(factory: (NewlineFragment) -> N) {
-            list += NewlineRule(factory)
+        fun lineBreak(factory: (LineBreakFragment) -> N) {
+            set += LineBreakRule(factory)
         }
         
         fun charLiteral(factory: (CharLiteralFragment) -> N) {
-            list += CharLiteralRule(factory)
+            set += CharLiteralRule(factory)
         }
         
         fun stringLiteral(factory: (StringLiteralFragment) -> N) {
-            list += StringLiteralRule(factory)
+            set += StringLiteralRule(factory)
         }
         
         @Suppress("UNCHECKED_CAST")
@@ -79,7 +75,7 @@ class GrammarBuilder {
             comp0: Symbol<N0>,
             factory: (N0) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0)) { list ->
+            set += NonLeafRule(listOf(comp0)) { list ->
                 factory(list[0] as N0)
             }
         }
@@ -90,7 +86,7 @@ class GrammarBuilder {
             comp1: Symbol<N1>,
             factory: (N0, N1) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1)) { list ->
                 factory(list[0] as N0, list[1] as N1)
             }
         }
@@ -102,7 +98,7 @@ class GrammarBuilder {
             comp2: Symbol<N2>,
             factory: (N0, N1, N2) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2)
             }
         }
@@ -115,7 +111,7 @@ class GrammarBuilder {
             comp3: Symbol<N3>,
             factory: (N0, N1, N2, N3) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2, comp3)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2, comp3)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3)
             }
         }
@@ -129,7 +125,7 @@ class GrammarBuilder {
             comp4: Symbol<N4>,
             factory: (N0, N1, N2, N3, N4) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4)
             }
         }
@@ -144,7 +140,7 @@ class GrammarBuilder {
             comp5: Symbol<N5>,
             factory: (N0, N1, N2, N3, N4, N5) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5)
             }
         }
@@ -160,7 +156,7 @@ class GrammarBuilder {
             comp6: Symbol<N6>,
             factory: (N0, N1, N2, N3, N4, N5, N6) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6)
             }
         }
@@ -177,7 +173,7 @@ class GrammarBuilder {
             comp7: Symbol<N7>,
             factory: (N0, N1, N2, N3, N4, N5, N6, N7) -> N,
         ) {
-            list += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7)) { list ->
+            set += NonLeafRule(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7)) { list ->
                 factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6, list[7] as N7)
             }
         }
@@ -240,16 +236,16 @@ class RuleFactoryException(message: String) : Exception(message)
 sealed interface Rule<N>
 
 sealed interface LeafRule<N> : Rule<N>
-class FixedRule<N>(val string: String, val factory: (PlainFragment) -> N) : LeafRule<N>
-class RegexRule<N>(val regex: Regex, val factory: (PlainFragment) -> N) : LeafRule<N> {
+data class FixedRule<N>(val string: String, val factory: (PlainFragment) -> N) : LeafRule<N>
+data class RegexRule<N>(val regex: Regex, val factory: (PlainFragment) -> N) : LeafRule<N> {
     val automaton by lazy { RunAutomaton(RegExp(regex.pattern).toAutomaton(true), true) }
 }
 
-class NewlineRule<N>(val factory: (NewlineFragment) -> N) : LeafRule<N>
-class CharLiteralRule<N>(val factory: (CharLiteralFragment) -> N) : LeafRule<N>
-class StringLiteralRule<N>(val factory: (StringLiteralFragment) -> N) : LeafRule<N>
+data class LineBreakRule<N>(val factory: (LineBreakFragment) -> N) : LeafRule<N>
+data class CharLiteralRule<N>(val factory: (CharLiteralFragment) -> N) : LeafRule<N>
+data class StringLiteralRule<N>(val factory: (StringLiteralFragment) -> N) : LeafRule<N>
 
-class NonLeafRule<N>(
+data class NonLeafRule<N>(
     val components: List<Symbol<*>>,
     val factory: (List<*>) -> N,
 ) : Rule<N> {

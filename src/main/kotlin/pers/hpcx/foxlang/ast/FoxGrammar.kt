@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.ast
 
-import pers.hpcx.foxlang.parser.*
+import pers.hpcx.foxlang.frontend.*
 import pers.hpcx.foxlang.runtime.*
 import pers.hpcx.foxlang.type.toFoxTupleType
 import pers.hpcx.foxlang.utils.*
@@ -13,8 +13,18 @@ private val IdentifierColon = node<String>().name("IdentifierColon")
 private val TypeNameEqual = node<String>().name("TypeNameEqual")
 private val TypeNameColon = node<String>().name("TypeNameColon")
 private val Label = node<String>().name("Label")
-private val Newline = node<Unit>().name("Newline")
-private val LineBreaks = node<Unit>().name("LineBreaks")
+private val LineBreak = node<Unit>().name("LineBreak")
+private val Dot = node<Unit>().name("Dot")
+private val BlockOpen = node<Unit>().name("BlockOpen")
+private val BlockClose = node<Unit>().name("BlockClose")
+private val ParenOpen = node<Unit>().name("ParenOpen")
+private val ParenClose = node<Unit>().name("ParenClose")
+private val AngleOpen = node<Unit>().name("AngleOpen")
+private val AngleClose = node<Unit>().name("AngleClose")
+private val Comma = node<Unit>().name("Comma")
+private val Arrow = node<Unit>().name("Arrow")
+private val ElseKeyword = node<Unit>().name("ElseKeyword")
+private val DoWhileKeyword = node<Unit>().name("DoWhileKeyword")
 
 // Literal nodes
 private val BinInt = node<String>().name("BinInt")
@@ -90,6 +100,7 @@ private val MethodTypeArgumentListHead = node<ParsedMethodTypeArgument>().list()
 private val MethodTypeArgumentList = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentList")
 
 // Expression nodes
+private val StatementLine = node<FoxStatement>().name("StatementLine")
 private val StatementBlockHead = node<FoxStatement>().list().name("StatementBlockHead")
 private val StatementBlock = node<FoxStatement>().list().name("StatementBlock")
 private val ParenthesizedStatement = node<FoxStatement>().name("ParenthesizedStatement")
@@ -108,6 +119,7 @@ private val LogicalAndExpression = node<FoxStatement>().name("LogicalAndExpressi
 private val LogicalOrExpression = node<FoxStatement>().name("LogicalOrExpression")
 private val AssignableExpression = node<FoxStatement>().name("AssignableExpression")
 private val AssignmentExpression = node<FoxStatement>().name("AssignmentExpression")
+private val ControlBody = node<FoxStatement>().name("ControlBody")
 
 // Operator nodes
 private val MultiplicativeOperator = node<FoxBinaryOperator>().name("MultiplicativeOperator")
@@ -125,6 +137,7 @@ private val LogicalOrOperator = node<FoxBinaryOperator>().name("LogicalOrOperato
 private val WhenCaseConditionListHead = node<FoxStatement>().list().name("WhenCaseConditionListHead")
 private val WhenCaseConditionList = node<FoxStatement>().list().name("WhenCaseConditionList")
 private val WhenCase = node<FoxCase>().name("WhenCase")
+private val WhenCaseLine = node<FoxCase>().name("WhenCaseLine")
 private val WhenCaseListHead = node<FoxCase>().list().name("WhenCaseListHead")
 private val WhenCaseList = node<FoxCase>().list().name("WhenCaseList")
 private val IfCore = node<FoxIf>().name("IfCore")
@@ -134,6 +147,7 @@ private val WhenCore = node<FoxWhen>().name("WhenCore")
 private val FileElementList = node<FoxFileElement>().list().name("FileElementList")
 
 // Top-level nodes
+private val FileElementLine = node<FoxFileElement>().name("FileElementLine")
 private val ThisTypeQualifier = node<FoxType>().name("ThisTypeQualifier")
 private val ReturnTypeClause = node<FoxType>().name("ReturnTypeClause")
 private val MethodHead = node<FoxMethodDefinition>().name("MethodHead")
@@ -159,233 +173,35 @@ val FoxGrammar = buildGrammar {
         tokens.forEach { token -> rules(token(token)) { fixed(token) { it.text } } }
     }
     
-    fun tokenWeights(weight: Int, vararg tokens: String) {
-        tokens.forEach { token -> weight(token(token), weight) }
-    }
-    
-    fun symbolWeights(weight: Int, vararg symbols: Symbol<*>) {
-        symbols.forEach { symbol -> weight(symbol, weight) }
-    }
-    
-    fun <N> GrammarBuilder.RuleListBuilder<N>.tokenValues(vararg mappings: Pair<String, N>) {
+    fun <N> GrammarBuilder.RuleSetBuilder<N>.tokenValues(vararg mappings: Pair<String, N>) {
         mappings.forEach { (text, value) ->
             symbols(token(text)) { value }
         }
     }
     
-    fun <N> regexValue(
-        source: Symbol<String>,
-        pattern: String,
-        result: Symbol<N>,
-        parser: (String) -> N,
-    ) {
-        rules(source) { regex(Regex(pattern)) { it.text } }
-        rules(result) {
-            symbols(source) {
-                try {
-                    parser(it)
-                } catch (e: Exception) {
-                    throw RuleFactoryException("Invalid token: $it, cause: ${e.message}")
-                }
-            }
+    fun <N> GrammarBuilder.RuleSetBuilder<N>.lineContinuationTokenValues(vararg mappings: Pair<String, N>) {
+        mappings.forEach { (text, value) ->
+            symbols(token(text)) { value }
+            symbols(token(text), LineBreak) { _, _ -> value }
         }
     }
     
-    symbolWeights(
-        3,
-        Newline,
-        LineBreaks,
-    )
-    symbolWeights(
-        5,
-        Identifier,
-        TypeName,
-        BinInt,
-        DecInt,
-        HexInt,
-        BinLong,
-        DecLong,
-        HexLong,
-        DecFloat,
-        HexFloat,
-        DecDouble,
-        HexDouble,
-        node<Unit>(),
-        node<Boolean>(),
-        node<Char>(),
-        node<String>(),
-        node<Int>(),
-        node<Long>(),
-        node<Float>(),
-        node<Double>(),
-    )
-    symbolWeights(
-        7,
-        IdentifierEqual,
-        IdentifierColon,
-        TypeNameEqual,
-        TypeNameColon,
-        Label,
-        node<FoxUnaryOperator>(),
-        node<FoxBinaryOperator>(),
-        MultiplicativeOperator,
-        AdditiveOperator,
-        ShiftOperator,
-        ComparisonOperator,
-        EqualityOperator,
-        BitAndOperator,
-        BitXorOperator,
-        BitOrOperator,
-        LogicalAndOperator,
-        LogicalOrOperator,
-    )
-    symbolWeights(
-        9,
-        node<FoxAssignOperator>(),
-        FormalParameter,
-        ActualParameter,
-        FormalGenericParameter,
-        FormalGenericParameterNoConstraints,
-        ActualGenericParameter,
-        NamedActualGenericParameter,
-        AnonymousActualGenericParameter,
-        TupleComponentParameter,
-        StructFieldParameter,
-        StructFieldName,
-        ObjectMemberParameter,
-        ObjectMemberName,
-        EnumItemParameter,
-        EnumItemName,
-        MethodTypeArgument,
-        ThisTypeQualifier,
-        ReturnTypeClause,
-    )
-    symbolWeights(
-        12,
-        node<FoxEntityStatement>(),
-        ParenthesizedStatement,
-        PrimaryExpression,
-        FormalParameterListHead,
-        ActualParameterListHead,
-        FormalGenericParameterListHead,
-        FormalGenericParameterNoConstraintsListHead,
-        ActualGenericParameterListHead,
-        NamedActualGenericParameterListHead,
-        AnonymousActualGenericParameterListHead,
-        TupleComponentParameterListHead,
-        StructFieldParameterListHead,
-        StructFieldNameListHead,
-        ObjectMemberParameterListHead,
-        ObjectMemberNameListHead,
-        EnumItemParameterListHead,
-        EnumItemNameListHead,
-        MethodTypeArgumentListHead,
-    )
-    symbolWeights(
-        15,
-        node<FoxType>(),
-        PostfixExpression,
-        UnaryExpression,
-        FormalParameterList,
-        ActualParameterList,
-        FormalGenericParameterList,
-        FormalGenericParameterNoConstraintsList,
-        ActualGenericParameterList,
-        NamedActualGenericParameterList,
-        AnonymousActualGenericParameterList,
-        TupleComponentParameterList,
-        StructFieldParameterList,
-        StructFieldNameList,
-        ObjectMemberParameterList,
-        ObjectMemberNameList,
-        EnumItemParameterList,
-        EnumItemNameList,
-        MethodTypeArgumentList,
-    )
-    symbolWeights(
-        18,
-        MultiplicativeExpression,
-        AdditiveExpression,
-        ShiftExpression,
-        ComparisonExpression,
-        EqualityExpression,
-        BitAndExpression,
-        BitXorExpression,
-        BitOrExpression,
-        LogicalAndExpression,
-        LogicalOrExpression,
-        AssignableExpression,
-        WhenCaseConditionListHead,
-        WhenCaseConditionList,
-        WhenCase,
-        WhenCaseListHead,
-        IfCore,
-        WhileCore,
-        DoWhileCore,
-        WhenCore,
-    )
-    symbolWeights(
-        24,
-        AssignmentExpression,
-        node<FoxStatement>(),
-        StatementBlockHead,
-        StatementBlock,
-        node<FoxBlock>(),
-        WhenCaseList,
-    )
-    symbolWeights(
-        30,
-        MethodHead,
-        node<FoxTypeAlias>(),
-        node<FoxMethodDefinition>(),
-        node<FoxFileElement>(),
-        FileElementList,
-    )
-    symbolWeights(36, node<FoxFile>())
+    fun regexToken(source: Symbol<String>, pattern: String) {
+        rules(source) { regex(Regex(pattern)) { it.text } }
+    }
     
-    tokenWeights(
-        5,
-        ".", ":", ";", ",", "`", "~", "?", "@", "#", "$",
-    )
-    tokenWeights(
-        6,
-        "(", ")", "[", "]", "{", "}", "<", ">", "->",
-    )
-    tokenWeights(
-        8,
-        "+", "-", "*", "/", "%", "&", "|", "^", "!", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>", ">>>",
-    )
-    tokenWeights(
-        10,
-        "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
-    )
-    tokenWeights(
-        11,
-        "unit", "true", "false", "this", "new",
-    )
-    tokenWeights(
-        12,
-        "type", "def", "if", "else", "when", "do", "while", "break", "continue", "yield", "return",
-    )
-    tokenWeights(
-        13,
-        "Void", "Unit", "Bool", "Byte", "Short", "Int", "Long", "Float", "Double", "Char", "String",
-        "Any", "AnyTuple", "AnyStruct", "AnyObject", "AnyEnum",
-    )
-    tokenWeights(
-        15,
-        "Tuple", "Struct", "Object", "Enum", "Array", "Ref", "Method",
-        "AnyOf", "AllOf", "NoneOf", "AnyTupleOf", "AnyStructOf",
-        "ComponentAt", "LastComponentAt", "FirstComponentsOf", "ExactFirstComponentsOf",
-        "LastComponentsOf", "ExactLastComponentsOf", "DropFirstComponentsOf", "ExactDropFirstComponentsOf",
-        "DropLastComponentsOf", "ExactDropLastComponentsOf", "MergeComponentsOf",
-        "FieldOf", "FieldAt", "LastFieldAt", "FirstFieldsOf", "ExactFirstFieldsOf",
-        "LastFieldsOf", "ExactLastFieldsOf", "DropFirstFieldsOf", "ExactDropFirstFieldsOf",
-        "DropLastFieldsOf", "ExactDropLastFieldsOf", "FieldsOf", "DropFieldsOf", "MergeFieldsOf",
-        "MemberOf", "MembersOf", "DropMembersOf", "MergeMembersOf",
-        "ItemOf", "ItemsOf", "DropItemsOf", "MergeItemsOf",
-        "ElementOf", "ReferentOf", "MethodOf", "ThisOf", "ParametersOf", "ReturnOf",
-    )
+    fun <N> GrammarBuilder.RuleSetBuilder<N>.parsedTokenValue(
+        source: Symbol<String>,
+        parser: (String) -> N,
+    ) {
+        symbols(source) {
+            try {
+                parser(it)
+            } catch (e: Exception) {
+                throw RuleFactoryException("Invalid token: $it, cause: ${e.message}")
+            }
+        }
+    }
     
     fixedTokens(*ReservedKeywords.toTypedArray())
     fixedTokens(
@@ -427,7 +243,7 @@ val FoxGrammar = buildGrammar {
     }
     
     rules(node<FoxAssignOperator>()) {
-        tokenValues(
+        lineContinuationTokenValues(
             "=" to FoxPlainAssignOperator,
             ":=" to FoxTypeBindingAssignOperator,
             "+=" to FoxAddAssignOperator,
@@ -447,27 +263,27 @@ val FoxGrammar = buildGrammar {
     }
     
     rules(MultiplicativeOperator) {
-        tokenValues(
+        lineContinuationTokenValues(
             "*" to FoxMulOperator,
             "/" to FoxDivOperator,
             "%" to FoxRemOperator,
         )
     }
     rules(AdditiveOperator) {
-        tokenValues(
+        lineContinuationTokenValues(
             "+" to FoxAddOperator,
             "-" to FoxSubOperator,
         )
     }
     rules(ShiftOperator) {
-        tokenValues(
+        lineContinuationTokenValues(
             "<<" to FoxShlOperator,
             ">>" to FoxShrOperator,
             ">>>" to FoxUshrOperator,
         )
     }
     rules(ComparisonOperator) {
-        tokenValues(
+        lineContinuationTokenValues(
             "<" to FoxLtOperator,
             ">" to FoxGtOperator,
             "<=" to FoxLeOperator,
@@ -475,31 +291,68 @@ val FoxGrammar = buildGrammar {
         )
     }
     rules(EqualityOperator) {
-        tokenValues(
+        lineContinuationTokenValues(
             "==" to FoxEqOperator,
             "!=" to FoxNeqOperator,
         )
     }
     rules(BitAndOperator) {
-        tokenValues("&" to FoxAndOperator)
+        lineContinuationTokenValues("&" to FoxAndOperator)
     }
     rules(BitXorOperator) {
-        tokenValues("^" to FoxXorOperator)
+        lineContinuationTokenValues("^" to FoxXorOperator)
     }
     rules(BitOrOperator) {
-        tokenValues("|" to FoxOrOperator)
+        lineContinuationTokenValues("|" to FoxOrOperator)
     }
     rules(LogicalAndOperator) {
-        tokenValues("&&" to FoxAndAndOperator)
+        lineContinuationTokenValues("&&" to FoxAndAndOperator)
     }
     rules(LogicalOrOperator) {
-        tokenValues("||" to FoxOrOrOperator)
+        lineContinuationTokenValues("||" to FoxOrOrOperator)
     }
     
-    rules(Newline) { newline { } }
-    rules(LineBreaks) {
-        symbols(Newline) {}
-        symbols(LineBreaks, Newline) { _, _ -> }
+    rules(LineBreak) { lineBreak { } }
+    rules(Dot) {
+        symbols(token(".")) { }
+        symbols(LineBreak, token(".")) { _, _ -> }
+    }
+    rules(BlockOpen) {
+        symbols(token("{")) { }
+        symbols(token("{"), LineBreak) { _, _ -> }
+    }
+    rules(BlockClose) {
+        symbols(token("}")) { }
+    }
+    rules(ParenOpen) {
+        symbols(token("(")) { }
+    }
+    rules(ParenClose) {
+        symbols(token(")")) { }
+        symbols(LineBreak, token(")")) { _, _ -> }
+    }
+    rules(AngleOpen) {
+        symbols(token("<")) { }
+    }
+    rules(AngleClose) {
+        symbols(token(">")) { }
+        symbols(LineBreak, token(">")) { _, _ -> }
+    }
+    rules(Comma) {
+        symbols(token(",")) { }
+        symbols(token(","), LineBreak) { _, _ -> }
+    }
+    rules(Arrow) {
+        symbols(token("->")) { }
+        symbols(token("->"), LineBreak) { _, _ -> }
+    }
+    rules(ElseKeyword) {
+        symbols(token("else")) { }
+        symbols(LineBreak, token("else")) { _, _ -> }
+    }
+    rules(DoWhileKeyword) {
+        symbols(token("while")) { }
+        symbols(LineBreak, token("while")) { _, _ -> }
     }
     rules(Identifier) {
         regex(Regex("[a-z][a-zA-Z0-9_]*")) {
@@ -537,37 +390,6 @@ val FoxGrammar = buildGrammar {
             "AnyObject" to FoxAnyObjectType,
             "AnyEnum" to FoxAnyEnumType,
         )
-    }
-    
-    rules(node<Unit>()) { symbols(token("unit")) { } }
-    rules(node<Boolean>()) { symbols(token("true")) { true } }
-    rules(node<Boolean>()) { symbols(token("false")) { false } }
-    rules(node<Char>()) { charLiteral { it.char } }
-    rules(node<String>()) { stringLiteral { it.string } }
-    
-    regexValue(BinInt, "0b[01]+(_[01]+)*", node<Int>()) { it.drop(2).replace("_", "").toInt(2) }
-    regexValue(DecInt, "(0|[1-9][0-9]*(_[0-9]+)*)", node<Int>()) { it.replace("_", "").toInt() }
-    regexValue(HexInt, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*", node<Int>()) { it.drop(2).replace("_", "").toInt(16) }
-    regexValue(BinLong, "0b[01]+(_[01]+)*L", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
-    regexValue(DecLong, "(0|[1-9][0-9]*(_[0-9]+)*)L", node<Long>()) { it.dropLast(1).replace("_", "").toLong() }
-    regexValue(HexLong, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L", node<Long>()) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
-    regexValue(DecFloat, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() }
-    regexValue(HexFloat, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f", node<Float>()) { it.dropLast(1).replace("_", "").toFloat() }
-    regexValue(DecDouble, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?", node<Double>()) { it.replace("_", "").toDouble() }
-    regexValue(HexDouble, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+", node<Double>()) { it.replace("_", "").toDouble() }
-    
-    rules(node<FoxEntityStatement>()) {
-        symbols(node<Unit>()) { FoxEntityStatement(FoxUnit) }
-        symbols(node<Boolean>()) { FoxEntityStatement(FoxBool(it)) }
-        symbols(node<Int>()) { FoxEntityStatement(FoxInt(it)) }
-        symbols(node<Long>()) { FoxEntityStatement(FoxLong(it)) }
-        symbols(node<Float>()) { FoxEntityStatement(FoxFloat(it)) }
-        symbols(node<Double>()) { FoxEntityStatement(FoxDouble(it)) }
-        symbols(node<Char>()) { FoxEntityStatement(FoxChar(it)) }
-        symbols(node<String>()) { FoxEntityStatement(FoxString(it)) }
-    }
-    
-    rules(node<FoxType>()) {
         symbols(token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxAnyOfType(it)
         }
@@ -608,130 +430,130 @@ val FoxGrammar = buildGrammar {
         symbols(token("Method"), MethodTypeArgumentList) { _, items ->
             items.toFoxMethodType()
         }
-        symbols(token("ComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+        symbols(token("ComponentAt"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, index, _ ->
             FoxTupleComponentAtType(type, index)
         }
-        symbols(token("LastComponentAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+        symbols(token("LastComponentAt"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, index, _ ->
             FoxTupleLastComponentAtType(type, index)
         }
-        symbols(token("FirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("FirstComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleFirstComponentsOfType(type, count)
         }
-        symbols(token("ExactFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactFirstComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleExactFirstComponentsOfType(type, count)
         }
-        symbols(token("LastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("LastComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleLastComponentsOfType(type, count)
         }
-        symbols(token("ExactLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactLastComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleExactLastComponentsOfType(type, count)
         }
-        symbols(token("DropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("DropFirstComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleDropFirstComponentsOfType(type, count)
         }
-        symbols(token("ExactDropFirstComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactDropFirstComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleExactDropFirstComponentsOfType(type, count)
         }
-        symbols(token("DropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("DropLastComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleDropLastComponentsOfType(type, count)
         }
-        symbols(token("ExactDropLastComponentsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactDropLastComponentsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxTupleExactDropLastComponentsOfType(type, count)
         }
         symbols(token("MergeComponentsOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxTupleMergeComponentsOfType(it)
         }
-        symbols(token("FieldOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
+        symbols(token("FieldOf"), AngleOpen, node<FoxType>(), Comma, Identifier, AngleClose) { _, _, type, _, name, _ ->
             FoxStructFieldOfType(type, name)
         }
-        symbols(token("FieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+        symbols(token("FieldAt"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, index, _ ->
             FoxStructFieldAtType(type, index)
         }
-        symbols(token("LastFieldAt"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, index, _ ->
+        symbols(token("LastFieldAt"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, index, _ ->
             FoxStructLastFieldAtType(type, index)
         }
-        symbols(token("FirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("FirstFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructFirstFieldsOfType(type, count)
         }
-        symbols(token("ExactFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactFirstFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructExactFirstFieldsOfType(type, count)
         }
-        symbols(token("LastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("LastFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructLastFieldsOfType(type, count)
         }
-        symbols(token("ExactLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactLastFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructExactLastFieldsOfType(type, count)
         }
-        symbols(token("DropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("DropFirstFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructDropFirstFieldsOfType(type, count)
         }
-        symbols(token("ExactDropFirstFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactDropFirstFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructExactDropFirstFieldsOfType(type, count)
         }
-        symbols(token("DropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("DropLastFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructDropLastFieldsOfType(type, count)
         }
-        symbols(token("ExactDropLastFieldsOf"), token("<"), node<FoxType>(), token(","), node<Int>(), token(">")) { _, _, type, _, count, _ ->
+        symbols(token("ExactDropLastFieldsOf"), AngleOpen, node<FoxType>(), Comma, node<Int>(), AngleClose) { _, _, type, _, count, _ ->
             FoxStructExactDropLastFieldsOfType(type, count)
         }
-        symbols(token("FieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("FieldsOf"), AngleOpen, node<FoxType>(), Comma, StructFieldNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxStructFieldsOfType(type, names)
         }
-        symbols(token("DropFieldsOf"), token("<"), node<FoxType>(), token(","), StructFieldNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("DropFieldsOf"), AngleOpen, node<FoxType>(), Comma, StructFieldNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxStructDropFieldsOfType(type, names.toSet())
         }
         symbols(token("MergeFieldsOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxStructMergeFieldsOfType(it)
         }
-        symbols(token("MemberOf"), token("<"), node<FoxType>(), token(","), Identifier, token(">")) { _, _, type, _, name, _ ->
+        symbols(token("MemberOf"), AngleOpen, node<FoxType>(), Comma, Identifier, AngleClose) { _, _, type, _, name, _ ->
             FoxObjectMemberOfType(type, name)
         }
-        symbols(token("MembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("MembersOf"), AngleOpen, node<FoxType>(), Comma, ObjectMemberNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxObjectMembersOfType(type, names)
         }
-        symbols(token("DropMembersOf"), token("<"), node<FoxType>(), token(","), ObjectMemberNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("DropMembersOf"), AngleOpen, node<FoxType>(), Comma, ObjectMemberNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxObjectDropMembersOfType(type, names)
         }
         symbols(token("MergeMembersOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxObjectMergeMembersOfType(it)
         }
-        symbols(token("ItemOf"), token("<"), node<FoxType>(), token(","), TypeName, token(">")) { _, _, type, _, name, _ ->
+        symbols(token("ItemOf"), AngleOpen, node<FoxType>(), Comma, TypeName, AngleClose) { _, _, type, _, name, _ ->
             FoxEnumItemOfType(type, name)
         }
-        symbols(token("ItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("ItemsOf"), AngleOpen, node<FoxType>(), Comma, EnumItemNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxEnumItemsOfType(type, names)
         }
-        symbols(token("DropItemsOf"), token("<"), node<FoxType>(), token(","), EnumItemNameList, token(">")) { _, _, type, _, names, _ ->
+        symbols(token("DropItemsOf"), AngleOpen, node<FoxType>(), Comma, EnumItemNameList, AngleClose) { _, _, type, _, names, _ ->
             FoxEnumDropItemsOfType(type, names)
         }
         symbols(token("MergeItemsOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxEnumMergeItemsOfType(it)
         }
-        symbols(token("ElementOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+        symbols(token("ElementOf"), AngleOpen, node<FoxType>(), AngleClose) { _, _, type, _ ->
             FoxArrayElementOfType(type)
         }
-        symbols(token("ReferentOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+        symbols(token("ReferentOf"), AngleOpen, node<FoxType>(), AngleClose) { _, _, type, _ ->
             FoxRefReferentOfType(type)
         }
         symbols(
             token("MethodOf"),
-            token("<"),
+            AngleOpen,
             node<FoxType>(),
-            token(","),
+            Comma,
             node<FoxType>(),
-            token(","),
+            Comma,
             node<FoxType>(),
-            token(">"),
+            AngleClose,
         ) { _, _, `this`, _, parameters, _, `return`, _ ->
             FoxMethodOfType(`this`, parameters, `return`)
         }
-        symbols(token("ThisOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+        symbols(token("ThisOf"), AngleOpen, node<FoxType>(), AngleClose) { _, _, type, _ ->
             FoxMethodThisOfType(type)
         }
-        symbols(token("ParametersOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+        symbols(token("ParametersOf"), AngleOpen, node<FoxType>(), AngleClose) { _, _, type, _ ->
             FoxMethodParametersOfType(type)
         }
-        symbols(token("ReturnOf"), token("<"), node<FoxType>(), token(">")) { _, _, type, _ ->
+        symbols(token("ReturnOf"), AngleOpen, node<FoxType>(), AngleClose) { _, _, type, _ ->
             FoxMethodReturnOfType(type)
         }
         symbols(TypeName) {
@@ -742,17 +564,69 @@ val FoxGrammar = buildGrammar {
         }
     }
     
+    rules(node<Unit>()) { symbols(token("unit")) { } }
+    rules(node<Boolean>()) {
+        tokenValues(
+            "true" to true,
+            "false" to false,
+        )
+    }
+    rules(node<Char>()) { charLiteral { it.char } }
+    rules(node<String>()) { stringLiteral { it.string } }
+    
+    regexToken(BinInt, "0b[01]+(_[01]+)*")
+    regexToken(DecInt, "(0|[1-9][0-9]*(_[0-9]+)*)")
+    regexToken(HexInt, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*")
+    regexToken(BinLong, "0b[01]+(_[01]+)*L")
+    regexToken(DecLong, "(0|[1-9][0-9]*(_[0-9]+)*)L")
+    regexToken(HexLong, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L")
+    regexToken(DecFloat, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f")
+    regexToken(HexFloat, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f")
+    regexToken(DecDouble, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)(e[+-]?[0-9]+)?|(0|[1-9][0-9]*(_[0-9]+)*)e[+-]?[0-9]+")
+    regexToken(HexDouble, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+")
+    
+    rules(node<Int>()) {
+        parsedTokenValue(BinInt) { it.drop(2).replace("_", "").toInt(2) }
+        parsedTokenValue(DecInt) { it.replace("_", "").toInt() }
+        parsedTokenValue(HexInt) { it.drop(2).replace("_", "").toInt(16) }
+    }
+    rules(node<Long>()) {
+        parsedTokenValue(BinLong) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
+        parsedTokenValue(DecLong) { it.dropLast(1).replace("_", "").toLong() }
+        parsedTokenValue(HexLong) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
+    }
+    rules(node<Float>()) {
+        parsedTokenValue(DecFloat) { it.dropLast(1).replace("_", "").toFloat() }
+        parsedTokenValue(HexFloat) { it.dropLast(1).replace("_", "").toFloat() }
+    }
+    rules(node<Double>()) {
+        parsedTokenValue(DecDouble) { it.replace("_", "").toDouble() }
+        parsedTokenValue(HexDouble) { it.replace("_", "").toDouble() }
+    }
+    
+    rules(node<FoxEntityStatement>()) {
+        symbols(node<Unit>()) { FoxEntityStatement(FoxUnit) }
+        symbols(node<Boolean>()) { FoxEntityStatement(FoxBool(it)) }
+        symbols(node<Int>()) { FoxEntityStatement(FoxInt(it)) }
+        symbols(node<Long>()) { FoxEntityStatement(FoxLong(it)) }
+        symbols(node<Float>()) { FoxEntityStatement(FoxFloat(it)) }
+        symbols(node<Double>()) { FoxEntityStatement(FoxDouble(it)) }
+        symbols(node<Char>()) { FoxEntityStatement(FoxChar(it)) }
+        symbols(node<String>()) { FoxEntityStatement(FoxString(it)) }
+    }
+    
     rules(FormalParameter) {
         symbols(IdentifierColon, node<FoxType>()) { name, type -> name to type }
     }
     rules(FormalParameterListHead) {
-        symbols(token("("), FormalParameter) { _, it -> listOf(it) }
-        symbols(FormalParameterListHead, token(","), FormalParameter) { head, _, it -> head + it }
+        symbols(ParenOpen, FormalParameter) { _, it -> listOf(it) }
+        symbols(ParenOpen, LineBreak, FormalParameter) { _, _, it -> listOf(it) }
+        symbols(FormalParameterListHead, Comma, FormalParameter) { head, _, it -> head + it }
     }
     rules(FormalParameterList) {
-        symbols(token("("), token(")")) { _, _ -> emptyOrderedMap() }
-        symbols(FormalParameterListHead, token(")")) { head, _ -> head.toOrderedMap("formal parameter") }
-        symbols(FormalParameterListHead, token(","), token(")")) { head, _, _ -> head.toOrderedMap("formal parameter") }
+        symbols(ParenOpen, ParenClose) { _, _ -> emptyOrderedMap() }
+        symbols(FormalParameterListHead, ParenClose) { head, _ -> head.toOrderedMap("formal parameter") }
+        symbols(FormalParameterListHead, token(","), ParenClose) { head, _, _ -> head.toOrderedMap("formal parameter") }
     }
     
     rules(ActualParameter) {
@@ -760,13 +634,14 @@ val FoxGrammar = buildGrammar {
         symbols(IdentifierEqual, node<FoxStatement>()) { name, value -> name to value }
     }
     rules(ActualParameterListHead) {
-        symbols(token("("), ActualParameter) { _, it -> listOf(it) }
-        symbols(ActualParameterListHead, token(","), ActualParameter) { head, _, it -> head + it }
+        symbols(ParenOpen, ActualParameter) { _, it -> listOf(it) }
+        symbols(ParenOpen, LineBreak, ActualParameter) { _, _, it -> listOf(it) }
+        symbols(ActualParameterListHead, Comma, ActualParameter) { head, _, it -> head + it }
     }
     rules(ActualParameterList) {
-        symbols(token("("), token(")")) { _, _ -> emptyList() }
-        symbols(ActualParameterListHead, token(")")) { head, _ -> head }
-        symbols(ActualParameterListHead, token(","), token(")")) { head, _, _ -> head }
+        symbols(ParenOpen, ParenClose) { _, _ -> emptyList() }
+        symbols(ActualParameterListHead, ParenClose) { head, _ -> head }
+        symbols(ActualParameterListHead, token(","), ParenClose) { head, _, _ -> head }
     }
     
     rules(FormalGenericParameter) {
@@ -774,26 +649,28 @@ val FoxGrammar = buildGrammar {
         symbols(TypeName, token("="), node<FoxType>()) { name, _, constraint -> name to constraint }
     }
     rules(FormalGenericParameterListHead) {
-        symbols(token("<"), FormalGenericParameter) { _, it -> listOf(it) }
-        symbols(FormalGenericParameterListHead, token(","), FormalGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, FormalGenericParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, FormalGenericParameter) { _, _, it -> listOf(it) }
+        symbols(FormalGenericParameterListHead, Comma, FormalGenericParameter) { head, _, it -> head + it }
     }
     rules(FormalGenericParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyOrderedMap() }
-        symbols(FormalGenericParameterListHead, token(">")) { head, _ -> head.toOrderedMap("formal generic parameter") }
-        symbols(FormalGenericParameterListHead, token(","), token(">")) { head, _, _ -> head.toOrderedMap("formal generic parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyOrderedMap() }
+        symbols(FormalGenericParameterListHead, AngleClose) { head, _ -> head.toOrderedMap("formal generic parameter") }
+        symbols(FormalGenericParameterListHead, token(","), AngleClose) { head, _, _ -> head.toOrderedMap("formal generic parameter") }
     }
     
     rules(FormalGenericParameterNoConstraints) {
         symbols(TypeName) { it }
     }
     rules(FormalGenericParameterNoConstraintsListHead) {
-        symbols(token("<"), FormalGenericParameterNoConstraints) { _, it -> listOf(it) }
-        symbols(FormalGenericParameterNoConstraintsListHead, token(","), FormalGenericParameterNoConstraints) { head, _, it -> head + it }
+        symbols(AngleOpen, FormalGenericParameterNoConstraints) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, FormalGenericParameterNoConstraints) { _, _, it -> listOf(it) }
+        symbols(FormalGenericParameterNoConstraintsListHead, Comma, FormalGenericParameterNoConstraints) { head, _, it -> head + it }
     }
     rules(FormalGenericParameterNoConstraintsList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyOrderedSet() }
-        symbols(FormalGenericParameterNoConstraintsListHead, token(">")) { head, _ -> head.toOrderedSet("formal generic parameter") }
-        symbols(FormalGenericParameterNoConstraintsListHead, token(","), token(">")) { head, _, _ -> head.toOrderedSet("formal generic parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyOrderedSet() }
+        symbols(FormalGenericParameterNoConstraintsListHead, AngleClose) { head, _ -> head.toOrderedSet("formal generic parameter") }
+        symbols(FormalGenericParameterNoConstraintsListHead, token(","), AngleClose) { head, _, _ -> head.toOrderedSet("formal generic parameter") }
     }
     
     rules(ActualGenericParameter) {
@@ -801,39 +678,42 @@ val FoxGrammar = buildGrammar {
         symbols(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
     }
     rules(ActualGenericParameterListHead) {
-        symbols(token("<"), ActualGenericParameter) { _, it -> listOf(it) }
-        symbols(ActualGenericParameterListHead, token(","), ActualGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, ActualGenericParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, ActualGenericParameter) { _, _, it -> listOf(it) }
+        symbols(ActualGenericParameterListHead, Comma, ActualGenericParameter) { head, _, it -> head + it }
     }
     rules(ActualGenericParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyList() }
-        symbols(ActualGenericParameterListHead, token(">")) { head, _ -> head }
-        symbols(ActualGenericParameterListHead, token(","), token(">")) { head, _, _ -> head }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyList() }
+        symbols(ActualGenericParameterListHead, AngleClose) { head, _ -> head }
+        symbols(ActualGenericParameterListHead, token(","), AngleClose) { head, _, _ -> head }
     }
     
     rules(NamedActualGenericParameter) {
         symbols(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
     }
     rules(NamedActualGenericParameterListHead) {
-        symbols(token("<"), NamedActualGenericParameter) { _, it -> listOf(it) }
-        symbols(NamedActualGenericParameterListHead, token(","), NamedActualGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, NamedActualGenericParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, NamedActualGenericParameter) { _, _, it -> listOf(it) }
+        symbols(NamedActualGenericParameterListHead, Comma, NamedActualGenericParameter) { head, _, it -> head + it }
     }
     rules(NamedActualGenericParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyMap() }
-        symbols(NamedActualGenericParameterListHead, token(">")) { head, _ -> head.toMap("named actual generic parameter") }
-        symbols(NamedActualGenericParameterListHead, token(","), token(">")) { head, _, _ -> head.toMap("named actual generic parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyMap() }
+        symbols(NamedActualGenericParameterListHead, AngleClose) { head, _ -> head.toMap("named actual generic parameter") }
+        symbols(NamedActualGenericParameterListHead, token(","), AngleClose) { head, _, _ -> head.toMap("named actual generic parameter") }
     }
     
     rules(AnonymousActualGenericParameter) {
         symbols(node<FoxType>()) { it }
     }
     rules(AnonymousActualGenericParameterListHead) {
-        symbols(token("<"), AnonymousActualGenericParameter) { _, it -> listOf(it) }
-        symbols(AnonymousActualGenericParameterListHead, token(","), AnonymousActualGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, AnonymousActualGenericParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, AnonymousActualGenericParameter) { _, _, it -> listOf(it) }
+        symbols(AnonymousActualGenericParameterListHead, Comma, AnonymousActualGenericParameter) { head, _, it -> head + it }
     }
     rules(AnonymousActualGenericParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyList() }
-        symbols(AnonymousActualGenericParameterListHead, token(">")) { head, _ -> head }
-        symbols(AnonymousActualGenericParameterListHead, token(","), token(">")) { head, _, _ -> head }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyList() }
+        symbols(AnonymousActualGenericParameterListHead, AngleClose) { head, _ -> head }
+        symbols(AnonymousActualGenericParameterListHead, token(","), AngleClose) { head, _, _ -> head }
     }
     
     rules(TupleComponentParameter) {
@@ -844,26 +724,28 @@ val FoxGrammar = buildGrammar {
         }
     }
     rules(TupleComponentParameterListHead) {
-        symbols(token("<"), TupleComponentParameter) { _, it -> listOf(it) }
-        symbols(TupleComponentParameterListHead, token(","), TupleComponentParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, TupleComponentParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, TupleComponentParameter) { _, _, it -> listOf(it) }
+        symbols(TupleComponentParameterListHead, Comma, TupleComponentParameter) { head, _, it -> head + it }
     }
     rules(TupleComponentParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyList() }
-        symbols(TupleComponentParameterListHead, token(">")) { head, _ -> head }
-        symbols(TupleComponentParameterListHead, token(","), token(">")) { head, _, _ -> head }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyList() }
+        symbols(TupleComponentParameterListHead, AngleClose) { head, _ -> head }
+        symbols(TupleComponentParameterListHead, token(","), AngleClose) { head, _, _ -> head }
     }
     
     rules(StructFieldParameter) {
         symbols(IdentifierColon, node<FoxType>()) { name, type -> name to type }
     }
     rules(StructFieldParameterListHead) {
-        symbols(token("<"), StructFieldParameter) { _, it -> listOf(it) }
-        symbols(StructFieldParameterListHead, token(","), StructFieldParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, StructFieldParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, StructFieldParameter) { _, _, it -> listOf(it) }
+        symbols(StructFieldParameterListHead, Comma, StructFieldParameter) { head, _, it -> head + it }
     }
     rules(StructFieldParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyOrderedMap() }
-        symbols(StructFieldParameterListHead, token(">")) { head, _ -> head.toOrderedMap("struct field parameter") }
-        symbols(StructFieldParameterListHead, token(","), token(">")) { head, _, _ -> head.toOrderedMap("struct field parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyOrderedMap() }
+        symbols(StructFieldParameterListHead, AngleClose) { head, _ -> head.toOrderedMap("struct field parameter") }
+        symbols(StructFieldParameterListHead, token(","), AngleClose) { head, _, _ -> head.toOrderedMap("struct field parameter") }
     }
     
     rules(StructFieldName) {
@@ -871,7 +753,7 @@ val FoxGrammar = buildGrammar {
     }
     rules(StructFieldNameListHead) {
         symbols(StructFieldName) { it -> listOf(it) }
-        symbols(StructFieldNameListHead, token(","), StructFieldName) { head, _, it -> head + it }
+        symbols(StructFieldNameListHead, Comma, StructFieldName) { head, _, it -> head + it }
     }
     rules(StructFieldNameList) {
         symbols(StructFieldNameListHead) { it.toOrderedSet("struct field name") }
@@ -881,13 +763,14 @@ val FoxGrammar = buildGrammar {
         symbols(IdentifierColon, node<FoxType>()) { name, type -> name to type }
     }
     rules(ObjectMemberParameterListHead) {
-        symbols(token("<"), ObjectMemberParameter) { _, it -> listOf(it) }
-        symbols(ObjectMemberParameterListHead, token(","), ObjectMemberParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, ObjectMemberParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, ObjectMemberParameter) { _, _, it -> listOf(it) }
+        symbols(ObjectMemberParameterListHead, Comma, ObjectMemberParameter) { head, _, it -> head + it }
     }
     rules(ObjectMemberParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyMap() }
-        symbols(ObjectMemberParameterListHead, token(">")) { head, _ -> head.toMap("object member parameter") }
-        symbols(ObjectMemberParameterListHead, token(","), token(">")) { head, _, _ -> head.toMap("object member parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyMap() }
+        symbols(ObjectMemberParameterListHead, AngleClose) { head, _ -> head.toMap("object member parameter") }
+        symbols(ObjectMemberParameterListHead, token(","), AngleClose) { head, _, _ -> head.toMap("object member parameter") }
     }
     
     rules(ObjectMemberName) {
@@ -895,7 +778,7 @@ val FoxGrammar = buildGrammar {
     }
     rules(ObjectMemberNameListHead) {
         symbols(ObjectMemberName) { it -> listOf(it) }
-        symbols(ObjectMemberNameListHead, token(","), ObjectMemberName) { head, _, it -> head + it }
+        symbols(ObjectMemberNameListHead, Comma, ObjectMemberName) { head, _, it -> head + it }
     }
     rules(ObjectMemberNameList) {
         symbols(ObjectMemberNameListHead) { it.toSet("object member name") }
@@ -905,13 +788,14 @@ val FoxGrammar = buildGrammar {
         symbols(TypeNameEqual, node<FoxType>()) { name, type -> name to type }
     }
     rules(EnumItemParameterListHead) {
-        symbols(token("<"), EnumItemParameter) { _, it -> listOf(it) }
-        symbols(EnumItemParameterListHead, token(","), EnumItemParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, EnumItemParameter) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, EnumItemParameter) { _, _, it -> listOf(it) }
+        symbols(EnumItemParameterListHead, Comma, EnumItemParameter) { head, _, it -> head + it }
     }
     rules(EnumItemParameterList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyMap() }
-        symbols(EnumItemParameterListHead, token(">")) { head, _ -> head.toMap("enum item parameter") }
-        symbols(EnumItemParameterListHead, token(","), token(">")) { head, _, _ -> head.toMap("enum item parameter") }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyMap() }
+        symbols(EnumItemParameterListHead, AngleClose) { head, _ -> head.toMap("enum item parameter") }
+        symbols(EnumItemParameterListHead, token(","), AngleClose) { head, _, _ -> head.toMap("enum item parameter") }
     }
     
     rules(EnumItemName) {
@@ -919,7 +803,7 @@ val FoxGrammar = buildGrammar {
     }
     rules(EnumItemNameListHead) {
         symbols(EnumItemName) { it -> listOf(it) }
-        symbols(EnumItemNameListHead, token(","), EnumItemName) { head, _, it -> head + it }
+        symbols(EnumItemNameListHead, Comma, EnumItemName) { head, _, it -> head + it }
     }
     rules(EnumItemNameList) {
         symbols(EnumItemNameListHead) { it.toSet("enum item name") }
@@ -940,17 +824,18 @@ val FoxGrammar = buildGrammar {
         }
     }
     rules(MethodTypeArgumentListHead) {
-        symbols(token("<"), MethodTypeArgument) { _, it -> listOf(it) }
-        symbols(MethodTypeArgumentListHead, token(","), MethodTypeArgument) { head, _, it -> head + it }
+        symbols(AngleOpen, MethodTypeArgument) { _, it -> listOf(it) }
+        symbols(AngleOpen, LineBreak, MethodTypeArgument) { _, _, it -> listOf(it) }
+        symbols(MethodTypeArgumentListHead, Comma, MethodTypeArgument) { head, _, it -> head + it }
     }
     rules(MethodTypeArgumentList) {
-        symbols(token("<"), token(">")) { _, _ -> emptyList() }
-        symbols(MethodTypeArgumentListHead, token(">")) { head, _ -> head }
-        symbols(MethodTypeArgumentListHead, token(","), token(">")) { head, _, _ -> head }
+        symbols(AngleOpen, AngleClose) { _, _ -> emptyList() }
+        symbols(MethodTypeArgumentListHead, AngleClose) { head, _ -> head }
+        symbols(MethodTypeArgumentListHead, token(","), AngleClose) { head, _, _ -> head }
     }
     
     rules(Label) { symbols(token("#"), Identifier) { _, it -> it } }
-    rules(ParenthesizedStatement) { symbols(token("("), node<FoxStatement>(), token(")")) { _, node, _ -> node } }
+    rules(ParenthesizedStatement) { symbols(ParenOpen, node<FoxStatement>(), ParenClose) { _, node, _ -> node } }
     
     rules(PrimaryExpression) {
         symbols(token("this")) { FoxThis }
@@ -961,10 +846,10 @@ val FoxGrammar = buildGrammar {
     
     rules(PostfixExpression) {
         symbols(PrimaryExpression) { it }
-        symbols(PostfixExpression, token("."), Identifier) { target, _, name ->
+        symbols(PostfixExpression, Dot, Identifier) { target, _, name ->
             FoxFieldAccess(target, name)
         }
-        symbols(PostfixExpression, token("."), node<Int>()) { target, _, index ->
+        symbols(PostfixExpression, Dot, node<Int>()) { target, _, index ->
             FoxComponentAccess(target, index)
         }
         symbols(Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
@@ -973,10 +858,10 @@ val FoxGrammar = buildGrammar {
         symbols(Identifier, ActualParameterList) { name, parameters ->
             FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters)
         }
-        symbols(PostfixExpression, token("."), Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
+        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
             FoxCall(target, name, generics, parameters)
         }
-        symbols(PostfixExpression, token("."), Identifier, ActualParameterList) { target, _, name, parameters ->
+        symbols(PostfixExpression, Dot, Identifier, ActualParameterList) { target, _, name, parameters ->
             FoxCall(target, name, null, parameters)
         }
         symbols(node<FoxType>(), ActualParameterList) { type, parameters ->
@@ -985,7 +870,7 @@ val FoxGrammar = buildGrammar {
         symbols(ParenthesizedStatement, ActualParameterList) { method, parameters ->
             FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters)
         }
-        symbols(PostfixExpression, token("."), ParenthesizedStatement, ActualParameterList) { target, _, method, parameters ->
+        symbols(PostfixExpression, Dot, ParenthesizedStatement, ActualParameterList) { target, _, method, parameters ->
             FoxIndirectCall(target, method, parameters)
         }
     }
@@ -1078,12 +963,16 @@ val FoxGrammar = buildGrammar {
         }
     }
     
+    rules(StatementLine) {
+        symbols(node<FoxStatement>(), LineBreak) { statement, _ -> statement }
+    }
+    
     rules(StatementBlockHead) {
-        symbols(token("{")) { emptyList() }
-        symbols(StatementBlockHead, node<FoxStatement>()) { head, it -> head + it }
+        symbols(BlockOpen) { emptyList() }
+        symbols(StatementBlockHead, StatementLine) { head, it -> head + it }
     }
     rules(StatementBlock) {
-        symbols(StatementBlockHead, token("}")) { head, _ -> head }
+        symbols(StatementBlockHead, BlockClose) { head, _ -> head }
     }
     
     rules(node<FoxStatement>()) {
@@ -1113,18 +1002,23 @@ val FoxGrammar = buildGrammar {
         symbols(Label, StatementBlock) { label, it -> FoxBlock(label, it) }
     }
     
+    rules(ControlBody) {
+        symbols(node<FoxStatement>()) { it }
+        symbols(LineBreak, node<FoxStatement>()) { _, it -> it }
+    }
+    
     rules(IfCore) {
         symbols(
             token("if"),
             ParenthesizedStatement,
-            node<FoxStatement>(),
+            ControlBody,
         ) { _, condition, body -> FoxIf(null, condition, body, null) }
         symbols(
             token("if"),
             ParenthesizedStatement,
-            node<FoxStatement>(),
-            token("else"),
-            node<FoxStatement>(),
+            ControlBody,
+            ElseKeyword,
+            ControlBody,
         ) { _, condition, thenBody, _, elseBody -> FoxIf(null, condition, thenBody, elseBody) }
     }
     
@@ -1132,45 +1026,50 @@ val FoxGrammar = buildGrammar {
         symbols(
             token("while"),
             ParenthesizedStatement,
-            node<FoxStatement>(),
+            ControlBody,
         ) { _, condition, body -> FoxWhile(null, condition, body) }
     }
     
     rules(DoWhileCore) {
         symbols(
             token("do"),
-            node<FoxStatement>(),
-            token("while"),
+            ControlBody,
+            DoWhileKeyword,
             ParenthesizedStatement,
         ) { _, body, _, condition -> FoxDoWhile(null, body, condition) }
     }
     
     rules(WhenCaseConditionListHead) {
         symbols(node<FoxStatement>()) { listOf(it) }
-        symbols(WhenCaseConditionListHead, token(","), node<FoxStatement>()) { head, _, it -> head + it }
+        symbols(WhenCaseConditionListHead, Comma, node<FoxStatement>()) { head, _, it -> head + it }
     }
     rules(WhenCaseConditionList) {
-        symbols(WhenCaseConditionListHead, token("->")) { it, _ -> it }
+        symbols(WhenCaseConditionListHead, Arrow) { it, _ -> it }
     }
     
     rules(WhenCase) {
         symbols(
             WhenCaseConditionList,
-            node<FoxStatement>(),
+            ControlBody,
         ) { conditions, body -> FoxCase(conditions, body) }
         symbols(
             token("else"),
-            token("->"),
-            node<FoxStatement>(),
+            Arrow,
+            ControlBody,
         ) { _, _, body -> FoxCase(emptyList(), body) }
     }
     
+    rules(WhenCaseLine) {
+        symbols(WhenCase, LineBreak) { case, _ -> case }
+    }
+    
     rules(WhenCaseListHead) {
-        symbols(WhenCase) { listOf(it) }
-        symbols(WhenCaseListHead, WhenCase) { head, it -> head + it }
+        symbols(WhenCaseLine) { listOf(it) }
+        symbols(WhenCaseListHead, WhenCaseLine) { head, it -> head + it }
     }
     rules(WhenCaseList) {
-        symbols(token("{"), WhenCaseListHead, token("}")) { _, it, _ -> it }
+        symbols(BlockOpen, BlockClose) { _, _ -> emptyList() }
+        symbols(BlockOpen, WhenCaseListHead, BlockClose) { _, it, _ -> it }
     }
     
     rules(WhenCore) {
@@ -1201,7 +1100,7 @@ val FoxGrammar = buildGrammar {
         ) { _, name, _, type -> FoxTypeAlias(name, emptyOrderedSet(), type) }
     }
     
-    rules(ThisTypeQualifier) { symbols(node<FoxType>(), token(".")) { type, _ -> type } }
+    rules(ThisTypeQualifier) { symbols(node<FoxType>(), Dot) { type, _ -> type } }
     rules(ReturnTypeClause) { symbols(token(":"), node<FoxType>()) { _, type -> type } }
     
     rules(MethodHead) {
@@ -1256,9 +1155,13 @@ val FoxGrammar = buildGrammar {
         symbols(node<FoxMethodDefinition>()) { it }
     }
     
+    rules(FileElementLine) {
+        symbols(node<FoxFileElement>(), LineBreak) { element, _ -> element }
+    }
+    
     rules(FileElementList) {
-        symbols(node<FoxFileElement>()) { listOf(it) }
-        symbols(FileElementList, node<FoxFileElement>()) { head, it -> head + it }
+        symbols(FileElementLine) { listOf(it) }
+        symbols(FileElementList, FileElementLine) { head, it -> head + it }
     }
     rules(node<FoxFile>()) {
         symbols(FileElementList) { FoxFile(it) }
@@ -1266,31 +1169,6 @@ val FoxGrammar = buildGrammar {
 }
 
 val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
-
-fun foxGrammarRepresentativeSymbols(): List<Pair<String, Symbol<*>>> = listOf(
-    "Identifier" to Identifier,
-    "TypeName" to TypeName,
-    "IntLit" to node<Int>(),
-    "StringLit" to node<String>(),
-    "Entity" to node<FoxEntityStatement>(),
-    "Type" to node<FoxType>(),
-    "FormalParams" to FormalParameterList,
-    "ActualParams" to ActualParameterList,
-    "Postfix" to PostfixExpression,
-    "Unary" to UnaryExpression,
-    "Mul" to MultiplicativeExpression,
-    "Add" to AdditiveExpression,
-    "Compare" to ComparisonExpression,
-    "AssignExpr" to AssignmentExpression,
-    "Statement" to node<FoxStatement>(),
-    "Block" to node<FoxBlock>(),
-    "IfCore" to IfCore,
-    "WhileCore" to WhileCore,
-    "WhenCore" to WhenCore,
-    "TypeAlias" to node<FoxTypeAlias>(),
-    "MethodDef" to node<FoxMethodDefinition>(),
-    "File" to node<FoxFile>(),
-)
 
 private sealed interface ParsedMethodTypeArgument {
     data class This(val type: FoxType) : ParsedMethodTypeArgument

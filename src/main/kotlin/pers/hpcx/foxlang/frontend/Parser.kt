@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.parser
+package pers.hpcx.foxlang.frontend
 
 import pers.hpcx.foxlang.utils.UniqueQueue
 
@@ -10,29 +10,18 @@ class Parser<N>(
     fun parse(source: String): N? {
         val context = ParseContext(grammar, source.toFragments())
         context.init()
-        return context.buildNode(start)
+        return context.build(start)
     }
 }
 
-private sealed interface Match<N> {
-    val symbol: Symbol<N>
-    val rule: Rule<*>
-    val segments: List<SourceSpan>
+private data class Match<N>(
+    val symbol: Symbol<N>,
+    val rule: Rule<*>,
+    val segments: List<SourceSpan>,
+) {
+    
     val span: SourceSpan get() = SourceSpan(segments.first().begin, segments.last().end)
 }
-
-private data class ExactMatch<N>(
-    override val symbol: Symbol<N>,
-    override val rule: Rule<*>,
-    override val segments: List<SourceSpan>,
-) : Match<N>
-
-private data class FuzzyMatch<N>(
-    val confidence: Double,
-    override val symbol: Symbol<N>,
-    override val rule: Rule<*>,
-    override val segments: List<SourceSpan>,
-) : Match<N>
 
 private class ParseContext(
     private val grammar: Grammar,
@@ -40,25 +29,25 @@ private class ParseContext(
 ) {
     
     private val updateQueue = UniqueQueue<Symbol<*>>()
-    private val updateMap = mutableMapOf<Symbol<*>, MutableList<ExactMatch<*>>>()
-    private val matches = mutableMapOf<Pair<Symbol<*>, SourceSpan>, MutableSet<ExactMatch<*>>>()
-    private val matchesByBegin = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<ExactMatch<*>>>()
-    private val matchesByEnd = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<ExactMatch<*>>>()
+    private val updateMap = mutableMapOf<Symbol<*>, MutableList<Match<*>>>()
+    private val matches = mutableMapOf<Pair<Symbol<*>, SourceSpan>, MutableSet<Match<*>>>()
+    private val matchesByBegin = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<Match<*>>>()
+    private val matchesByEnd = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<Match<*>>>()
     
     @Suppress("UNCHECKED_CAST")
-    fun <N> buildNode(symbol: Symbol<N>): N? {
-        return buildNode(symbol, SourceSpan(SourcePosition(0), SourcePosition(fragments.size))) as N?
+    fun <N> build(symbol: Symbol<N>): N? {
+        return build(symbol, SourceSpan(SourcePosition(0), SourcePosition(fragments.size))) as N?
     }
     
-    private fun buildNode(symbol: Symbol<*>, span: SourceSpan): Any? {
+    private fun build(symbol: Symbol<*>, span: SourceSpan): Any? {
         val candidates = matches[symbol to span] ?: return null
-        val results = candidates.mapNotNull { buildNode(it) }
+        val results = candidates.mapNotNull { build(it) }
         if (results.isEmpty()) return null
         check(results.size == 1) { "Ambiguous grammar" }
         return results.single()
     }
     
-    private fun buildNode(match: ExactMatch<*>): Any? {
+    private fun build(match: Match<*>): Any? {
         val first = fragments[match.segments.first().begin.fragIndex]
         return try {
             when (val rule = match.rule) {
@@ -80,12 +69,12 @@ private class ParseContext(
                             .joinToString(separator = "") { it },
                     ),
                 )
-                is NewlineRule<*> -> rule.factory(first as NewlineFragment)
+                is LineBreakRule<*> -> rule.factory(first as LineBreakFragment)
                 is CharLiteralRule<*> -> rule.factory(first as CharLiteralFragment)
                 is StringLiteralRule<*> -> rule.factory(first as StringLiteralFragment)
                 is NonLeafRule<*> -> rule.factory(
                     rule.components.zip(match.segments).map { (component, segment) ->
-                        buildNode(component, segment) ?: return null
+                        build(component, segment) ?: return null
                     },
                 )
             }
@@ -101,7 +90,7 @@ private class ParseContext(
                 when (rule) {
                     is FixedRule<*> -> seedFixed(target, rule)
                     is RegexRule<*> -> seedRegex(target, rule)
-                    is NewlineRule<*> -> seedNewline(target, rule)
+                    is LineBreakRule<*> -> seedLineBreak(target, rule)
                     is CharLiteralRule<*> -> seedCharLiteral(target, rule)
                     is StringLiteralRule<*> -> seedStringLiteral(target, rule)
                 }
@@ -146,7 +135,7 @@ private class ParseContext(
                         lefts.forEach { left ->
                             rights.forEach { right ->
                                 val segments = left + listOf(match.span) + right
-                                seedMatch(ExactMatch(symbol, rule, segments))
+                                seedMatch(Match(symbol, rule, segments))
                             }
                         }
                     }
@@ -162,22 +151,22 @@ private class ParseContext(
     private fun seedFixed(target: Symbol<*>, rule: FixedRule<*>) {
         fragments.indices.forEach { index ->
             val span = matchFixed(rule, SourcePosition(index)) ?: return@forEach
-            seedMatch(ExactMatch(target, rule, listOf(span)))
+            seedMatch(Match(target, rule, listOf(span)))
         }
     }
     
     private fun seedRegex(target: Symbol<*>, rule: RegexRule<*>) {
         fragments.indices.forEach { index ->
             val span = matchRegex(rule, SourcePosition(index)) ?: return@forEach
-            seedMatch(ExactMatch(target, rule, listOf(span)))
+            seedMatch(Match(target, rule, listOf(span)))
         }
     }
     
-    private fun seedNewline(target: Symbol<*>, rule: NewlineRule<*>) {
+    private fun seedLineBreak(target: Symbol<*>, rule: LineBreakRule<*>) {
         fragments.forEachIndexed { index, fragment ->
-            if (fragment !is NewlineFragment) return@forEachIndexed
+            if (fragment !is LineBreakFragment) return@forEachIndexed
             val span = SourceSpan(SourcePosition(index), SourcePosition(index) + 1)
-            seedMatch(ExactMatch(target, rule, listOf(span)))
+            seedMatch(Match(target, rule, listOf(span)))
         }
     }
     
@@ -185,7 +174,7 @@ private class ParseContext(
         fragments.forEachIndexed { index, fragment ->
             if (fragment !is CharLiteralFragment) return@forEachIndexed
             val span = SourceSpan(SourcePosition(index), SourcePosition(index) + 1)
-            seedMatch(ExactMatch(target, rule, listOf(span)))
+            seedMatch(Match(target, rule, listOf(span)))
         }
     }
     
@@ -193,12 +182,12 @@ private class ParseContext(
         fragments.forEachIndexed { index, fragment ->
             if (fragment !is StringLiteralFragment) return@forEachIndexed
             val span = SourceSpan(SourcePosition(index), SourcePosition(index) + 1)
-            seedMatch(ExactMatch(target, rule, listOf(span)))
+            seedMatch(Match(target, rule, listOf(span)))
         }
     }
     
     @Suppress("UNCHECKED_CAST")
-    private fun seedMatch(match: ExactMatch<*>) {
+    private fun seedMatch(match: Match<*>) {
         val span = match.span
         val symbol = match.symbol
         if (!matches.getOrPut(symbol to span) { mutableSetOf() }.add(match)) return

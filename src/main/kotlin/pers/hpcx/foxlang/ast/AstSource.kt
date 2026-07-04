@@ -40,6 +40,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         file.elements.forEachIndexed { index, element ->
             if (index > 0) print(fileSeparator)
             printFileElement(element)
+            print('\n')
         }
     }
     
