@@ -6,153 +6,169 @@ import pers.hpcx.foxlang.type.toFoxTupleType
 import pers.hpcx.foxlang.utils.*
 
 // Lexical nodes
-private val Identifier = node<String>().name("Identifier")
-private val TypeName = node<String>().name("TypeName")
-private val IdentifierEqual = node<String>().name("IdentifierEqual")
-private val IdentifierColon = node<String>().name("IdentifierColon")
-private val TypeNameEqual = node<String>().name("TypeNameEqual")
-private val TypeNameColon = node<String>().name("TypeNameColon")
-private val Label = node<String>().name("Label")
-private val LineBreak = node<Unit>().name("LineBreak")
-private val Dot = node<Unit>().name("Dot")
-private val BlockOpen = node<Unit>().name("BlockOpen")
-private val BlockClose = node<Unit>().name("BlockClose")
-private val ParenOpen = node<Unit>().name("ParenOpen")
-private val ParenClose = node<Unit>().name("ParenClose")
-private val AngleOpen = node<Unit>().name("AngleOpen")
-private val AngleClose = node<Unit>().name("AngleClose")
-private val Comma = node<Unit>().name("Comma")
-private val Arrow = node<Unit>().name("Arrow")
-private val ElseKeyword = node<Unit>().name("ElseKeyword")
-private val DoWhileKeyword = node<Unit>().name("DoWhileKeyword")
+internal val Identifier = node<String>().name("Identifier")
+internal val TypeName = node<String>().name("TypeName")
+internal val IdentifierEqual = node<String>().name("IdentifierEqual")
+internal val IdentifierColon = node<String>().name("IdentifierColon")
+internal val TypeNameEqual = node<String>().name("TypeNameEqual")
+internal val TypeNameColon = node<String>().name("TypeNameColon")
+internal val Label = node<String>().name("Label")
+internal val LineBreak = node<Unit>().name("LineBreak")
+internal val FormattedStringStart = node<Boolean>().name("FormattedStringStart")
+internal val FormattedStringEnd = node<Unit>().name("FormattedStringEnd")
+internal val FormattedExpressionOpen = node<Unit>().name("FormattedExpressionOpen")
+internal val FormattedExpressionClose = node<Unit>().name("FormattedExpressionClose")
+internal val Dot = node<Unit>().name("Dot")
+internal val BlockOpen = node<Unit>().name("BlockOpen")
+internal val BlockClose = node<Unit>().name("BlockClose")
+internal val ParenOpen = node<Unit>().name("ParenOpen")
+internal val ParenClose = node<Unit>().name("ParenClose")
+internal val AngleOpen = node<Unit>().name("AngleOpen")
+internal val AngleClose = node<Unit>().name("AngleClose")
+internal val Comma = node<Unit>().name("Comma")
+internal val Arrow = node<Unit>().name("Arrow")
+internal val ElseKeyword = node<Unit>().name("ElseKeyword")
+internal val DoWhileKeyword = node<Unit>().name("DoWhileKeyword")
 
 // Literal nodes
-private val BinInt = node<String>().name("BinInt")
-private val DecInt = node<String>().name("DecInt")
-private val HexInt = node<String>().name("HexInt")
-private val BinLong = node<String>().name("BinLong")
-private val DecLong = node<String>().name("DecLong")
-private val HexLong = node<String>().name("HexLong")
-private val DecFloat = node<String>().name("DecFloat")
-private val HexFloat = node<String>().name("HexFloat")
-private val DecDouble = node<String>().name("DecDouble")
-private val HexDouble = node<String>().name("HexDouble")
+internal val BinInt = node<String>().name("BinInt")
+internal val DecInt = node<String>().name("DecInt")
+internal val HexInt = node<String>().name("HexInt")
+internal val BinLong = node<String>().name("BinLong")
+internal val DecLong = node<String>().name("DecLong")
+internal val HexLong = node<String>().name("HexLong")
+internal val DecFloat = node<String>().name("DecFloat")
+internal val HexFloat = node<String>().name("HexFloat")
+internal val DecDouble = node<String>().name("DecDouble")
+internal val HexDouble = node<String>().name("HexDouble")
 
 // Parameter and generic nodes
-private val FormalParameter = node<String>().pair(node<FoxType>()).name("FormalParameter")
-private val FormalParameterListHead = node<String>().pair(node<FoxType>()).list().name("FormalParameterListHead")
-private val FormalParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalParameterList")
+internal val FormalParameter = node<String>().pair(node<FoxType>()).name("FormalParameter")
+internal val FormalParameterListHead = node<String>().pair(node<FoxType>()).list().name("FormalParameterListHead")
+internal val FormalParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalParameterList")
 
-private val ActualParameter = node<String>().optional().pair(node<FoxStatement>()).name("ActualParameter")
-private val ActualParameterListHead = node<String>().optional().pair(node<FoxStatement>()).list().name("ActualParameterListHead")
-private val ActualParameterList = node<String>().optional().pair(node<FoxStatement>()).list().name("ActualParameterList")
+internal val ActualParameter = node<String>().optional().pair(node<FoxStatement>()).name("ActualParameter")
+internal val ActualParameterListHead = node<String>().optional().pair(node<FoxStatement>()).list().name("ActualParameterListHead")
+internal val ActualParameterList = node<String>().optional().pair(node<FoxStatement>()).list().name("ActualParameterList")
+internal val LambdaParameter = node<String>().pair(node<FoxType>().optional()).name("LambdaParameter")
+internal val LambdaParameterListHead = node<String>().pair(node<FoxType>().optional()).list().name("LambdaParameterListHead")
+internal val LambdaParameterList = node<String>().pair(node<FoxType>().optional()).list().name("LambdaParameterList")
 
-private val FormalGenericParameter = node<String>().pair(node<FoxType>()).name("FormalGenericParameter")
-private val FormalGenericParameterListHead = node<String>().pair(node<FoxType>()).list().name("FormalGenericParameterListHead")
-private val FormalGenericParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalGenericParameterList")
+internal val FormalGenericParameter = node<String>().pair(node<FoxType>()).name("FormalGenericParameter")
+internal val FormalGenericParameterListHead = node<String>().pair(node<FoxType>()).list().name("FormalGenericParameterListHead")
+internal val FormalGenericParameterList = node<String>().orderedMap(node<FoxType>()).name("FormalGenericParameterList")
 
-private val FormalGenericParameterNoConstraints = node<String>().name("FormalGenericParameterNoConstraints")
-private val FormalGenericParameterNoConstraintsListHead = node<String>().list().name("FormalGenericParameterNoConstraintsListHead")
-private val FormalGenericParameterNoConstraintsList = node<String>().orderedSet().name("FormalGenericParameterNoConstraintsList")
+internal val FormalGenericParameterNoConstraints = node<String>().name("FormalGenericParameterNoConstraints")
+internal val FormalGenericParameterNoConstraintsListHead = node<String>().list().name("FormalGenericParameterNoConstraintsListHead")
+internal val FormalGenericParameterNoConstraintsList = node<String>().orderedSet().name("FormalGenericParameterNoConstraintsList")
 
-private val ActualGenericParameter = node<String>().optional().pair(node<FoxType>()).name("ActualGenericParameter")
-private val ActualGenericParameterListHead = node<String>().optional().pair(node<FoxType>()).list().name("ActualGenericParameterListHead")
-private val ActualGenericParameterList = node<String>().optional().pair(node<FoxType>()).list().name("ActualGenericParameterList")
+internal val ActualGenericParameter = node<String>().optional().pair(node<FoxType>()).name("ActualGenericParameter")
+internal val ActualGenericParameterListHead = node<String>().optional().pair(node<FoxType>()).list().name("ActualGenericParameterListHead")
+internal val ActualGenericParameterList = node<String>().optional().pair(node<FoxType>()).list().name("ActualGenericParameterList")
 
-private val NamedActualGenericParameter = node<String>().pair(node<FoxType>()).name("NamedActualGenericParameter")
-private val NamedActualGenericParameterListHead = node<String>().pair(node<FoxType>()).list().name("NamedActualGenericParameterListHead")
-private val NamedActualGenericParameterList = node<String>().map(node<FoxType>()).name("NamedActualGenericParameterList")
+internal val NamedActualGenericParameter = node<String>().pair(node<FoxType>()).name("NamedActualGenericParameter")
+internal val NamedActualGenericParameterListHead = node<String>().pair(node<FoxType>()).list().name("NamedActualGenericParameterListHead")
+internal val NamedActualGenericParameterList = node<String>().map(node<FoxType>()).name("NamedActualGenericParameterList")
 
-private val AnonymousActualGenericParameter = node<FoxType>().name("AnonymousActualGenericParameter")
-private val AnonymousActualGenericParameterListHead = node<FoxType>().list().name("AnonymousActualGenericParameterListHead")
-private val AnonymousActualGenericParameterList = node<FoxType>().list().name("AnonymousActualGenericParameterList")
+internal val AnonymousActualGenericParameter = node<FoxType>().name("AnonymousActualGenericParameter")
+internal val AnonymousActualGenericParameterListHead = node<FoxType>().list().name("AnonymousActualGenericParameterListHead")
+internal val AnonymousActualGenericParameterList = node<FoxType>().list().name("AnonymousActualGenericParameterList")
 
-private val TupleComponentParameter = node<FoxType>().pair(node<Int>()).name("TupleComponentParameter")
-private val TupleComponentParameterListHead = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterListHead")
-private val TupleComponentParameterList = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterList")
+internal val TupleComponentParameter = node<FoxType>().pair(node<Int>()).name("TupleComponentParameter")
+internal val TupleComponentParameterListHead = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterListHead")
+internal val TupleComponentParameterList = node<FoxType>().pair(node<Int>()).list().name("TupleComponentParameterList")
 
-private val StructFieldParameter = node<String>().pair(node<FoxType>()).name("StructFieldParameter")
-private val StructFieldParameterListHead = node<String>().pair(node<FoxType>()).list().name("StructFieldParameterListHead")
-private val StructFieldParameterList = node<String>().orderedMap(node<FoxType>()).name("StructFieldParameterList")
+internal val StructFieldParameter = node<String>().pair(node<FoxType>()).name("StructFieldParameter")
+internal val StructFieldParameterListHead = node<String>().pair(node<FoxType>()).list().name("StructFieldParameterListHead")
+internal val StructFieldParameterList = node<String>().orderedMap(node<FoxType>()).name("StructFieldParameterList")
 
-private val StructFieldName = node<String>().name("StructFieldName")
-private val StructFieldNameListHead = node<String>().list().name("StructFieldNameListHead")
-private val StructFieldNameList = node<String>().orderedSet().name("StructFieldNameList")
+internal val StructFieldName = node<String>().name("StructFieldName")
+internal val StructFieldNameListHead = node<String>().list().name("StructFieldNameListHead")
+internal val StructFieldNameList = node<String>().orderedSet().name("StructFieldNameList")
 
-private val ObjectMemberParameter = node<String>().pair(node<FoxType>()).name("ObjectMemberParameter")
-private val ObjectMemberParameterListHead = node<String>().pair(node<FoxType>()).list().name("ObjectMemberParameterListHead")
-private val ObjectMemberParameterList = node<String>().map(node<FoxType>()).name("ObjectMemberParameterList")
+internal val ObjectMemberParameter = node<String>().pair(node<FoxType>()).name("ObjectMemberParameter")
+internal val ObjectMemberParameterListHead = node<String>().pair(node<FoxType>()).list().name("ObjectMemberParameterListHead")
+internal val ObjectMemberParameterList = node<String>().map(node<FoxType>()).name("ObjectMemberParameterList")
 
-private val ObjectMemberName = node<String>().name("ObjectMemberName")
-private val ObjectMemberNameListHead = node<String>().list().name("ObjectMemberNameListHead")
-private val ObjectMemberNameList = node<String>().set().name("ObjectMemberNameList")
+internal val ObjectMemberName = node<String>().name("ObjectMemberName")
+internal val ObjectMemberNameListHead = node<String>().list().name("ObjectMemberNameListHead")
+internal val ObjectMemberNameList = node<String>().set().name("ObjectMemberNameList")
 
-private val EnumItemParameter = node<String>().pair(node<FoxType>()).name("EnumItemParameter")
-private val EnumItemParameterListHead = node<String>().pair(node<FoxType>()).list().name("EnumItemParameterListHead")
-private val EnumItemParameterList = node<String>().map(node<FoxType>()).name("EnumItemParameterList")
+internal val EnumItemParameter = node<String>().pair(node<FoxType>()).name("EnumItemParameter")
+internal val EnumItemParameterListHead = node<String>().pair(node<FoxType>()).list().name("EnumItemParameterListHead")
+internal val EnumItemParameterList = node<String>().map(node<FoxType>()).name("EnumItemParameterList")
 
-private val EnumItemName = node<String>().name("EnumItemName")
-private val EnumItemNameListHead = node<String>().list().name("EnumItemNameListHead")
-private val EnumItemNameList = node<String>().set().name("EnumItemNameList")
+internal val EnumItemName = node<String>().name("EnumItemName")
+internal val EnumItemNameListHead = node<String>().list().name("EnumItemNameListHead")
+internal val EnumItemNameList = node<String>().set().name("EnumItemNameList")
 
-private val MethodTypeArgument = node<ParsedMethodTypeArgument>().name("MethodTypeArgument")
-private val MethodTypeArgumentListHead = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentListHead")
-private val MethodTypeArgumentList = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentList")
+internal val MethodTypeArgument = node<ParsedMethodTypeArgument>().name("MethodTypeArgument")
+internal val MethodTypeArgumentListHead = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentListHead")
+internal val MethodTypeArgumentList = node<ParsedMethodTypeArgument>().list().name("MethodTypeArgumentList")
 
 // Expression nodes
-private val StatementLine = node<FoxStatement>().name("StatementLine")
-private val StatementBlockHead = node<FoxStatement>().list().name("StatementBlockHead")
-private val StatementBlock = node<FoxStatement>().list().name("StatementBlock")
-private val ParenthesizedStatement = node<FoxStatement>().name("ParenthesizedStatement")
-private val PrimaryExpression = node<FoxStatement>().name("PrimaryExpression")
-private val PostfixExpression = node<FoxStatement>().name("PostfixExpression")
-private val UnaryExpression = node<FoxStatement>().name("UnaryExpression")
-private val MultiplicativeExpression = node<FoxStatement>().name("MultiplicativeExpression")
-private val AdditiveExpression = node<FoxStatement>().name("AdditiveExpression")
-private val ShiftExpression = node<FoxStatement>().name("ShiftExpression")
-private val ComparisonExpression = node<FoxStatement>().name("ComparisonExpression")
-private val EqualityExpression = node<FoxStatement>().name("EqualityExpression")
-private val BitAndExpression = node<FoxStatement>().name("BitAndExpression")
-private val BitXorExpression = node<FoxStatement>().name("BitXorExpression")
-private val BitOrExpression = node<FoxStatement>().name("BitOrExpression")
-private val LogicalAndExpression = node<FoxStatement>().name("LogicalAndExpression")
-private val LogicalOrExpression = node<FoxStatement>().name("LogicalOrExpression")
-private val AssignableExpression = node<FoxStatement>().name("AssignableExpression")
-private val AssignmentExpression = node<FoxStatement>().name("AssignmentExpression")
-private val ControlBody = node<FoxStatement>().name("ControlBody")
+internal val StatementLine = node<FoxStatement>().name("StatementLine")
+internal val StatementBlockHead = node<FoxStatement>().list().name("StatementBlockHead")
+internal val StatementBlock = node<FoxStatement>().list().name("StatementBlock")
+internal val ParenthesizedStatement = node<FoxStatement>().name("ParenthesizedStatement")
+internal val PrimaryExpression = node<FoxStatement>().name("PrimaryExpression")
+internal val PostfixExpression = node<FoxStatement>().name("PostfixExpression")
+internal val UnaryExpression = node<FoxStatement>().name("UnaryExpression")
+internal val MultiplicativeExpression = node<FoxStatement>().name("MultiplicativeExpression")
+internal val AdditiveExpression = node<FoxStatement>().name("AdditiveExpression")
+internal val ShiftExpression = node<FoxStatement>().name("ShiftExpression")
+internal val ComparisonExpression = node<FoxStatement>().name("ComparisonExpression")
+internal val EqualityExpression = node<FoxStatement>().name("EqualityExpression")
+internal val BitAndExpression = node<FoxStatement>().name("BitAndExpression")
+internal val BitXorExpression = node<FoxStatement>().name("BitXorExpression")
+internal val BitOrExpression = node<FoxStatement>().name("BitOrExpression")
+internal val LogicalAndExpression = node<FoxStatement>().name("LogicalAndExpression")
+internal val LogicalOrExpression = node<FoxStatement>().name("LogicalOrExpression")
+internal val AssignableExpression = node<FoxStatement>().name("AssignableExpression")
+internal val AssignmentExpression = node<FoxStatement>().name("AssignmentExpression")
+internal val ControlBody = node<FoxStatement>().name("ControlBody")
+internal val FormattedStringPart = node<FoxFormattedStringPart>().name("FormattedStringPart")
+internal val FormattedStringPartListHead = node<FoxFormattedStringPart>().list().name("FormattedStringPartListHead")
+internal val LambdaStatementBlockHead = node<FoxStatement>().list().name("LambdaStatementBlockHead")
+internal val LambdaBody = node<FoxStatement>().name("LambdaBody")
+internal val ExplicitLambdaLiteral = node<FoxLambda>().name("ExplicitLambdaLiteral")
+internal val InlineImplicitLambdaLiteral = node<FoxLambda>().name("InlineImplicitLambdaLiteral")
+internal val ImplicitLambdaLiteral = node<FoxLambda>().name("ImplicitLambdaLiteral")
+internal val LambdaLiteral = node<FoxLambda>().name("LambdaLiteral")
+internal val SingleLineStatementBlock = node<FoxBlock>().name("SingleLineStatementBlock")
 
 // Operator nodes
-private val MultiplicativeOperator = node<FoxBinaryOperator>().name("MultiplicativeOperator")
-private val AdditiveOperator = node<FoxBinaryOperator>().name("AdditiveOperator")
-private val ShiftOperator = node<FoxBinaryOperator>().name("ShiftOperator")
-private val ComparisonOperator = node<FoxBinaryOperator>().name("ComparisonOperator")
-private val EqualityOperator = node<FoxBinaryOperator>().name("EqualityOperator")
-private val BitAndOperator = node<FoxBinaryOperator>().name("BitAndOperator")
-private val BitXorOperator = node<FoxBinaryOperator>().name("BitXorOperator")
-private val BitOrOperator = node<FoxBinaryOperator>().name("BitOrOperator")
-private val LogicalAndOperator = node<FoxBinaryOperator>().name("LogicalAndOperator")
-private val LogicalOrOperator = node<FoxBinaryOperator>().name("LogicalOrOperator")
+internal val MultiplicativeOperator = node<FoxBinaryOperator>().name("MultiplicativeOperator")
+internal val AdditiveOperator = node<FoxBinaryOperator>().name("AdditiveOperator")
+internal val ShiftOperator = node<FoxBinaryOperator>().name("ShiftOperator")
+internal val ComparisonOperator = node<FoxBinaryOperator>().name("ComparisonOperator")
+internal val EqualityOperator = node<FoxBinaryOperator>().name("EqualityOperator")
+internal val BitAndOperator = node<FoxBinaryOperator>().name("BitAndOperator")
+internal val BitXorOperator = node<FoxBinaryOperator>().name("BitXorOperator")
+internal val BitOrOperator = node<FoxBinaryOperator>().name("BitOrOperator")
+internal val LogicalAndOperator = node<FoxBinaryOperator>().name("LogicalAndOperator")
+internal val LogicalOrOperator = node<FoxBinaryOperator>().name("LogicalOrOperator")
 
 // Control-flow nodes
-private val WhenCaseConditionListHead = node<FoxStatement>().list().name("WhenCaseConditionListHead")
-private val WhenCaseConditionList = node<FoxStatement>().list().name("WhenCaseConditionList")
-private val WhenCase = node<FoxCase>().name("WhenCase")
-private val WhenCaseLine = node<FoxCase>().name("WhenCaseLine")
-private val WhenCaseListHead = node<FoxCase>().list().name("WhenCaseListHead")
-private val WhenCaseList = node<FoxCase>().list().name("WhenCaseList")
-private val IfCore = node<FoxIf>().name("IfCore")
-private val WhileCore = node<FoxWhile>().name("WhileCore")
-private val DoWhileCore = node<FoxDoWhile>().name("DoWhileCore")
-private val WhenCore = node<FoxWhen>().name("WhenCore")
-private val FileElementList = node<FoxFileElement>().list().name("FileElementList")
+internal val WhenCaseConditionListHead = node<FoxStatement>().list().name("WhenCaseConditionListHead")
+internal val WhenCaseConditionList = node<FoxStatement>().list().name("WhenCaseConditionList")
+internal val WhenCase = node<FoxCase>().name("WhenCase")
+internal val WhenCaseLine = node<FoxCase>().name("WhenCaseLine")
+internal val WhenCaseListHead = node<FoxCase>().list().name("WhenCaseListHead")
+internal val WhenCaseList = node<FoxCase>().list().name("WhenCaseList")
+internal val IfCore = node<FoxIf>().name("IfCore")
+internal val WhileCore = node<FoxWhile>().name("WhileCore")
+internal val DoWhileCore = node<FoxDoWhile>().name("DoWhileCore")
+internal val WhenCore = node<FoxWhen>().name("WhenCore")
+internal val FileElementList = node<FoxFileElement>().list().name("FileElementList")
 
 // Top-level nodes
-private val FileElementLine = node<FoxFileElement>().name("FileElementLine")
-private val ThisTypeQualifier = node<FoxType>().name("ThisTypeQualifier")
-private val ReturnTypeClause = node<FoxType>().name("ReturnTypeClause")
-private val MethodHead = node<FoxMethodDefinition>().name("MethodHead")
+internal val FileElementLine = node<FoxFileElement>().name("FileElementLine")
+internal val ThisTypeQualifier = node<FoxType>().name("ThisTypeQualifier")
+internal val ReturnTypeClause = node<FoxType>().name("ReturnTypeClause")
+internal val MethodHead = node<FoxMethodDefinition>().name("MethodHead")
 
-private val ReservedKeywords = setOf(
+internal val ReservedKeywords = setOf(
     "const", "type", "def", "this", "if", "else", "when", "new", "yield", "return", "for", "in",
     "do", "while", "break", "continue", "try", "finally", "import", "unit", "true", "false",
     
@@ -313,6 +329,10 @@ val FoxGrammar = buildGrammar {
     }
     
     rules(LineBreak) { lineBreak { } }
+    rules(FormattedStringStart) { formattedStringStart { it.isRaw } }
+    rules(FormattedStringEnd) { formattedStringEnd { } }
+    rules(FormattedExpressionOpen) { formattedExpressionStart { } }
+    rules(FormattedExpressionClose) { formattedExpressionEnd { } }
     rules(Dot) {
         symbols(token(".")) { }
         symbols(LineBreak, token(".")) { _, _ -> }
@@ -631,7 +651,9 @@ val FoxGrammar = buildGrammar {
     
     rules(ActualParameter) {
         symbols(node<FoxStatement>()) { null to it }
+        symbols(ImplicitLambdaLiteral) { null to it }
         symbols(IdentifierEqual, node<FoxStatement>()) { name, value -> name to value }
+        symbols(IdentifierEqual, ImplicitLambdaLiteral) { name, value -> name to value }
     }
     rules(ActualParameterListHead) {
         symbols(ParenOpen, ActualParameter) { _, it -> listOf(it) }
@@ -642,6 +664,20 @@ val FoxGrammar = buildGrammar {
         symbols(ParenOpen, ParenClose) { _, _ -> emptyList() }
         symbols(ActualParameterListHead, ParenClose) { head, _ -> head }
         symbols(ActualParameterListHead, token(","), ParenClose) { head, _, _ -> head }
+    }
+    
+    rules(LambdaParameter) {
+        symbols(Identifier) { name -> name to null }
+        symbols(IdentifierColon, node<FoxType>()) { name, type -> name to type }
+    }
+    rules(LambdaParameterListHead) {
+        symbols(LambdaParameter) { listOf(it) }
+        symbols(LineBreak, LambdaParameter) { _, it -> listOf(it) }
+        symbols(LambdaParameterListHead, Comma, LambdaParameter) { head, _, it -> head + it }
+    }
+    rules(LambdaParameterList) {
+        symbols(LambdaParameterListHead) { it }
+        symbols(LambdaParameterListHead, token(",")) { head, _ -> head }
     }
     
     rules(FormalGenericParameter) {
@@ -837,11 +873,86 @@ val FoxGrammar = buildGrammar {
     rules(Label) { symbols(token("#"), Identifier) { _, it -> it } }
     rules(ParenthesizedStatement) { symbols(ParenOpen, node<FoxStatement>(), ParenClose) { _, node, _ -> node } }
     
+    rules(FormattedStringPart) {
+        formattedStringText { FoxFormattedText(it.text) }
+        symbols(FormattedExpressionOpen, AssignmentExpression, FormattedExpressionClose) { _, expression, _ ->
+            FoxFormattedExpression(expression)
+        }
+    }
+    
+    rules(FormattedStringPartListHead) {
+        symbols(FormattedStringPart) { listOf(it) }
+        symbols(FormattedStringPartListHead, FormattedStringPart) { head, part -> head + part }
+    }
+    
+    rules(LambdaStatementBlockHead) {
+        symbols(LineBreak) { emptyList() }
+        symbols(LambdaStatementBlockHead, StatementLine) { head, it -> head + it }
+    }
+    
+    rules(LambdaBody) {
+        symbols(node<FoxStatement>()) { it }
+        symbols(LineBreak, node<FoxStatement>()) { _, it -> it }
+        symbols(LambdaStatementBlockHead) { FoxBlock(null, it) }
+    }
+    
+    rules(ExplicitLambdaLiteral) {
+        symbols(token("{"), token("->"), token("}")) { _, _, _ ->
+            FoxLambda(emptyList(), FoxBlock(null, emptyList()))
+        }
+        symbols(token("{"), token("->"), LambdaBody, BlockClose) { _, _, body, _ ->
+            FoxLambda(emptyList(), body)
+        }
+        symbols(token("{"), LambdaParameterList, token("->"), token("}")) { _, parameters, _, _ ->
+            FoxLambda(parameters, FoxBlock(null, emptyList()))
+        }
+        symbols(token("{"), LambdaParameterList, token("->"), LambdaBody, BlockClose) { _, parameters, _, body, _ ->
+            FoxLambda(parameters, body)
+        }
+    }
+    
+    rules(InlineImplicitLambdaLiteral) {
+        symbols(token("{"), node<FoxStatement>(), BlockClose) { _, body, _ ->
+            FoxLambda(null, body)
+        }
+    }
+    
+    rules(ImplicitLambdaLiteral) {
+        symbols(token("{"), token("}")) { _, _ ->
+            FoxLambda(null, FoxBlock(null, emptyList()))
+        }
+        symbols(InlineImplicitLambdaLiteral) { it }
+        symbols(token("{"), LambdaStatementBlockHead, BlockClose) { _, statements, _ ->
+            FoxLambda(null, FoxBlock(null, statements))
+        }
+    }
+    
+    rules(LambdaLiteral) {
+        symbols(ExplicitLambdaLiteral) { it }
+        symbols(ImplicitLambdaLiteral) { it }
+    }
+    
+    rules(SingleLineStatementBlock) {
+        symbols(token("{"), node<FoxStatement>(), token("}")) { _, statement, _ ->
+            FoxBlock(null, listOf(statement))
+        }
+        symbols(Label, token("{"), node<FoxStatement>(), token("}")) { label, _, statement, _ ->
+            FoxBlock(label, listOf(statement))
+        }
+    }
+    
     rules(PrimaryExpression) {
         symbols(token("this")) { FoxThis }
         symbols(Identifier) { FoxSymbol(it) }
         symbols(ParenthesizedStatement) { it }
         symbols(node<FoxEntityStatement>()) { it }
+        symbols(ExplicitLambdaLiteral) { it }
+        symbols(FormattedStringStart, FormattedStringEnd) { isRaw, _ ->
+            FoxFormattedString(emptyList(), isRaw)
+        }
+        symbols(FormattedStringStart, FormattedStringPartListHead, FormattedStringEnd) { isRaw, parts, _ ->
+            FoxFormattedString(parts, isRaw)
+        }
     }
     
     rules(PostfixExpression) {
@@ -855,23 +966,65 @@ val FoxGrammar = buildGrammar {
         symbols(Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
             FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters)
         }
+        symbols(Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral) { name, generics, parameters, lambda ->
+            FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters + listOf(null to lambda))
+        }
+        symbols(Identifier, ActualGenericParameterList, LambdaLiteral) { name, generics, lambda ->
+            FoxCall(FoxEntityStatement(FoxUnit), name, generics, listOf(null to lambda))
+        }
         symbols(Identifier, ActualParameterList) { name, parameters ->
             FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters)
+        }
+        symbols(Identifier, ActualParameterList, LambdaLiteral) { name, parameters, lambda ->
+            FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters + listOf(null to lambda))
+        }
+        symbols(Identifier, LambdaLiteral) { name, lambda ->
+            FoxCall(FoxEntityStatement(FoxUnit), name, null, listOf(null to lambda))
         }
         symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
             FoxCall(target, name, generics, parameters)
         }
+        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral) { target, _, name, generics, parameters, lambda ->
+            FoxCall(target, name, generics, parameters + listOf(null to lambda))
+        }
+        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, LambdaLiteral) { target, _, name, generics, lambda ->
+            FoxCall(target, name, generics, listOf(null to lambda))
+        }
         symbols(PostfixExpression, Dot, Identifier, ActualParameterList) { target, _, name, parameters ->
             FoxCall(target, name, null, parameters)
+        }
+        symbols(PostfixExpression, Dot, Identifier, ActualParameterList, LambdaLiteral) { target, _, name, parameters, lambda ->
+            FoxCall(target, name, null, parameters + listOf(null to lambda))
+        }
+        symbols(PostfixExpression, Dot, Identifier, LambdaLiteral) { target, _, name, lambda ->
+            FoxCall(target, name, null, listOf(null to lambda))
         }
         symbols(node<FoxType>(), ActualParameterList) { type, parameters ->
             FoxConstruct(type, parameters)
         }
+        symbols(node<FoxType>(), ActualParameterList, LambdaLiteral) { type, parameters, lambda ->
+            FoxConstruct(type, parameters + listOf(null to lambda))
+        }
+        symbols(node<FoxType>(), LambdaLiteral) { type, lambda ->
+            FoxConstruct(type, listOf(null to lambda))
+        }
         symbols(ParenthesizedStatement, ActualParameterList) { method, parameters ->
             FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters)
         }
+        symbols(ParenthesizedStatement, ActualParameterList, LambdaLiteral) { method, parameters, lambda ->
+            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters + listOf(null to lambda))
+        }
+        symbols(ParenthesizedStatement, LambdaLiteral) { method, lambda ->
+            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, listOf(null to lambda))
+        }
         symbols(PostfixExpression, Dot, ParenthesizedStatement, ActualParameterList) { target, _, method, parameters ->
             FoxIndirectCall(target, method, parameters)
+        }
+        symbols(PostfixExpression, Dot, ParenthesizedStatement, ActualParameterList, LambdaLiteral) { target, _, method, parameters, lambda ->
+            FoxIndirectCall(target, method, parameters + listOf(null to lambda))
+        }
+        symbols(PostfixExpression, Dot, ParenthesizedStatement, LambdaLiteral) { target, _, method, lambda ->
+            FoxIndirectCall(target, method, listOf(null to lambda))
         }
     }
     
@@ -965,6 +1118,7 @@ val FoxGrammar = buildGrammar {
     
     rules(StatementLine) {
         symbols(node<FoxStatement>(), LineBreak) { statement, _ -> statement }
+        symbols(SingleLineStatementBlock, LineBreak) { statement, _ -> statement }
     }
     
     rules(StatementBlockHead) {
@@ -1170,7 +1324,7 @@ val FoxGrammar = buildGrammar {
 
 val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
 
-private sealed interface ParsedMethodTypeArgument {
+internal sealed interface ParsedMethodTypeArgument {
     data class This(val type: FoxType) : ParsedMethodTypeArgument
     data class Return(val type: FoxType) : ParsedMethodTypeArgument
     data class Parameter(val name: String, val type: FoxType) : ParsedMethodTypeArgument

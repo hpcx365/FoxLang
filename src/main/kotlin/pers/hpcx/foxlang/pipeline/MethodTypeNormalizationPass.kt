@@ -53,6 +53,10 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
             },
             statement.isRaw,
         )
+        is FoxLambda -> FoxLambda(
+            statement.parameters?.map { (name, type) -> name to type?.let { normalizeType(method, it) } },
+            normalizeStatement(method, statement.body),
+        )
         is FoxConstruct -> FoxConstruct(
             normalizeType(method, statement.type),
             statement.parameters.map { (name, value) -> name to normalizeStatement(method, value) },

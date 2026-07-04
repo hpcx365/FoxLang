@@ -1,10 +1,7 @@
 package pers.hpcx.foxlang.frontend
 
 import org.junit.jupiter.api.assertThrows
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNull
+import kotlin.test.*
 
 class ParserTest {
     
@@ -135,6 +132,33 @@ class ParserTest {
     }
     
     @Test
+    fun testFormattedStringLeafRules() {
+        val start = node<FormattedParts>()
+        val isRaw = node<Boolean>().name("FormattedStart")
+        val text = node<String>().name("FormattedText")
+        val expressionOpen = node<Unit>().name("FormattedExpressionOpen")
+        val expressionClose = node<Unit>().name("FormattedExpressionClose")
+        val stringEnd = node<Unit>().name("FormattedStringEnd")
+        val identifier = node<String>().name("Identifier")
+        val grammar = buildGrammar {
+            rules(isRaw) { formattedStringStart { it.isRaw } }
+            rules(text) { formattedStringText { it.text } }
+            rules(expressionOpen) { formattedExpressionStart { } }
+            rules(expressionClose) { formattedExpressionEnd { } }
+            rules(stringEnd) { formattedStringEnd { } }
+            rules(identifier) { regex(Regex("[a-z]+")) { it.text } }
+            rules(start) {
+                symbols(isRaw, text, expressionOpen, identifier, expressionClose, stringEnd) { raw, literal, _, name, _, _ ->
+                    FormattedParts(raw, literal, name)
+                }
+            }
+        }
+        
+        val result = assertIs<FormattedParts>(Parser(grammar, start).parse("""f"hello {name}""""))
+        assertEquals(FormattedParts(false, "hello ", "name"), result)
+    }
+    
+    @Test
     fun testParseFailsWhenInputHasUnconsumedSuffix() {
         val start = node<Atom>()
         val grammar = buildGrammar {
@@ -159,10 +183,43 @@ class ParserTest {
                 }
             }
         }
+        val parser = Parser(grammar, start)
         
-        val result = assertIs<IntBox>(Parser(grammar, start).parse("7"))
+        val result = assertIs<IntBox>(parser.parse("7"))
         assertEquals(IntBox(7), result)
-        assertNull(Parser(grammar, start).parse("12"))
+        
+        val analysis = parser.analyze("12")
+        assertNull(analysis.value)
+        val failure = analysis.exactChart.ruleFactoryFailures().single()
+        assertEquals(start, failure.symbol)
+        assertEquals(SourceSpan(SourcePosition(0), SourcePosition(1)), failure.span)
+        assertEquals("Too large", failure.message)
+    }
+    
+    @Test
+    fun testFactoryParseExceptionDoesNotReportWhenAnotherCandidateBuilds() {
+        val start = node<IntBox>()
+        val grammar = buildGrammar {
+            rules(start) {
+                regex(Regex("[0-9]+")) {
+                    throw RuleFactoryException("Rejected candidate")
+                }
+                regex(Regex("[0-9]+")) {
+                    IntBox(it.text.toInt())
+                }
+            }
+        }
+        
+        val analysis = Parser(grammar, start).analyze("7")
+        val result = DiagnosticResult(
+            root = Expectation(start, analysis.source.span),
+            chart = analysis.exactChart,
+            exactBuildSucceeded = analysis.value != null,
+        )
+        
+        assertEquals(IntBox(7), analysis.value)
+        assertEquals("Rejected candidate", analysis.exactChart.ruleFactoryFailures().single().message)
+        assertTrue(result.report().items.isEmpty(), result.report().items.joinToString())
     }
     
     @Test
@@ -196,6 +253,7 @@ private data class Atom(val text: String)
 private data class WordValue(val text: String)
 private data class CharBox(val value: Char)
 private data class StringBox(val value: String)
+private data class FormattedParts(val isRaw: Boolean, val text: String, val expression: String)
 private data class IntBox(val value: Int)
 
 private sealed interface Expr {

@@ -51,3 +51,4 @@ data class FoxWhen(val label: String?, val value: FoxStatement?, val cases: List
 data class FoxCase(val conditions: List<FoxStatement>, val body: FoxStatement)
 data class FoxWhile(val label: String?, val condition: FoxStatement, val body: FoxStatement) : FoxStatement
 data class FoxDoWhile(val label: String?, val body: FoxStatement, val condition: FoxStatement) : FoxStatement
+data class FoxLambda(val parameters: List<Pair<String, FoxType?>>?, val body: FoxStatement) : FoxStatement

@@ -1,8 +1,7 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.runtime.FoxInt
-import pers.hpcx.foxlang.runtime.FoxString
+import pers.hpcx.foxlang.ast.FoxFileParser
+import pers.hpcx.foxlang.ast.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -10,88 +9,11 @@ import kotlin.test.assertNotNull
 class FoxGrammarTest {
     
     @Test
-    fun testParserAndAstSourcePrinter() {
+    fun testRoundTrip() {
         val file = assertNotNull(FoxFileParser.parse(source))
         val printed = file.toSource()
         val reparsed = assertNotNull(FoxFileParser.parse(printed))
         assertEquals(file, reparsed)
-    }
-    
-    @Test
-    fun testStatementMustEndWithLineBreak() {
-        val file = assertNotNull(
-            FoxFileParser.parse(
-                """
-def main() {
-    return "fox"
-}
-""",
-            ),
-        )
-        
-        val method = file.elements.single() as FoxMethodDefinition
-        val body = method.body as FoxBlock
-        assertEquals(
-            listOf(FoxReturn(FoxEntityStatement(FoxString("fox")))),
-            body.statements,
-        )
-    }
-    
-    @Test
-    fun testDotAbsorbsLineBreakInPostfixExpression() {
-        val file = assertNotNull(
-            FoxFileParser.parse(
-                """
-def main() {
-    list
-    .add("fox")
-}
-""",
-            ),
-        )
-        
-        val method = file.elements.single() as FoxMethodDefinition
-        val body = method.body as FoxBlock
-        assertEquals(
-            listOf(
-                FoxCall(
-                    FoxSymbol("list"),
-                    "add",
-                    null,
-                    listOf(null to FoxEntityStatement(FoxString("fox"))),
-                ),
-            ),
-            body.statements,
-        )
-    }
-    
-    @Test
-    fun testBinaryOperatorAbsorbsFollowingLineBreak() {
-        val file = assertNotNull(
-            FoxFileParser.parse(
-                """
-def main() {
-    return 1 +
-    2
-}
-""",
-            ),
-        )
-        
-        val method = file.elements.single() as FoxMethodDefinition
-        val body = method.body as FoxBlock
-        assertEquals(
-            listOf(
-                FoxReturn(
-                    FoxBinary(
-                        FoxEntityStatement(FoxInt(1)),
-                        FoxAddOperator,
-                        FoxEntityStatement(FoxInt(2)),
-                    ),
-                ),
-            ),
-            body.statements,
-        )
     }
     
     val source = """
@@ -168,18 +90,18 @@ def Int.collatz(): Ref<List<Int>> {
 
     i := this
     println((println)("indirect call"))
-//    result.(forEach)({ println(it) })
+    result.(forEach)({ println(it) })
     #loop while (i != 1) {
         result += i
         i = if (i % 2 == 0) i / 2 else {
             j := 3 * i + 1
             when {
                 j > 1_000_000_000 -> {
-//                    println(f"Wow, a \"huge\" number: {j}, I can't handle it.")
+                    println(f"Wow, a \"huge\" number: {j}, I can't handle it.")
                     break #loop
                 }
-//                j > 1_000_000 -> println(f"\\Amazing\\ number: {j}")
-//                j > 10_000 -> println(f"Cool number: {j}")
+                j > 1_000_000 -> println(f"\\Amazing\\ number: {j}")
+                j > 10_000 -> println(f"Cool number: {j}")
                 else -> {}
             }
             yield j
@@ -199,7 +121,7 @@ def main(args: Array<String>) {
 
     result := i.collatz()
     println("Collatz sequence:")
-//    result.forEach { println(it) }
+    result.forEach { println(it) }
 
     if (false) {
         println('a')

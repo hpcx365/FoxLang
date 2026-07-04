@@ -322,6 +322,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             is FoxSymbol -> print(statement.name)
             is FoxEntityStatement -> printEntity(statement.value)
             is FoxFormattedString -> printFormattedString(statement)
+            is FoxLambda -> printLambda(statement, indentLevel)
             is FoxBlock -> printBlock(statement, indentLevel)
             is FoxUnary -> printUnary(statement, indentLevel)
             is FoxBinary -> printBinary(statement, indentLevel)
@@ -344,7 +345,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             is FoxCall -> printCall(statement, indentLevel)
             is FoxConstruct -> {
                 printType(statement.type)
-                printActualParameters(statement.parameters, indentLevel)
+                printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
             }
             is FoxIndirectCall -> printIndirectCall(statement, indentLevel)
             is FoxIf -> printIf(statement, indentLevel)
@@ -430,7 +431,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
         print(statement.name)
         statement.generics?.let { printActualTypeArguments(it) }
-        printActualParameters(statement.parameters, indentLevel)
+        printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
     }
     
     private fun PrintWriter.printIndirectCall(statement: FoxIndirectCall, indentLevel: Int) {
@@ -441,9 +442,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('(')
         printStatement(statement.method, indentLevel, Standalone)
         print(')')
-        print('(')
-        printActualParameters(statement.parameters, indentLevel)
-        print(')')
+        printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
     }
     
     private fun PrintWriter.printIf(statement: FoxIf, indentLevel: Int) {
@@ -582,6 +581,28 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print(')')
     }
     
+    private fun PrintWriter.printActualParametersWithTrailingLambda(
+        parameters: List<Pair<String?, FoxStatement>>,
+        indentLevel: Int,
+    ) {
+        val trailingLambda = parameters.lastOrNull()
+            ?.takeIf { !canonical && it.first == null && it.second is FoxLambda }
+            ?.second as FoxLambda?
+        if (trailingLambda == null) {
+            printActualParameters(parameters, indentLevel)
+            return
+        }
+        
+        val regularParameters = parameters.dropLast(1)
+        if (regularParameters.isNotEmpty()) {
+            printActualParameters(regularParameters, indentLevel)
+            print(' ')
+        } else {
+            print(' ')
+        }
+        printLambda(trailingLambda, indentLevel)
+    }
+    
     private fun PrintWriter.printActualTypeArguments(generics: List<Pair<String?, FoxType>>) {
         if (generics.isEmpty()) return
         print('<')
@@ -610,6 +631,47 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             }
         }
         print('"')
+    }
+    
+    private fun PrintWriter.printLambda(statement: FoxLambda, indentLevel: Int) {
+        print('{')
+        statement.parameters?.let { parameters ->
+            if (parameters.isNotEmpty()) {
+                print(' ')
+                printCommaSeparated(parameters) { (name, type) ->
+                    print(name)
+                    type?.let { type ->
+                        print(": ")
+                        printType(type)
+                    }
+                }
+            }
+            print(" ->")
+        }
+        
+        when (val body = statement.body) {
+            is FoxBlock -> {
+                if (body.statements.isEmpty()) {
+                    if (statement.parameters != null) print(' ')
+                    print('}')
+                    return
+                }
+                print('\n')
+                body.statements.forEachIndexed { index, bodyStatement ->
+                    print(indent(indentLevel + 1))
+                    printStatement(bodyStatement, indentLevel + 1, Standalone)
+                    if (index != body.statements.lastIndex) print('\n')
+                }
+                print('\n')
+                print(indent(indentLevel))
+            }
+            else -> {
+                print(' ')
+                printStatement(body, indentLevel, Standalone)
+                print(' ')
+            }
+        }
+        print('}')
     }
     
     private fun PrintWriter.printEntity(entity: FoxEntity) {
@@ -706,6 +768,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         is FoxTypeBinding,
             -> 0
         
+        is FoxLambda -> 5
         is FoxAssign -> 10
         is FoxBinary -> binaryPrecedence(statement.operator)
         is FoxUnary -> 120

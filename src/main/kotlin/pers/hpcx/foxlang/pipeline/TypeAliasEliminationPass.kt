@@ -80,6 +80,10 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
         },
         isRaw,
     )
+    is FoxLambda -> FoxLambda(
+        parameters?.map { (name, type) -> name to type?.mapTypes(transform) },
+        body.mapTypes(transform),
+    )
     is FoxConstruct -> FoxConstruct(
         transform(type),
         parameters.map { (name, parameter) -> name to parameter.mapTypes(transform) },
