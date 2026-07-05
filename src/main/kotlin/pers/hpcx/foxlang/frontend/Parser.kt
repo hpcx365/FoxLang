@@ -3,25 +3,25 @@
 package pers.hpcx.foxlang.frontend
 
 import pers.hpcx.foxlang.utils.UniqueQueue
+import java.util.*
 
-class Parser<N>(
-    val grammar: Grammar,
-    val start: Symbol<N>,
-) {
+class Parser<N>(val grammar: Grammar, val start: Symbol<N>) {
     
     fun parse(src: String): N? {
-        return analyze(src).value
+        return (analyze(src).buildResult as? ParseContextBuildSuccess)?.node
     }
     
     fun analyze(src: String): ParseAnalysis<N> {
         val source = Source(src)
-        val chart = ParseChart(grammar, source)
+        val context = ParseContext(grammar, source)
+        context.seedLeafRules()
+        context.grow()
         return ParseAnalysis(
             grammar = grammar,
             start = start,
             source = source,
-            exactChart = chart,
-            value = chart.build(start),
+            context = context,
+            buildResult = context.build(start),
         )
     }
 }
@@ -30,134 +30,199 @@ data class ParseAnalysis<N>(
     val grammar: Grammar,
     val start: Symbol<N>,
     val source: Source,
-    val exactChart: ParseChart,
-    val value: N?,
+    val context: ParseContext,
+    val buildResult: ParseContextBuildResult<N>,
 )
 
-data class RuleFactoryFailure(
+data class ParseMatch<N>(
+    val symbol: Symbol<N>,
+    val matchType: ParseMatchType,
+    val segments: List<SourceSpan>,
+    val grammarRule: GrammarRule<*>?,
+) {
+    
+    init {
+        require(segments.isNotEmpty()) { "Match segments must not be empty" }
+        segments.zipWithNext().forEach {
+            require(it.first.end == it.second.start) { "Match segments must be contiguous" }
+        }
+        if (matchType.isBuildable()) {
+            requireNotNull(grammarRule) { "Grammar rule must not be null for buildable match type" }
+        }
+        when (grammarRule) {
+            null -> {}
+            is GrammarRule.LeafRule -> require(segments.size == 1) {
+                "Leaf rule match must have exactly one segment"
+            }
+            is GrammarRule.MatchSymbols -> require(segments.size == grammarRule.components.size) {
+                "Match symbols rule match must have exactly ${grammarRule.components.size} segments"
+            }
+        }
+    }
+    
+    val span: SourceSpan get() = SourceSpan(segments.first().start, segments.last().end)
+}
+
+enum class ParseMatchType {
+    
+    Exact,
+    Derived,
+    Expected,
+    Synthetic;
+    
+    fun isBuildable(): Boolean = when (this) {
+        Exact -> true
+        Derived -> true
+        Expected -> false
+        Synthetic -> false
+    }
+}
+
+sealed interface ParseContextBuildResult<out N>
+
+data class ParseContextBuildSuccess<N>(
+    val node: N,
+) : ParseContextBuildResult<N>
+
+data class ParseContextBuildFailure(
+    val errors: Set<GrammarRuleFactoryError>,
+) : ParseContextBuildResult<Nothing>
+
+data class GrammarRuleFactoryError(
     val symbol: Symbol<*>,
     val span: SourceSpan,
     val message: String,
 )
 
-data class ParseMatch<N>(
-    val symbol: Symbol<N>,
-    val rule: Rule<*>?,
-    val segments: List<SourceSpan>,
-    val origin: MatchOrigin = MatchOrigin.Exact,
-) {
-    
-    init {
-        require(segments.isNotEmpty()) { "Match segments must not be empty" }
-    }
-    
-    val span: SourceSpan get() = SourceSpan(segments.first().begin, segments.last().end)
-    
-    fun isExactTree(): Boolean = when (origin) {
-        MatchOrigin.Exact -> true
-        is MatchOrigin.Expected -> false
-        is MatchOrigin.Derived -> !origin.fromSynthetic
-    }
-    
-    fun hasSyntheticOrigin(): Boolean = when (origin) {
-        MatchOrigin.Exact -> false
-        is MatchOrigin.Expected -> true
-        is MatchOrigin.Derived -> origin.fromSynthetic
-    }
-}
-
-sealed interface MatchOrigin {
-    
-    data object Exact : MatchOrigin
-    
-    data class Expected(
-        val reason: String,
-        val cost: Int,
-        val children: List<Expectation> = emptyList(),
-    ) : MatchOrigin
-    
-    data class Derived(
-        val fromSynthetic: Boolean,
-    ) : MatchOrigin
-}
-
-class ParseChart(
-    val grammar: Grammar,
-    val source: Source,
-    seedLeaves: Boolean = true,
-) {
+class ParseContext(val grammar: Grammar, val source: Source) {
     
     private val updateQueue = UniqueQueue<Symbol<*>>()
     private val updateMap = mutableMapOf<Symbol<*>, MutableList<ParseMatch<*>>>()
     private val matches = mutableMapOf<Pair<Symbol<*>, SourceSpan>, MutableSet<ParseMatch<*>>>()
-    private val matchesByBegin = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<ParseMatch<*>>>()
+    private val matchesByStart = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<ParseMatch<*>>>()
     private val matchesByEnd = mutableMapOf<Pair<Symbol<*>, SourcePosition>, MutableList<ParseMatch<*>>>()
-    private val ruleFactoryFailures = mutableSetOf<RuleFactoryFailure>()
-    
-    init {
-        if (seedLeaves) seedLeafRules()
-    }
-    
-    fun forkForDiagnostics(): ParseChart {
-        val result = ParseChart(grammar, source, seedLeaves = false)
-        allMatches().forEach { result.seed(it, grow = false) }
-        result.ruleFactoryFailures += ruleFactoryFailures
-        result.grow()
-        return result
-    }
-    
-    fun allMatches(): List<ParseMatch<*>> {
-        return matches.values.flatten()
-    }
     
     fun matches(symbol: Symbol<*>, span: SourceSpan): List<ParseMatch<*>> {
         return matches[symbol to span]?.toList().orEmpty()
     }
     
-    fun matchesByBegin(symbol: Symbol<*>, begin: SourcePosition): List<ParseMatch<*>> {
-        return matchesByBegin[symbol to begin]?.toList().orEmpty()
+    fun matchesByStart(symbol: Symbol<*>, start: SourcePosition): List<ParseMatch<*>> {
+        return matchesByStart[symbol to start]?.toList().orEmpty()
     }
     
     fun matchesByEnd(symbol: Symbol<*>, end: SourcePosition): List<ParseMatch<*>> {
         return matchesByEnd[symbol to end]?.toList().orEmpty()
     }
     
-    fun ruleFactoryFailures(): List<RuleFactoryFailure> {
-        return ruleFactoryFailures.toList()
+    fun seedLeafRules() {
+        grammar.rules.forEach { (symbol, rules) ->
+            rules.asSequence().filterIsInstance<GrammarRule.LeafRule<*>>().forEach { rule ->
+                rule.seed(symbol)
+            }
+        }
     }
-
-    fun seed(match: ParseMatch<*>, grow: Boolean = true): Boolean {
+    
+    fun seed(match: ParseMatch<*>): Boolean {
         val span = match.span
         val symbol = match.symbol
         if (!matches.getOrPut(symbol to span) { mutableSetOf() }.add(match)) return false
-        matchesByBegin.getOrPut(symbol to span.begin) { mutableListOf() } += match
+        matchesByStart.getOrPut(symbol to span.start) { mutableListOf() } += match
         matchesByEnd.getOrPut(symbol to span.end) { mutableListOf() } += match
         grammar.dependencyGraph[symbol]?.forEach { parent ->
             updateQueue += parent
             updateMap.getOrPut(parent) { mutableListOf() } += match
         }
-        if (grow) grow()
         return true
     }
     
-    private fun seedLeafRules() {
-        grammar.rules.forEach { (target, rules) ->
-            rules.asSequence().filterIsInstance<LeafRule<*>>().forEach { rule ->
-                when (rule) {
-                    is FixedRule<*> -> seedFixed(target, rule)
-                    is RegexRule<*> -> seedRegex(target, rule)
-                    is LineBreakRule<*> -> seed<LineBreakFragment>(target, rule)
-                    is CharLiteralRule<*> -> seed<CharLiteralFragment>(target, rule)
-                    is StringLiteralRule<*> -> seed<StringLiteralFragment>(target, rule)
-                    is FormattedStringStartRule<*> -> seed<FormattedStringStartFragment>(target, rule)
-                    is FormattedStringTextRule<*> -> seed<FormattedStringTextFragment>(target, rule)
-                    is FormattedExpressionStartRule<*> -> seed<FormattedExpressionStartFragment>(target, rule)
-                    is FormattedExpressionEndRule<*> -> seed<FormattedExpressionEndFragment>(target, rule)
-                    is FormattedStringEndRule<*> -> seed<FormattedStringEndFragment>(target, rule)
+    private fun GrammarRule.LeafRule<*>.seed(symbol: Symbol<*>) = when (this) {
+        is GrammarRule.MatchFixed<*> -> seedFixed(symbol, this)
+        is GrammarRule.MatchRegex<*> -> seedRegex(symbol, this)
+        is GrammarRule.MatchLineBreak<*> -> seed<LineBreakFragment>(symbol, this)
+        is GrammarRule.MatchCharLiteral<*> -> seed<CharLiteralFragment>(symbol, this)
+        is GrammarRule.MatchStringLiteral<*> -> seed<StringLiteralFragment>(symbol, this)
+        is GrammarRule.MatchFormattedStringStart<*> -> seed<FormattedStringStartFragment>(symbol, this)
+        is GrammarRule.MatchFormattedStringText<*> -> seed<FormattedStringTextFragment>(symbol, this)
+        is GrammarRule.MatchFormattedExpressionStart<*> -> seed<FormattedExpressionStartFragment>(symbol, this)
+        is GrammarRule.MatchFormattedExpressionEnd<*> -> seed<FormattedExpressionEndFragment>(symbol, this)
+        is GrammarRule.MatchFormattedStringEnd<*> -> seed<FormattedStringEndFragment>(symbol, this)
+    }
+    
+    private inline fun seedFixed(target: Symbol<*>, rule: GrammarRule.MatchFixed<*>) {
+        source.positions.forEach { position ->
+            val span = matchFixed(rule, position) ?: return@forEach
+            seed(ParseMatch(target, ParseMatchType.Exact, listOf(span), rule))
+        }
+    }
+    
+    private inline fun seedRegex(target: Symbol<*>, rule: GrammarRule.MatchRegex<*>) {
+        source.positions.forEach { position ->
+            val span = matchRegex(rule, position) ?: return@forEach
+            seed(ParseMatch(target, ParseMatchType.Exact, listOf(span), rule))
+        }
+    }
+    
+    private inline fun <reified F> seed(target: Symbol<*>, rule: GrammarRule.LeafRule<*>) {
+        source.forEachIndexed { index, fragment ->
+            if (fragment !is F) return@forEachIndexed
+            val span = SourceSpan(SourcePosition(index), SourcePosition(index) + 1)
+            seed(ParseMatch(target, ParseMatchType.Exact, listOf(span), rule))
+        }
+    }
+    
+    private fun matchFixed(rule: GrammarRule.MatchFixed<*>, start: SourcePosition): SourceSpan? {
+        val string = rule.string
+        var stringIndex = 0
+        val seen = mutableListOf<PlainFragment>()
+        
+        loop@ while (true) {
+            val curr = source.getOrNull(start + seen.size) ?: break
+            if (curr !is PlainFragment) break
+            seen.lastOrNull()?.let { prev ->
+                if (prev.line != curr.line || prev.column + prev.text.length != curr.column) {
+                    break
                 }
             }
+            curr.text.forEach { char ->
+                if (stringIndex >= string.length || string[stringIndex] != char) break@loop
+                stringIndex++
+            }
+            seen += curr
         }
-        grow()
+        if (seen.isEmpty() || stringIndex < string.length) return null
+        
+        val result = buildString { seen.forEach { append(it.text) } }
+        check(result == string)
+        return SourceSpan(start, start + seen.size)
+    }
+    
+    private fun matchRegex(rule: GrammarRule.MatchRegex<*>, start: SourcePosition): SourceSpan? {
+        val automaton = rule.automaton
+        var automatonState = automaton.initialState
+        val seen = mutableListOf<PlainFragment>()
+        var longestMatch = 0
+        
+        loop@ while (true) {
+            val curr = source.getOrNull(start + seen.size) ?: break
+            if (curr !is PlainFragment) break
+            seen.lastOrNull()?.let { prev ->
+                if (prev.line != curr.line || prev.column + prev.text.length != curr.column) {
+                    break
+                }
+            }
+            curr.text.forEach { char ->
+                val nextState = automaton.step(automatonState, char)
+                if (nextState < 0) break@loop
+                automatonState = nextState
+            }
+            seen += curr
+            if (automaton.isAccept(automatonState)) longestMatch = seen.size
+        }
+        if (seen.isEmpty() || longestMatch == 0) return null
+        
+        val result = buildString { seen.subList(0, longestMatch).forEach { append(it.text) } }
+        check(rule.regex.matches(result))
+        return SourceSpan(start, start + longestMatch)
     }
     
     fun grow() {
@@ -165,7 +230,7 @@ class ParseChart(
             val symbol = updateQueue.poll() ?: break
             updateMap.remove(symbol)?.forEach { match ->
                 grammar.rules[symbol]?.forEach { rule ->
-                    if (rule !is NonLeafRule) return@forEach
+                    if (rule !is GrammarRule.MatchSymbols) return@forEach
                     
                     fun collectLeft(index: Int, end: SourcePosition): List<List<SourceSpan>> {
                         if (index < 0) return listOf(emptyList())
@@ -173,17 +238,17 @@ class ParseChart(
                         val matches = matchesByEnd[component to end] ?: return emptyList()
                         val results = mutableListOf<List<SourceSpan>>()
                         matches.forEach { leftMatch ->
-                            collectLeft(index - 1, leftMatch.span.begin).forEach { left ->
+                            collectLeft(index - 1, leftMatch.span.start).forEach { left ->
                                 results += left + listOf(leftMatch.span)
                             }
                         }
                         return results
                     }
                     
-                    fun collectRight(index: Int, begin: SourcePosition): List<List<SourceSpan>> {
+                    fun collectRight(index: Int, start: SourcePosition): List<List<SourceSpan>> {
                         if (index >= rule.components.size) return listOf(emptyList())
                         val component = rule.components[index]
-                        val matches = matchesByBegin[component to begin] ?: return emptyList()
+                        val matches = matchesByStart[component to start] ?: return emptyList()
                         val results = mutableListOf<List<SourceSpan>>()
                         matches.forEach { rightMatch ->
                             collectRight(index + 1, rightMatch.span.end).forEach { right ->
@@ -194,17 +259,16 @@ class ParseChart(
                     }
                     
                     fun collect(index: Int) {
-                        val lefts = collectLeft(index - 1, match.span.begin)
+                        val lefts = collectLeft(index - 1, match.span.start)
                         val rights = collectRight(index + 1, match.span.end)
                         lefts.forEach { left ->
                             rights.forEach { right ->
                                 val segments = left + listOf(match.span) + right
-                                val origin = MatchOrigin.Derived(
-                                    segments.withIndex().any { (segmentIndex, segment) ->
-                                        matches(rule.components[segmentIndex], segment).any { it.hasSyntheticOrigin() }
-                                    },
-                                )
-                                seed(ParseMatch(symbol, rule, segments, origin), grow = false)
+                                val buildable = segments.withIndex().all { (segment, span) ->
+                                    matches(rule.components[segment], span).any { it.matchType.isBuildable() }
+                                }
+                                val matchType = if (buildable) ParseMatchType.Derived else ParseMatchType.Synthetic
+                                seed(ParseMatch(symbol, matchType, segments, rule))
                             }
                         }
                     }
@@ -217,143 +281,155 @@ class ParseChart(
         }
     }
     
+    fun <N> build(symbol: Symbol<N>): ParseContextBuildResult<N> = build(symbol, source.span)
+    
     @Suppress("UNCHECKED_CAST")
-    fun <N> build(symbol: Symbol<N>): N? {
-        return build(symbol, source.span) as N?
+    fun <N> build(symbol: Symbol<N>, span: SourceSpan): ParseContextBuildResult<N> {
+        val errors = mutableSetOf<GrammarRuleFactoryError>()
+        build(symbol, span, errors)?.let { node ->
+            return ParseContextBuildSuccess(node as N)
+        }
+        return ParseContextBuildFailure(errors)
     }
     
-    private fun build(symbol: Symbol<*>, span: SourceSpan): Any? {
-        val candidates = matches[symbol to span] ?: return null
-        val results = candidates
-            .filter { it.isExactTree() }
-            .mapNotNull { build(it) }
+    private fun build(symbol: Symbol<*>, span: SourceSpan, errors: MutableSet<GrammarRuleFactoryError>): Any? {
+        val results = matches[symbol to span].orEmpty().mapNotNull { build(it, errors) }
         if (results.isEmpty()) return null
         check(results.size == 1) { "Ambiguous grammar" }
         return results.single()
     }
     
-    private fun build(match: ParseMatch<*>): Any? {
-        if (match.origin is MatchOrigin.Expected) return null
-        val first = source[match.segments.first().begin]
+    private fun build(match: ParseMatch<*>, errors: MutableSet<GrammarRuleFactoryError>): Any? {
+        if (!match.matchType.isBuildable()) return null
+        val rule = checkNotNull(match.grammarRule)
+        val first = source[match.segments.first().start]
         return try {
-            when (val rule = match.rule) {
-                null -> null
-                is FixedRule<*> -> rule.factory(
-                    PlainFragment(
-                        first.line,
-                        first.column,
-                        match.segments.first().asSequence()
-                            .map { (source[it] as PlainFragment).text }
-                            .joinToString(separator = "") { it },
-                    ),
-                )
-                is RegexRule<*> -> rule.factory(
-                    PlainFragment(
-                        first.line,
-                        first.column,
-                        match.segments.first().asSequence()
-                            .map { (source[it] as PlainFragment).text }
-                            .joinToString(separator = "") { it },
-                    ),
-                )
-                is LineBreakRule<*> -> rule.factory(first as LineBreakFragment)
-                is CharLiteralRule<*> -> rule.factory(first as CharLiteralFragment)
-                is StringLiteralRule<*> -> rule.factory(first as StringLiteralFragment)
-                is FormattedStringStartRule<*> -> rule.factory(first as FormattedStringStartFragment)
-                is FormattedStringTextRule<*> -> rule.factory(first as FormattedStringTextFragment)
-                is FormattedExpressionStartRule<*> -> rule.factory(first as FormattedExpressionStartFragment)
-                is FormattedExpressionEndRule<*> -> rule.factory(first as FormattedExpressionEndFragment)
-                is FormattedStringEndRule<*> -> rule.factory(first as FormattedStringEndFragment)
-                is NonLeafRule<*> -> rule.factory(
-                    rule.components.zip(match.segments).map { (component, segment) ->
-                        build(component, segment) ?: return null
-                    },
-                )
+            when (rule) {
+                is GrammarRule.MatchFixed<*> -> {
+                    rule.factory(
+                        PlainFragment(
+                            first.line,
+                            first.column,
+                            match.segments.first().asSequence()
+                                .map { (source[it] as PlainFragment).text }
+                                .joinToString(separator = "") { it },
+                        ),
+                    )
+                }
+                is GrammarRule.MatchRegex<*> -> {
+                    rule.factory(
+                        PlainFragment(
+                            first.line,
+                            first.column,
+                            match.segments.first().asSequence()
+                                .map { (source[it] as PlainFragment).text }
+                                .joinToString(separator = "") { it },
+                        ),
+                    )
+                }
+                is GrammarRule.MatchLineBreak<*> -> {
+                    rule.factory(first as LineBreakFragment)
+                }
+                is GrammarRule.MatchCharLiteral<*> -> {
+                    rule.factory(first as CharLiteralFragment)
+                }
+                is GrammarRule.MatchStringLiteral<*> -> {
+                    rule.factory(first as StringLiteralFragment)
+                }
+                is GrammarRule.MatchFormattedStringStart<*> -> {
+                    rule.factory(first as FormattedStringStartFragment)
+                }
+                is GrammarRule.MatchFormattedStringText<*> -> {
+                    rule.factory(first as FormattedStringTextFragment)
+                }
+                is GrammarRule.MatchFormattedExpressionStart<*> -> {
+                    rule.factory(first as FormattedExpressionStartFragment)
+                }
+                is GrammarRule.MatchFormattedExpressionEnd<*> -> {
+                    rule.factory(first as FormattedExpressionEndFragment)
+                }
+                is GrammarRule.MatchFormattedStringEnd<*> -> {
+                    rule.factory(first as FormattedStringEndFragment)
+                }
+                is GrammarRule.MatchSymbols<*> -> {
+                    rule.factory(
+                        rule.components.zip(match.segments).map { (component, segment) ->
+                            build(component, segment, errors) ?: return null
+                        },
+                    )
+                }
             }
-        } catch (e: RuleFactoryException) {
-            ruleFactoryFailures += RuleFactoryFailure(
+        } catch (e: GrammarRuleFactoryException) {
+            errors += GrammarRuleFactoryError(
                 symbol = match.symbol,
                 span = match.span,
-                message = e.message ?: "Rule factory rejected match",
+                message = e.message,
             )
             null
         }
     }
     
-    private inline fun seedFixed(target: Symbol<*>, rule: FixedRule<*>) {
-        source.positions.forEach { position ->
-            val span = matchFixed(rule, position) ?: return@forEach
-            seed(ParseMatch(target, rule, listOf(span)), grow = false)
-        }
-    }
-    
-    private inline fun seedRegex(target: Symbol<*>, rule: RegexRule<*>) {
-        source.positions.forEach { position ->
-            val span = matchRegex(rule, position) ?: return@forEach
-            seed(ParseMatch(target, rule, listOf(span)), grow = false)
-        }
-    }
-    
-    private inline fun <reified F> seed(target: Symbol<*>, rule: LeafRule<*>) {
-        source.forEachIndexed { index, fragment ->
-            if (fragment !is F) return@forEachIndexed
-            val span = SourceSpan(SourcePosition(index), SourcePosition(index) + 1)
-            seed(ParseMatch(target, rule, listOf(span)), grow = false)
-        }
-    }
-    
-    private fun matchFixed(rule: FixedRule<*>, begin: SourcePosition): SourceSpan? {
-        val string = rule.string
-        var stringIndex = 0
-        val seen = mutableListOf<PlainFragment>()
+    fun repair(root: Expectation, strategy: RepairStrategy) {
+        val queue = ArrayDeque<Expectation>()
+        val seen = mutableSetOf<Expectation>()
         
-        loop@ while (true) {
-            val currFrag = source.getOrNull(begin + seen.size) ?: break
-            if (currFrag !is PlainFragment) break
-            seen.lastOrNull()?.let { prevFrag ->
-                if (prevFrag.line != currFrag.line || prevFrag.column + prevFrag.text.length != currFrag.column) {
-                    break
+        queue += root
+        while (queue.isNotEmpty()) {
+            val expectation = queue.poll()
+            if (!seen.add(expectation)) continue
+            
+            val existing = matches[expectation.symbol to expectation.span].orEmpty()
+            if (existing.any { it.matchType.isBuildable() }) continue
+            
+            strategy.childExpectations(this, expectation).forEach {
+                if (seed(it.toParseMatch())) {
+                    queue += it
                 }
             }
-            currFrag.text.forEach { char ->
-                if (stringIndex >= string.length || string[stringIndex] != char) break@loop
-                stringIndex++
-            }
-            seen += currFrag
+            
+            grow()
         }
-        if (seen.isEmpty() || stringIndex < string.length) return null
-        
-        val result = buildString { seen.forEach { append(it.text) } }
-        check(result == string)
-        return SourceSpan(begin, begin + seen.size)
     }
     
-    private fun matchRegex(rule: RegexRule<*>, begin: SourcePosition): SourceSpan? {
-        val automaton = rule.automaton
-        var automatonState = automaton.initialState
-        val seen = mutableListOf<PlainFragment>()
-        var longestMatch = 0
+    fun best(symbol: Symbol<*>, strategy: DiagnosticScoringStrategy) = best(symbol, source.span, strategy)
+    
+    fun best(symbol: Symbol<*>, span: SourceSpan, strategy: DiagnosticScoringStrategy): DiagnosticTree? {
+        val memo = mutableMapOf<Expectation, DiagnosticTree?>()
+        val visiting = mutableSetOf<Expectation>()
         
-        loop@ while (true) {
-            val currFrag = source.getOrNull(begin + seen.size) ?: break
-            if (currFrag !is PlainFragment) break
-            seen.lastOrNull()?.let { prevFrag ->
-                if (prevFrag.line != currFrag.line || prevFrag.column + prevFrag.text.length != currFrag.column) {
-                    break
+        fun best(symbol: Symbol<*>, span: SourceSpan): DiagnosticTree? {
+            
+            fun best(match: ParseMatch<*>): DiagnosticTree? {
+                if (match.matchType == ParseMatchType.Expected) {
+                    val score = strategy.expectedScore(match.symbol, match.span, source) ?: return null
+                    return DiagnosticTree(match, emptyList(), score)
+                }
+                
+                val rule = match.grammarRule ?: return null
+                return when (rule) {
+                    is GrammarRule.LeafRule<*> -> DiagnosticTree(match, emptyList(), DiagnosticScore.Node)
+                    is GrammarRule.MatchSymbols<*> -> {
+                        val children = rule.components.zip(match.segments).map { (component, segment) ->
+                            best(component, segment) ?: return null
+                        }
+                        val score = children.fold(DiagnosticScore.Node + strategy.rulePenalty(match, rule, source)) { acc, child ->
+                            acc + child.score.nested()
+                        }
+                        DiagnosticTree(match, children, score)
+                    }
                 }
             }
-            currFrag.text.forEach { char ->
-                val nextState = automaton.step(automatonState, char)
-                if (nextState < 0) break@loop
-                automatonState = nextState
-            }
-            seen += currFrag
-            if (automaton.isAccept(automatonState)) longestMatch = seen.size
+            
+            val key = Expectation(symbol, span)
+            if (key in memo) return memo[key]
+            if (!visiting.add(key)) return null
+            
+            val result = matches[symbol to span].orEmpty().mapNotNull { best(it) }.minOrNull()
+            visiting -= key
+            memo[key] = result
+            return result
         }
-        if (seen.isEmpty() || longestMatch == 0) return null
         
-        val result = buildString { seen.subList(0, longestMatch).forEach { append(it.text) } }
-        check(rule.regex.matches(result))
-        return SourceSpan(begin, begin + longestMatch)
+        return best(symbol, span)
     }
 }

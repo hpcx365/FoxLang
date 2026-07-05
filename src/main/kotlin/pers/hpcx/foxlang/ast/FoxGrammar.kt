@@ -185,147 +185,98 @@ internal val ReservedKeywords = setOf(
 )
 
 val FoxGrammar = buildGrammar {
-    fun fixedTokens(vararg tokens: String) {
-        tokens.forEach { token -> rules(token(token)) { fixed(token) { it.text } } }
-    }
+    ReservedKeywords.forEach { token -> rules(token(token)) { fixed(token) { it.text } } }
     
-    fun <N> GrammarBuilder.RuleSetBuilder<N>.tokenValues(vararg mappings: Pair<String, N>) {
-        mappings.forEach { (text, value) ->
-            symbols(token(text)) { value }
-        }
-    }
-    
-    fun <N> GrammarBuilder.RuleSetBuilder<N>.lineContinuationTokenValues(vararg mappings: Pair<String, N>) {
-        mappings.forEach { (text, value) ->
-            symbols(token(text)) { value }
-            symbols(token(text), LineBreak) { _, _ -> value }
-        }
-    }
-    
-    fun regexToken(source: Symbol<String>, pattern: String) {
-        rules(source) { regex(Regex(pattern)) { it.text } }
-    }
-    
-    fun <N> GrammarBuilder.RuleSetBuilder<N>.parsedTokenValue(
-        source: Symbol<String>,
-        parser: (String) -> N,
-    ) {
-        symbols(source) {
-            try {
-                parser(it)
-            } catch (e: Exception) {
-                throw RuleFactoryException("Invalid token: $it, cause: ${e.message}")
-            }
-        }
-    }
-    
-    fixedTokens(*ReservedKeywords.toTypedArray())
-    fixedTokens(
+    listOf(
         "(", ")", "[", "]", "{", "}", ".", ":", ";", ",",
         "+", "-", "*", "/", "%", "`", "~", "?", "!", "@", "#", "$", "&", "|", "^",
         "<", ">", "==", "!=", "<=", ">=", "&&", "||", "<<", ">>", ">>>", "->",
         "=", ":=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=",
-    )
+    ).forEach { token -> rules(token(token)) { fixed(token) { it.text } } }
     
     rules(node<FoxUnaryOperator>()) {
-        tokenValues(
-            "!" to FoxNotOperator,
-            "-" to FoxNegOperator,
-        )
+        symbols(token("!")) { FoxNotOperator }
+        symbols(token("-")) { FoxNegOperator }
     }
     
     rules(node<FoxBinaryOperator>()) {
-        tokenValues(
-            "+" to FoxAddOperator,
-            "-" to FoxSubOperator,
-            "*" to FoxMulOperator,
-            "/" to FoxDivOperator,
-            "%" to FoxRemOperator,
-            "&" to FoxAndOperator,
-            "|" to FoxOrOperator,
-            "^" to FoxXorOperator,
-            "<<" to FoxShlOperator,
-            ">>" to FoxShrOperator,
-            ">>>" to FoxUshrOperator,
-            "==" to FoxEqOperator,
-            "!=" to FoxNeqOperator,
-            "<" to FoxLtOperator,
-            ">" to FoxGtOperator,
-            "<=" to FoxLeOperator,
-            ">=" to FoxGeOperator,
-            "&&" to FoxAndAndOperator,
-            "||" to FoxOrOrOperator,
-        )
+        symbols(token("+")) { FoxAddOperator }
+        symbols(token("-")) { FoxSubOperator }
+        symbols(token("*")) { FoxMulOperator }
+        symbols(token("/")) { FoxDivOperator }
+        symbols(token("%")) { FoxRemOperator }
+        symbols(token("&")) { FoxAndOperator }
+        symbols(token("|")) { FoxOrOperator }
+        symbols(token("^")) { FoxXorOperator }
+        symbols(token("<<")) { FoxShlOperator }
+        symbols(token(">>")) { FoxShrOperator }
+        symbols(token(">>>")) { FoxUshrOperator }
+        symbols(token("==")) { FoxEqOperator }
+        symbols(token("!=")) { FoxNeqOperator }
+        symbols(token("<")) { FoxLtOperator }
+        symbols(token(">")) { FoxGtOperator }
+        symbols(token("<=")) { FoxLeOperator }
+        symbols(token(">=")) { FoxGeOperator }
+        symbols(token("&&")) { FoxAndAndOperator }
+        symbols(token("||")) { FoxOrOrOperator }
     }
     
     rules(node<FoxAssignOperator>()) {
-        lineContinuationTokenValues(
-            "=" to FoxPlainAssignOperator,
-            ":=" to FoxTypeBindingAssignOperator,
-            "+=" to FoxAddAssignOperator,
-            "-=" to FoxSubAssignOperator,
-            "*=" to FoxMulAssignOperator,
-            "/=" to FoxDivAssignOperator,
-            "%=" to FoxRemAssignOperator,
-            "&=" to FoxAndAssignOperator,
-            "|=" to FoxOrAssignOperator,
-            "^=" to FoxXorAssignOperator,
-            "<<=" to FoxShlAssignOperator,
-            ">>=" to FoxShrAssignOperator,
-            ">>>=" to FoxUshrAssignOperator,
-            "&&=" to FoxAndAndAssignOperator,
-            "||=" to FoxOrOrAssignOperator,
-        )
+        symbols(token("=")) { FoxPlainAssignOperator }
+        symbols(token(":=")) { FoxTypeBindingAssignOperator }
+        symbols(token("+=")) { FoxAddAssignOperator }
+        symbols(token("-=")) { FoxSubAssignOperator }
+        symbols(token("*=")) { FoxMulAssignOperator }
+        symbols(token("/=")) { FoxDivAssignOperator }
+        symbols(token("%=")) { FoxRemAssignOperator }
+        symbols(token("&=")) { FoxAndAssignOperator }
+        symbols(token("|=")) { FoxOrAssignOperator }
+        symbols(token("^=")) { FoxXorAssignOperator }
+        symbols(token("<<=")) { FoxShlAssignOperator }
+        symbols(token(">>=")) { FoxShrAssignOperator }
+        symbols(token(">>>")) { FoxUshrAssignOperator }
+        symbols(token("&&=")) { FoxAndAndAssignOperator }
+        symbols(token("||=")) { FoxOrOrAssignOperator }
     }
     
     rules(MultiplicativeOperator) {
-        lineContinuationTokenValues(
-            "*" to FoxMulOperator,
-            "/" to FoxDivOperator,
-            "%" to FoxRemOperator,
-        )
+        symbols(token("*")) { FoxMulOperator }
+        symbols(token("/")) { FoxDivOperator }
+        symbols(token("%")) { FoxRemOperator }
     }
     rules(AdditiveOperator) {
-        lineContinuationTokenValues(
-            "+" to FoxAddOperator,
-            "-" to FoxSubOperator,
-        )
+        symbols(token("+")) { FoxAddOperator }
+        symbols(token("-")) { FoxSubOperator }
     }
     rules(ShiftOperator) {
-        lineContinuationTokenValues(
-            "<<" to FoxShlOperator,
-            ">>" to FoxShrOperator,
-            ">>>" to FoxUshrOperator,
-        )
+        symbols(token("<<")) { FoxShlOperator }
+        symbols(token(">>")) { FoxShrOperator }
+        symbols(token(">>>")) { FoxUshrOperator }
     }
     rules(ComparisonOperator) {
-        lineContinuationTokenValues(
-            "<" to FoxLtOperator,
-            ">" to FoxGtOperator,
-            "<=" to FoxLeOperator,
-            ">=" to FoxGeOperator,
-        )
+        symbols(token("<")) { FoxLtOperator }
+        symbols(token(">")) { FoxGtOperator }
+        symbols(token("<=")) { FoxLeOperator }
+        symbols(token(">=")) { FoxGeOperator }
     }
     rules(EqualityOperator) {
-        lineContinuationTokenValues(
-            "==" to FoxEqOperator,
-            "!=" to FoxNeqOperator,
-        )
+        symbols(token("==")) { FoxEqOperator }
+        symbols(token("!=")) { FoxNeqOperator }
     }
     rules(BitAndOperator) {
-        lineContinuationTokenValues("&" to FoxAndOperator)
+        symbols(token("&")) { FoxAndOperator }
     }
     rules(BitXorOperator) {
-        lineContinuationTokenValues("^" to FoxXorOperator)
+        symbols(token("^")) { FoxXorOperator }
     }
     rules(BitOrOperator) {
-        lineContinuationTokenValues("|" to FoxOrOperator)
+        symbols(token("|")) { FoxOrOperator }
     }
     rules(LogicalAndOperator) {
-        lineContinuationTokenValues("&&" to FoxAndAndOperator)
+        symbols(token("&&")) { FoxAndAndOperator }
     }
     rules(LogicalOrOperator) {
-        lineContinuationTokenValues("||" to FoxOrOrOperator)
+        symbols(token("||")) { FoxOrOrOperator }
     }
     
     rules(LineBreak) { lineBreak { } }
@@ -376,13 +327,13 @@ val FoxGrammar = buildGrammar {
     }
     rules(Identifier) {
         regex(Regex("[a-z][a-zA-Z0-9_]*")) {
-            if (it.text in ReservedKeywords) throw RuleFactoryException("'${it.text}' is a reserved keyword")
+            if (it.text in ReservedKeywords) throw GrammarRuleFactoryException("'${it.text}' is a reserved keyword")
             it.text
         }
     }
     rules(TypeName) {
         regex(Regex("[A-Z][a-zA-Z0-9_]*")) {
-            if (it.text in ReservedKeywords) throw RuleFactoryException("'${it.text}' is a reserved keyword")
+            if (it.text in ReservedKeywords) throw GrammarRuleFactoryException("'${it.text}' is a reserved keyword")
             it.text
         }
     }
@@ -392,24 +343,22 @@ val FoxGrammar = buildGrammar {
     rules(TypeNameColon) { symbols(TypeName, token(":")) { it, _ -> it } }
     
     rules(node<FoxType>()) {
-        tokenValues(
-            "Void" to FoxVoidType,
-            "Unit" to FoxUnitType,
-            "Bool" to FoxBoolType,
-            "Byte" to FoxByteType,
-            "Short" to FoxShortType,
-            "Int" to FoxIntType,
-            "Long" to FoxLongType,
-            "Float" to FoxFloatType,
-            "Double" to FoxDoubleType,
-            "Char" to FoxCharType,
-            "String" to FoxStringType,
-            "Any" to FoxAnyType,
-            "AnyTuple" to FoxAnyTupleType,
-            "AnyStruct" to FoxAnyStructType,
-            "AnyObject" to FoxAnyObjectType,
-            "AnyEnum" to FoxAnyEnumType,
-        )
+        symbols(token("Void")) { FoxVoidType }
+        symbols(token("Unit")) { FoxUnitType }
+        symbols(token("Bool")) { FoxBoolType }
+        symbols(token("Byte")) { FoxByteType }
+        symbols(token("Short")) { FoxShortType }
+        symbols(token("Int")) { FoxIntType }
+        symbols(token("Long")) { FoxLongType }
+        symbols(token("Float")) { FoxFloatType }
+        symbols(token("Double")) { FoxDoubleType }
+        symbols(token("Char")) { FoxCharType }
+        symbols(token("String")) { FoxStringType }
+        symbols(token("Any")) { FoxAnyType }
+        symbols(token("AnyTuple")) { FoxAnyTupleType }
+        symbols(token("AnyStruct")) { FoxAnyStructType }
+        symbols(token("AnyObject")) { FoxAnyObjectType }
+        symbols(token("AnyEnum")) { FoxAnyEnumType }
         symbols(token("AnyOf"), AnonymousActualGenericParameterList) { _, it ->
             FoxAnyOfType(it)
         }
@@ -423,14 +372,14 @@ val FoxGrammar = buildGrammar {
             it.toFoxTupleType()
         }
         symbols(token("AnyTupleOf"), AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) throw RuleFactoryException("AnyTupleOf type must have exactly one generic parameter")
+            if (it.size != 1) throw GrammarRuleFactoryException("AnyTupleOf type must have exactly one generic parameter")
             FoxAnyTupleOfType(it.first())
         }
         symbols(token("Struct"), StructFieldParameterList) { _, it ->
             FoxStructType(it)
         }
         symbols(token("AnyStructOf"), AnonymousActualGenericParameterList) { _, it ->
-            if (it.isEmpty()) throw RuleFactoryException("AnyStructOf type must have at least one generic parameter")
+            if (it.isEmpty()) throw GrammarRuleFactoryException("AnyStructOf type must have at least one generic parameter")
             FoxAnyStructOfType(it)
         }
         symbols(token("Object"), ObjectMemberParameterList) { _, it ->
@@ -440,11 +389,11 @@ val FoxGrammar = buildGrammar {
             FoxEnumType(it)
         }
         symbols(token("Array"), AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) throw RuleFactoryException("Array type must have exactly one generic parameter")
+            if (it.size != 1) throw GrammarRuleFactoryException("Array type must have exactly one generic parameter")
             FoxArrayType(it.first())
         }
         symbols(token("Ref"), AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) throw RuleFactoryException("Ref type must have exactly one generic parameter")
+            if (it.size != 1) throw GrammarRuleFactoryException("Ref type must have exactly one generic parameter")
             FoxRefType(it.first())
         }
         symbols(token("Method"), MethodTypeArgumentList) { _, items ->
@@ -586,42 +535,60 @@ val FoxGrammar = buildGrammar {
     
     rules(node<Unit>()) { symbols(token("unit")) { } }
     rules(node<Boolean>()) {
-        tokenValues(
-            "true" to true,
-            "false" to false,
-        )
+        symbols(token("true")) { true }
+        symbols(token("false")) { false }
     }
     rules(node<Char>()) { charLiteral { it.char } }
     rules(node<String>()) { stringLiteral { it.string } }
     
-    regexToken(BinInt, "0b[01]+(_[01]+)*")
-    regexToken(DecInt, "(0|[1-9][0-9]*(_[0-9]+)*)")
-    regexToken(HexInt, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*")
-    regexToken(BinLong, "0b[01]+(_[01]+)*L")
-    regexToken(DecLong, "(0|[1-9][0-9]*(_[0-9]+)*)L")
-    regexToken(HexLong, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L")
-    regexToken(DecFloat, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f")
-    regexToken(HexFloat, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f")
-    regexToken(DecDouble, "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)(e[+-]?[0-9]+)?|(0|[1-9][0-9]*(_[0-9]+)*)e[+-]?[0-9]+")
-    regexToken(HexDouble, "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+")
+    rules(BinInt) {
+        regex(Regex("0b[01]+(_[01]+)*")) { it.text }
+    }
+    rules(DecInt) {
+        regex(Regex("(0|[1-9][0-9]*(_[0-9]+)*)")) { it.text }
+    }
+    rules(HexInt) {
+        regex(Regex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*")) { it.text }
+    }
+    rules(BinLong) {
+        regex(Regex("0b[01]+(_[01]+)*L")) { it.text }
+    }
+    rules(DecLong) {
+        regex(Regex("(0|[1-9][0-9]*(_[0-9]+)*)L")) { it.text }
+    }
+    rules(HexLong) {
+        regex(Regex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L")) { it.text }
+    }
+    rules(DecFloat) {
+        regex(Regex("(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f")) { it.text }
+    }
+    rules(HexFloat) {
+        regex(Regex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f")) { it.text }
+    }
+    rules(DecDouble) {
+        regex(Regex("(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)(e[+-]?[0-9]+)?|(0|[1-9][0-9]*(_[0-9]+)*)e[+-]?[0-9]+")) { it.text }
+    }
+    rules(HexDouble) {
+        regex(Regex("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+")) { it.text }
+    }
     
     rules(node<Int>()) {
-        parsedTokenValue(BinInt) { it.drop(2).replace("_", "").toInt(2) }
-        parsedTokenValue(DecInt) { it.replace("_", "").toInt() }
-        parsedTokenValue(HexInt) { it.drop(2).replace("_", "").toInt(16) }
+        symbols(BinInt) { it.drop(2).replace("_", "").toInt(2) }
+        symbols(DecInt) { it.replace("_", "").toInt() }
+        symbols(HexInt) { it.drop(2).replace("_", "").toInt(16) }
     }
     rules(node<Long>()) {
-        parsedTokenValue(BinLong) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
-        parsedTokenValue(DecLong) { it.dropLast(1).replace("_", "").toLong() }
-        parsedTokenValue(HexLong) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
+        symbols(BinLong) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
+        symbols(DecLong) { it.dropLast(1).replace("_", "").toLong() }
+        symbols(HexLong) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
     }
     rules(node<Float>()) {
-        parsedTokenValue(DecFloat) { it.dropLast(1).replace("_", "").toFloat() }
-        parsedTokenValue(HexFloat) { it.dropLast(1).replace("_", "").toFloat() }
+        symbols(DecFloat) { it.dropLast(1).replace("_", "").toFloat() }
+        symbols(HexFloat) { it.dropLast(1).replace("_", "").toFloat() }
     }
     rules(node<Double>()) {
-        parsedTokenValue(DecDouble) { it.replace("_", "").toDouble() }
-        parsedTokenValue(HexDouble) { it.replace("_", "").toDouble() }
+        symbols(DecDouble) { it.replace("_", "").toDouble() }
+        symbols(HexDouble) { it.replace("_", "").toDouble() }
     }
     
     rules(node<FoxEntityStatement>()) {
@@ -755,7 +722,7 @@ val FoxGrammar = buildGrammar {
     rules(TupleComponentParameter) {
         symbols(node<FoxType>()) { it to 1 }
         symbols(node<FoxType>(), token(":"), node<Int>()) { type, _, count ->
-            if (count <= 0) throw RuleFactoryException("Tuple component count must be positive")
+            if (count <= 0) throw GrammarRuleFactoryException("Tuple component count must be positive")
             type to count
         }
     }
@@ -788,7 +755,7 @@ val FoxGrammar = buildGrammar {
         symbols(Identifier) { it }
     }
     rules(StructFieldNameListHead) {
-        symbols(StructFieldName) { it -> listOf(it) }
+        symbols(StructFieldName) { listOf(it) }
         symbols(StructFieldNameListHead, Comma, StructFieldName) { head, _, it -> head + it }
     }
     rules(StructFieldNameList) {
@@ -813,7 +780,7 @@ val FoxGrammar = buildGrammar {
         symbols(Identifier) { it }
     }
     rules(ObjectMemberNameListHead) {
-        symbols(ObjectMemberName) { it -> listOf(it) }
+        symbols(ObjectMemberName) { listOf(it) }
         symbols(ObjectMemberNameListHead, Comma, ObjectMemberName) { head, _, it -> head + it }
     }
     rules(ObjectMemberNameList) {
@@ -838,7 +805,7 @@ val FoxGrammar = buildGrammar {
         symbols(TypeName) { it }
     }
     rules(EnumItemNameListHead) {
-        symbols(EnumItemName) { it -> listOf(it) }
+        symbols(EnumItemName) { listOf(it) }
         symbols(EnumItemNameListHead, Comma, EnumItemName) { head, _, it -> head + it }
     }
     rules(EnumItemNameList) {
@@ -1324,6 +1291,8 @@ val FoxGrammar = buildGrammar {
 
 val FoxFileParser = Parser(FoxGrammar, node<FoxFile>())
 
+fun String.analyzeFox() = FoxFileParser.analyze(this)
+
 internal sealed interface ParsedMethodTypeArgument {
     data class This(val type: FoxType) : ParsedMethodTypeArgument
     data class Return(val type: FoxType) : ParsedMethodTypeArgument
@@ -1334,7 +1303,7 @@ internal sealed interface ParsedMethodTypeArgument {
 private fun List<String>.toSet(itemName: String): Set<String> {
     val result = LinkedHashSet<String>()
     forEach { name ->
-        if (name in result) throw RuleFactoryException("Duplicate $itemName name '$name'")
+        if (name in result) throw GrammarRuleFactoryException("Duplicate $itemName name '$name'")
         result += name
     }
     return result
@@ -1343,7 +1312,7 @@ private fun List<String>.toSet(itemName: String): Set<String> {
 private fun <V : Any> List<Pair<String, V>>.toMap(itemName: String): Map<String, V> {
     val result = LinkedHashMap<String, V>()
     forEach { (name, value) ->
-        if (name in result) throw RuleFactoryException("Duplicate $itemName name '$name'")
+        if (name in result) throw GrammarRuleFactoryException("Duplicate $itemName name '$name'")
         result[name] = value
     }
     return result
@@ -1352,7 +1321,7 @@ private fun <V : Any> List<Pair<String, V>>.toMap(itemName: String): Map<String,
 private fun List<String>.toOrderedSet(itemName: String): OrderedSet<String> {
     val result = mutableOrderedSetOf<String>()
     forEach { name ->
-        if (name in result) throw RuleFactoryException("Duplicate $itemName name '$name'")
+        if (name in result) throw GrammarRuleFactoryException("Duplicate $itemName name '$name'")
         result += name
     }
     return result
@@ -1361,7 +1330,7 @@ private fun List<String>.toOrderedSet(itemName: String): OrderedSet<String> {
 private fun <V : Any> List<Pair<String, V>>.toOrderedMap(itemName: String): OrderedMap<String, V> {
     val result = mutableOrderedMapOf<String, V>()
     forEach { (name, value) ->
-        if (name in result) throw RuleFactoryException("Duplicate $itemName name '$name'")
+        if (name in result) throw GrammarRuleFactoryException("Duplicate $itemName name '$name'")
         result[name] = value
     }
     return result
@@ -1369,21 +1338,21 @@ private fun <V : Any> List<Pair<String, V>>.toOrderedMap(itemName: String): Orde
 
 private fun List<ParsedMethodTypeArgument>.toFoxMethodType(): FoxMethodType {
     if (count { it is ParsedMethodTypeArgument.This } > 1) {
-        throw RuleFactoryException("Method type cannot declare more than one 'this' type")
+        throw GrammarRuleFactoryException("Method type cannot declare more than one 'this' type")
     }
     if (count { it is ParsedMethodTypeArgument.Return } > 1) {
-        throw RuleFactoryException("Method type cannot declare more than one 'return' type")
+        throw GrammarRuleFactoryException("Method type cannot declare more than one 'return' type")
     }
     forEachIndexed { index, item ->
         if (item is ParsedMethodTypeArgument.This && index != 0) {
-            throw RuleFactoryException("Method type 'this' must be the first item")
+            throw GrammarRuleFactoryException("Method type 'this' must be the first item")
         }
         if (item is ParsedMethodTypeArgument.Return && index != lastIndex) {
-            throw RuleFactoryException("Method type 'return' must be the last item")
+            throw GrammarRuleFactoryException("Method type 'return' must be the last item")
         }
     }
     if (size == 1 && firstOrNull() is ParsedMethodTypeArgument.AnonymousType) {
-        throw RuleFactoryException("Method<T> is ambiguous; use 'this: T' or 'return: T' explicitly")
+        throw GrammarRuleFactoryException("Method<T> is ambiguous; use 'this: T' or 'return: T' explicitly")
     }
     
     var start = 0
@@ -1417,16 +1386,16 @@ private fun List<ParsedMethodTypeArgument>.toFoxMethodType(): FoxMethodType {
         when (item) {
             is ParsedMethodTypeArgument.Parameter -> {
                 if (item.name in parameters) {
-                    throw RuleFactoryException("Duplicate method type parameter name '${item.name}'")
+                    throw GrammarRuleFactoryException("Duplicate method type parameter name '${item.name}'")
                 }
                 parameters[item.name] = item.type
             }
             is ParsedMethodTypeArgument.This ->
-                throw RuleFactoryException("Method type 'this' must be the first item")
+                throw GrammarRuleFactoryException("Method type 'this' must be the first item")
             is ParsedMethodTypeArgument.Return ->
-                throw RuleFactoryException("Method type 'return' must be the last item")
+                throw GrammarRuleFactoryException("Method type 'return' must be the last item")
             is ParsedMethodTypeArgument.AnonymousType ->
-                throw RuleFactoryException("Anonymous method type items may only appear as leading 'this' or trailing 'return'")
+                throw GrammarRuleFactoryException("Anonymous method type items may only appear as leading 'this' or trailing 'return'")
         }
     }
     return FoxMethodType(thisType, parameters, returnType)

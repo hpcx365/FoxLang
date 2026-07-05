@@ -25,12 +25,12 @@ fun FoxTupleType.lastComponentAt(index: Int): FoxType {
     return componentAt(arity - 1 - index)
 }
 
-fun FoxTupleType.sliceComponents(beginIndex: Int, endIndex: Int): FoxTupleType {
-    require(beginIndex >= 0) { "Tuple slice begin index must be non-negative: $beginIndex" }
-    require(endIndex >= beginIndex) { "Tuple slice end index must be >= begin index: $endIndex < $beginIndex" }
+fun FoxTupleType.sliceComponents(startIndex: Int, endIndex: Int): FoxTupleType {
+    require(startIndex >= 0) { "Tuple slice start index must be non-negative: $startIndex" }
+    require(endIndex >= startIndex) { "Tuple slice end index must be >= start index: $endIndex < $startIndex" }
     require(endIndex <= arity) { "Tuple slice end index out of bounds: $endIndex, size=$arity" }
-    if (beginIndex == endIndex) return FoxTupleType(emptyList())
-    return components.subList(beginIndex, endIndex).toFoxTupleType()
+    if (startIndex == endIndex) return FoxTupleType(emptyList())
+    return components.subList(startIndex, endIndex).toFoxTupleType()
 }
 
 fun FoxTupleType.firstComponents(count: Int): FoxTupleType {
@@ -103,14 +103,14 @@ fun FoxStructType.lastFieldAt(index: Int): Map.Entry<String, FoxType> {
     return fieldAt(arity - 1 - index)
 }
 
-fun FoxStructType.sliceFields(beginIndex: Int, endIndex: Int): FoxStructType {
-    require(beginIndex >= 0) { "Struct slice begin index must be non-negative: $beginIndex" }
-    require(endIndex >= beginIndex) { "Struct slice end index must be >= begin index: $endIndex < $beginIndex" }
+fun FoxStructType.sliceFields(startIndex: Int, endIndex: Int): FoxStructType {
+    require(startIndex >= 0) { "Struct slice start index must be non-negative: $startIndex" }
+    require(endIndex >= startIndex) { "Struct slice end index must be >= start index: $endIndex < $startIndex" }
     require(endIndex <= arity) { "Struct slice end index out of bounds: $endIndex, size=$arity" }
-    if (beginIndex == endIndex) return FoxStructType(emptyOrderedMap())
+    if (startIndex == endIndex) return FoxStructType(emptyOrderedMap())
     
     val result = mutableOrderedMapOf<String, FoxType>()
-    for (index in beginIndex until endIndex) {
+    for (index in startIndex until endIndex) {
         val entry = fields.entryAt(index)
         result[entry.key] = entry.value
     }

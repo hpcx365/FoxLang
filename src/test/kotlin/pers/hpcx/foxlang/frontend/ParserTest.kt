@@ -1,7 +1,10 @@
 package pers.hpcx.foxlang.frontend
 
 import org.junit.jupiter.api.assertThrows
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 class ParserTest {
     
@@ -178,7 +181,7 @@ class ParserTest {
             rules(start) {
                 regex(Regex("[0-9]+")) {
                     val value = it.text.toInt()
-                    if (value > 9) throw RuleFactoryException("Too large")
+                    if (value > 9) throw GrammarRuleFactoryException("Too large")
                     IntBox(value)
                 }
             }
@@ -189,37 +192,11 @@ class ParserTest {
         assertEquals(IntBox(7), result)
         
         val analysis = parser.analyze("12")
-        assertNull(analysis.value)
-        val failure = analysis.exactChart.ruleFactoryFailures().single()
+        val buildResult = assertIs<ParseContextBuildFailure>(analysis.buildResult)
+        val failure = buildResult.errors.single()
         assertEquals(start, failure.symbol)
         assertEquals(SourceSpan(SourcePosition(0), SourcePosition(1)), failure.span)
         assertEquals("Too large", failure.message)
-    }
-    
-    @Test
-    fun testFactoryParseExceptionDoesNotReportWhenAnotherCandidateBuilds() {
-        val start = node<IntBox>()
-        val grammar = buildGrammar {
-            rules(start) {
-                regex(Regex("[0-9]+")) {
-                    throw RuleFactoryException("Rejected candidate")
-                }
-                regex(Regex("[0-9]+")) {
-                    IntBox(it.text.toInt())
-                }
-            }
-        }
-        
-        val analysis = Parser(grammar, start).analyze("7")
-        val result = DiagnosticResult(
-            root = Expectation(start, analysis.source.span),
-            chart = analysis.exactChart,
-            exactBuildSucceeded = analysis.value != null,
-        )
-        
-        assertEquals(IntBox(7), analysis.value)
-        assertEquals("Rejected candidate", analysis.exactChart.ruleFactoryFailures().single().message)
-        assertTrue(result.report().items.isEmpty(), result.report().items.joinToString())
     }
     
     @Test
