@@ -1,52 +1,8 @@
-package pers.hpcx.foxlang.frontend
+package pers.hpcx.foxlang.frontend.fox
 
-data class Source(
-    val text: String,
-    val fragments: List<SourceFragment>,
-) : Iterable<SourceFragment> {
-    
-    constructor(text: String) : this(text, text.toFragments())
-    
-    override fun iterator() = fragments.iterator()
-    operator fun get(pos: SourcePosition) = fragments[pos.fragIndex]
-    fun getOrNull(pos: SourcePosition) = fragments.getOrNull(pos.fragIndex)
-    val span get() = SourceSpan(SourcePosition(0), SourcePosition(fragments.size))
-    val positions get() = fragments.indices.map { SourcePosition(it) }
-}
+import pers.hpcx.foxlang.frontend.common.Source
 
-@JvmInline
-value class SourcePosition(val fragIndex: Int) : Comparable<SourcePosition> {
-    
-    init {
-        require(fragIndex >= 0) { "Fragment index must be non-negative: $fragIndex" }
-    }
-    
-    operator fun plus(other: Int) = SourcePosition(fragIndex + other)
-    operator fun minus(other: Int) = SourcePosition(fragIndex - other)
-    override fun compareTo(other: SourcePosition) = fragIndex.compareTo(other.fragIndex)
-    override fun toString() = fragIndex.toString()
-}
-
-data class SourceSpan(val start: SourcePosition, val end: SourcePosition) : Comparable<SourceSpan>, Iterable<SourcePosition> {
-    
-    init {
-        require(start <= end) { "Start must be less than or equal to end: $start, $end" }
-    }
-    
-    fun isEmpty() = start == end
-    fun isNotEmpty() = start < end
-    val length get() = end.fragIndex - start.fragIndex
-    
-    override fun compareTo(other: SourceSpan): Int {
-        check(start == other.start) { "Start must be equal: $start, ${other.start}" }
-        return end.compareTo(other.end)
-    }
-    
-    override fun iterator() = (start.fragIndex..<end.fragIndex).asSequence().map { SourcePosition(it) }.iterator()
-    override fun toString() = "[$start, $end)"
-}
-
-sealed interface SourceFragment {
+sealed interface FoxFragment {
     val line: Int
     val column: Int
 }
@@ -55,7 +11,7 @@ data class PlainFragment(
     override val line: Int,
     override val column: Int,
     val text: String,
-) : SourceFragment {
+) : FoxFragment {
     
     init {
         require(text.isNotEmpty()) { "Text must not be empty: $text" }
@@ -68,7 +24,7 @@ data class PlainFragment(
 data class LineBreakFragment(
     override val line: Int,
     override val column: Int,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <line-separator>"
 }
@@ -77,7 +33,7 @@ data class CharLiteralFragment(
     override val line: Int,
     override val column: Int,
     val char: Char,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <char-literal> '${
         when (char) {
@@ -97,7 +53,7 @@ data class StringLiteralFragment(
     override val line: Int,
     override val column: Int,
     val string: String,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <string-literal> $string"
 }
@@ -106,7 +62,7 @@ data class FormattedStringStartFragment(
     override val line: Int,
     override val column: Int,
     val isRaw: Boolean,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <formatted-string-start> ${if (isRaw) "raw" else "regular"}"
 }
@@ -115,7 +71,7 @@ data class FormattedStringTextFragment(
     override val line: Int,
     override val column: Int,
     val text: String,
-) : SourceFragment {
+) : FoxFragment {
     
     init {
         require(text.isNotEmpty()) { "Text must not be empty: $text" }
@@ -127,7 +83,7 @@ data class FormattedStringTextFragment(
 data class FormattedExpressionStartFragment(
     override val line: Int,
     override val column: Int,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <formatted-expression-start>"
 }
@@ -135,7 +91,7 @@ data class FormattedExpressionStartFragment(
 data class FormattedExpressionEndFragment(
     override val line: Int,
     override val column: Int,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <formatted-expression-end>"
 }
@@ -143,30 +99,23 @@ data class FormattedExpressionEndFragment(
 data class FormattedStringEndFragment(
     override val line: Int,
     override val column: Int,
-) : SourceFragment {
+) : FoxFragment {
     
     override fun toString() = "line ${line + 1}, column ${column + 1}: <formatted-string-end>"
 }
 
-fun SourceFragment.sourceWidth(): Int = when (this) {
-    is PlainFragment -> text.length
-    is LineBreakFragment -> 1
-    is CharLiteralFragment -> 2 + when (char) {
-        '\b', '\t', '\n', '\r', '\\', '\'' -> 2
-        else -> 1
-    }
-    is StringLiteralFragment -> 2 + string.length
-    is FormattedStringStartFragment -> if (isRaw) 3 else 2
-    is FormattedStringTextFragment -> text.length
-    is FormattedExpressionStartFragment -> 1
-    is FormattedExpressionEndFragment -> 1
-    is FormattedStringEndFragment -> 1
-}
+sealed interface SourceFragmentationResult
+data class SourceFragmentationSuccess(val value: Source<FoxFragment>) : SourceFragmentationResult
+data class SourceFragmentationFailure(val errors: List<String>) : SourceFragmentationResult
 
-class SourceFragmentationException(message: String) : Exception(message)
-
-fun String.toFragments(): List<SourceFragment> {
+fun String.toFoxSource(): SourceFragmentationResult {
     val lines = lines()
+    val errors = mutableListOf<String>()
+    
+    fun <T> recordError(message: String): T? {
+        errors += message
+        return null
+    }
     
     fun fragmentPlain(line: Int, start: Int, end: Int): PlainFragment {
         val lineText = lines[line]
@@ -178,10 +127,10 @@ fun String.toFragments(): List<SourceFragment> {
         return LineBreakFragment(line, start)
     }
     
-    fun fragmentCharLiteral(line: Int, start: Int, end: Int): CharLiteralFragment {
+    fun fragmentCharLiteral(line: Int, start: Int, end: Int): CharLiteralFragment? {
         val text = lines[line].substring(start + 1, end - 1)
         when (text.length) {
-            0 -> throw SourceFragmentationException("Empty character literal")
+            0 -> return recordError("Empty character literal")
             1 -> return CharLiteralFragment(line, start, text[0])
             2 -> if (text[0] == '\\') {
                 return when (text[1]) {
@@ -191,21 +140,21 @@ fun String.toFragments(): List<SourceFragment> {
                     'r' -> CharLiteralFragment(line, start, '\r')
                     '\'' -> CharLiteralFragment(line, start, '\'')
                     '\\' -> CharLiteralFragment(line, start, '\\')
-                    else -> throw SourceFragmentationException("Invalid escape sequence: $text")
+                    else -> recordError("Invalid escape sequence: $text")
                 }
             }
             6 -> if (text[0] == '\\' && text[1] == 'u') {
-                try {
-                    return CharLiteralFragment(line, start, text.substring(2, 6).toInt(16).toChar())
+                return try {
+                    CharLiteralFragment(line, start, text.substring(2, 6).toInt(16).toChar())
                 } catch (_: NumberFormatException) {
-                    throw SourceFragmentationException("Invalid unicode escape sequence: $text")
+                    recordError("Invalid unicode escape sequence: $text")
                 }
             }
         }
-        throw SourceFragmentationException("Invalid character literal: $text")
+        return recordError("Invalid character literal: $text")
     }
     
-    fun fragmentStringLiteral(line: Int, start: Int, end: Int): StringLiteralFragment {
+    fun fragmentStringLiteral(line: Int, start: Int, end: Int): StringLiteralFragment? {
         var i = 0
         val builder = StringBuilder()
         val text = lines[line].substring(start + 1, end - 1)
@@ -213,7 +162,7 @@ fun String.toFragments(): List<SourceFragment> {
             val char = text[i++]
             if (char == '\\') {
                 if (i >= text.length) {
-                    throw SourceFragmentationException("Unterminated escape sequence in string literal")
+                    return recordError("Unterminated escape sequence in string literal")
                 }
                 val nextChar = text[i++]
                 when (nextChar) {
@@ -225,12 +174,16 @@ fun String.toFragments(): List<SourceFragment> {
                     '"' -> builder.append('"')
                     'u' -> {
                         if (i + 3 >= text.length) {
-                            throw SourceFragmentationException("Unterminated unicode escape sequence in string literal")
+                            return recordError("Unterminated unicode escape sequence in string literal")
                         }
-                        builder.append(lines[line].substring(i, i + 4).toInt(16).toChar())
+                        try {
+                            builder.append(lines[line].substring(i, i + 4).toInt(16).toChar())
+                        } catch (_: NumberFormatException) {
+                            return recordError("Invalid unicode escape sequence in string literal")
+                        }
                         i += 4
                     }
-                    else -> throw SourceFragmentationException("Invalid escape sequence in string literal")
+                    else -> return recordError("Invalid escape sequence in string literal")
                 }
             } else {
                 builder.append(char)
@@ -264,25 +217,25 @@ fun String.toFragments(): List<SourceFragment> {
         return StringLiteralFragment(line, start, builder.toString())
     }
     
-    fun parseUnicodeEscape(lineText: String, line: Int, column: Int): Char {
+    fun parseUnicodeEscape(lineText: String, line: Int, column: Int): Char? {
         if (column + 5 >= lineText.length) {
-            throw SourceFragmentationException("Unterminated unicode escape sequence at line ${line + 1}, column ${column + 1}")
+            return recordError("Unterminated unicode escape sequence at line ${line + 1}, column ${column + 1}")
         }
         val text = lineText.substring(column + 2, column + 6)
         return try {
             text.toInt(16).toChar()
         } catch (_: NumberFormatException) {
-            throw SourceFragmentationException("Invalid unicode escape sequence: $text")
+            return recordError("Invalid unicode escape sequence: $text")
         }
     }
     
-    val result = mutableListOf<SourceFragment>()
+    val result = mutableListOf<FoxFragment>()
     var line = 0
     var column = 0
     
     val formattedScanner = object {
         
-        fun scanFormattedExpression(line: Int, start: Int): Int {
+        fun scanFormattedExpression(line: Int, start: Int): Int? {
             val lineText = lines[line]
             var index = start
             var braceDepth = 0
@@ -294,30 +247,30 @@ fun String.toFragments(): List<SourceFragment> {
                 }
                 
                 if (lineText.startsWith("//", index)) {
-                    throw SourceFragmentationException("Unterminated formatted expression at line ${line + 1}, column ${start + 1}")
+                    return recordError("Unterminated formatted expression at line ${line + 1}, column ${start + 1}")
                 }
                 
                 if (lineText.startsWith("/*", index)) {
                     val end = lineText.indexOf("*/", index + 2)
                         .takeIf { it >= 0 }
-                        ?: throw SourceFragmentationException("Unterminated comment in formatted expression at line ${line + 1}, column ${index + 1}")
+                        ?: return recordError("Unterminated comment in formatted expression at line ${line + 1}, column ${index + 1}")
                     index = end + 2
                     continue
                 }
                 
                 if (lineText.startsWith("rf\"", index)) {
-                    index = scanFormattedString(line, index, isRaw = true)
+                    index = scanFormattedString(line, index, isRaw = true) ?: return null
                     continue
                 }
                 
                 if (lineText.startsWith("f\"", index)) {
-                    index = scanFormattedString(line, index, isRaw = false)
+                    index = scanFormattedString(line, index, isRaw = false) ?: return null
                     continue
                 }
                 
                 if (lineText.startsWith("r\"", index)) {
                     val end = findClosingQuote(lineText, index + 2, '"')
-                        ?: throw SourceFragmentationException("Unterminated raw string at line ${line + 1}, column ${index + 1}")
+                        ?: return recordError("Unterminated raw string at line ${line + 1}, column ${index + 1}")
                     result += fragmentRawStringLiteral(line, index, end + 1)
                     index = end + 1
                     continue
@@ -325,16 +278,16 @@ fun String.toFragments(): List<SourceFragment> {
                 
                 if (lineText[index] == '\'') {
                     val end = findClosingQuote(lineText, index + 1, '\'')
-                        ?: throw SourceFragmentationException("Unterminated char at line ${line + 1}, column ${index + 1}")
-                    result += fragmentCharLiteral(line, index, end + 1)
+                        ?: return recordError("Unterminated char at line ${line + 1}, column ${index + 1}")
+                    result += fragmentCharLiteral(line, index, end + 1) ?: return null
                     index = end + 1
                     continue
                 }
                 
                 if (lineText[index] == '"') {
                     val end = findClosingQuote(lineText, index + 1, '"')
-                        ?: throw SourceFragmentationException("Unterminated string at line ${line + 1}, column ${index + 1}")
-                    result += fragmentStringLiteral(line, index, end + 1)
+                        ?: return recordError("Unterminated string at line ${line + 1}, column ${index + 1}")
+                    result += fragmentStringLiteral(line, index, end + 1) ?: return null
                     index = end + 1
                     continue
                 }
@@ -372,10 +325,10 @@ fun String.toFragments(): List<SourceFragment> {
                 index++
             }
             
-            throw SourceFragmentationException("Unterminated formatted expression at line ${line + 1}, column ${start + 1}")
+            return recordError("Unterminated formatted expression at line ${line + 1}, column ${start + 1}")
         }
         
-        fun scanFormattedString(line: Int, start: Int, isRaw: Boolean): Int {
+        fun scanFormattedString(line: Int, start: Int, isRaw: Boolean): Int? {
             val lineText = lines[line]
             var index = start + if (isRaw) 3 else 2
             var textColumn = index
@@ -408,13 +361,13 @@ fun String.toFragments(): List<SourceFragment> {
                     '{' -> {
                         flushText(index)
                         result += FormattedExpressionStartFragment(line, index)
-                        index = scanFormattedExpression(line, index + 1)
+                        index = scanFormattedExpression(line, index + 1) ?: return null
                         textColumn = index
                     }
                     
                     '}' -> {
                         if (escapedBraceDepth <= 0) {
-                            throw SourceFragmentationException("Unescaped } in formatted string at line ${line + 1}, column ${index + 1}")
+                            return recordError("Unescaped } in formatted string at line ${line + 1}, column ${index + 1}")
                         }
                         builder.append(char)
                         escapedBraceDepth--
@@ -458,7 +411,7 @@ fun String.toFragments(): List<SourceFragment> {
                             }
                         } else {
                             if (index + 1 >= lineText.length) {
-                                throw SourceFragmentationException("Unterminated escape sequence in formatted string")
+                                return recordError("Unterminated escape sequence in formatted string")
                             }
                             when (lineText[index + 1]) {
                                 't' -> builder.append('\t')
@@ -472,8 +425,8 @@ fun String.toFragments(): List<SourceFragment> {
                                     escapedBraceDepth++
                                 }
                                 '}' -> appendEscapedClosingBrace()
-                                'u' -> builder.append(parseUnicodeEscape(lineText, line, index))
-                                else -> throw SourceFragmentationException("Invalid escape sequence in formatted string")
+                                'u' -> builder.append(parseUnicodeEscape(lineText, line, index) ?: return null)
+                                else -> return recordError("Invalid escape sequence in formatted string")
                             }
                             index += if (lineText[index + 1] == 'u') 6 else 2
                         }
@@ -486,7 +439,7 @@ fun String.toFragments(): List<SourceFragment> {
                 }
             }
             
-            throw SourceFragmentationException("Unterminated formatted string at line ${line + 1}, column ${start + 1}")
+            return recordError("Unterminated formatted string at line ${line + 1}, column ${start + 1}")
         }
     }
     
@@ -512,99 +465,103 @@ fun String.toFragments(): List<SourceFragment> {
         }
     }
     
-    while (line < lines.size) {
-        if (column >= lines[line].length) {
-            move(0)
-            continue
-        }
-        
-        if (lines[line][column].isWhitespace()) {
-            move(1)
-            continue
-        }
-        
-        if (lines[line].startsWith("//", column)) {
-            move(lines[line].length - column)
-            continue
-        }
-        
-        if (lines[line].startsWith("/*", column)) {
-            move(2)
-            val startLine = line
-            val startColumn = column
-            
-            while (true) {
-                if (line >= lines.size) {
-                    throw SourceFragmentationException("Unterminated comment starting at line ${startLine + 1}, column ${startColumn + 1}")
-                }
-                val index = lines[line].indexOf("*/", column)
-                if (index >= 0) {
-                    move(index - column + 2)
-                    break
-                }
-                move(lines[line].length - column)
+    fun mainLoop(): List<FoxFragment>? {
+        while (line < lines.size) {
+            if (column >= lines[line].length) {
+                move(0)
+                continue
             }
-            continue
+            
+            if (lines[line][column].isWhitespace()) {
+                move(1)
+                continue
+            }
+            
+            if (lines[line].startsWith("//", column)) {
+                move(lines[line].length - column)
+                continue
+            }
+            
+            if (lines[line].startsWith("/*", column)) {
+                move(2)
+                val startLine = line
+                val startColumn = column
+                
+                while (true) {
+                    if (line >= lines.size) {
+                        return recordError("Unterminated comment starting at line ${startLine + 1}, column ${startColumn + 1}")
+                    }
+                    val index = lines[line].indexOf("*/", column)
+                    if (index >= 0) {
+                        move(index - column + 2)
+                        break
+                    }
+                    move(lines[line].length - column)
+                }
+                continue
+            }
+            
+            if (lines[line].startsWith("rf\"", column)) {
+                val end = formattedScanner.scanFormattedString(line, column, isRaw = true) ?: return null
+                move(end - column)
+                continue
+            }
+            
+            if (lines[line].startsWith("f\"", column)) {
+                val end = formattedScanner.scanFormattedString(line, column, isRaw = false) ?: return null
+                move(end - column)
+                continue
+            }
+            
+            if (lines[line].startsWith("r\"", column)) {
+                val start = column
+                val lineText = lines[line]
+                val index = findClosingQuote(lineText, start + 2, '"')
+                    ?: return recordError("Unterminated raw string at line ${line + 1}, column ${start + 1}")
+                result += fragmentRawStringLiteral(line, start, index + 1)
+                move(index - column + 1)
+                continue
+            }
+            
+            if (lines[line][column] == '\'') {
+                val start = column
+                val lineText = lines[line]
+                val index = findClosingQuote(lineText, start + 1, '\'')
+                    ?: return recordError("Unterminated char at line ${line + 1}, column ${start + 1}")
+                result += fragmentCharLiteral(line, start, index + 1) ?: return null
+                move(index - column + 1)
+                continue
+            }
+            
+            if (lines[line][column] == '"') {
+                val start = column
+                val lineText = lines[line]
+                val index = findClosingQuote(lineText, start + 1, '"')
+                    ?: return recordError("Unterminated string at line ${line + 1}, column ${start + 1}")
+                result += fragmentStringLiteral(line, start, index + 1) ?: return null
+                move(index - column + 1)
+                continue
+            }
+            
+            var end = column
+            while (end < lines[line].length && lines[line][end].isWordChar()) {
+                end++
+            }
+            
+            if (column < end) {
+                result += fragmentPlain(line, column, end)
+                move(end - column)
+                continue
+            }
+            
+            result += fragmentPlain(line, column, column + 1)
+            move(1)
         }
         
-        if (lines[line].startsWith("rf\"", column)) {
-            val end = formattedScanner.scanFormattedString(line, column, isRaw = true)
-            move(end - column)
-            continue
-        }
-        
-        if (lines[line].startsWith("f\"", column)) {
-            val end = formattedScanner.scanFormattedString(line, column, isRaw = false)
-            move(end - column)
-            continue
-        }
-        
-        if (lines[line].startsWith("r\"", column)) {
-            val start = column
-            val lineText = lines[line]
-            val index = findClosingQuote(lineText, start + 2, '"')
-                ?: throw SourceFragmentationException("Unterminated raw string at line ${line + 1}, column ${start + 1}")
-            result += fragmentRawStringLiteral(line, start, index + 1)
-            move(index - column + 1)
-            continue
-        }
-        
-        if (lines[line][column] == '\'') {
-            val start = column
-            val lineText = lines[line]
-            val index = findClosingQuote(lineText, start + 1, '\'')
-                ?: throw SourceFragmentationException("Unterminated char at line ${line + 1}, column ${start + 1}")
-            result += fragmentCharLiteral(line, start, index + 1)
-            move(index - column + 1)
-            continue
-        }
-        
-        if (lines[line][column] == '"') {
-            val start = column
-            val lineText = lines[line]
-            val index = findClosingQuote(lineText, start + 1, '"')
-                ?: throw SourceFragmentationException("Unterminated string at line ${line + 1}, column ${start + 1}")
-            result += fragmentStringLiteral(line, start, index + 1)
-            move(index - column + 1)
-            continue
-        }
-        
-        var end = column
-        while (end < lines[line].length && lines[line][end].isWordChar()) {
-            end++
-        }
-        
-        if (column < end) {
-            result += fragmentPlain(line, column, end)
-            move(end - column)
-            continue
-        }
-        
-        result += fragmentPlain(line, column, column + 1)
-        move(1)
+        return result
     }
     
-    return result
+    return mainLoop()?.let { SourceFragmentationSuccess(Source(this, it)) } ?: SourceFragmentationFailure(errors)
 }
 
 fun Char.isWordChar(): Boolean {

@@ -1,4 +1,4 @@
-package pers.hpcx.foxlang.frontend
+package pers.hpcx.foxlang.frontend.common
 
 data class DiagnosticScore(
     val repairCost: Long,
@@ -72,15 +72,15 @@ data class DiagnosticScore(
 interface DiagnosticScoringStrategy {
     
     fun expectedScore(
-        symbol: Symbol<*>,
+        symbol: GrammarSymbol<*>,
         span: SourceSpan,
-        source: Source,
+        source: Source<*>,
     ): DiagnosticScore?
     
     fun rulePenalty(
         match: ParseMatch<*>,
         rule: GrammarRule.MatchSymbols<*>,
-        source: Source,
+        source: Source<*>,
     ): DiagnosticScore = DiagnosticScore.Zero
 }
 

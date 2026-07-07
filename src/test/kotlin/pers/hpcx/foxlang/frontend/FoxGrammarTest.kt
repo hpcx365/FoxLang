@@ -1,18 +1,25 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.FoxFileParser
-import pers.hpcx.foxlang.ast.toSource
+import pers.hpcx.foxlang.frontend.fox.SourceFragmentationSuccess
+import pers.hpcx.foxlang.frontend.fox.parseFox
+import pers.hpcx.foxlang.frontend.fox.sourceFox
+import pers.hpcx.foxlang.frontend.fox.toSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
 class FoxGrammarTest {
     
     @Test
     fun testRoundTrip() {
-        val file = assertNotNull(FoxFileParser.parse(source))
+        val file = assertNotNull(
+            assertIs<SourceFragmentationSuccess>(source.sourceFox()).value.parseFox(),
+        )
         val printed = file.toSource()
-        val reparsed = assertNotNull(FoxFileParser.parse(printed))
+        val reparsed = assertNotNull(
+            assertIs<SourceFragmentationSuccess>(printed.sourceFox()).value.parseFox(),
+        )
         assertEquals(file, reparsed)
     }
     

@@ -1,10 +1,10 @@
-package pers.hpcx.foxlang.ast
+package pers.hpcx.foxlang.frontend.fox
 
+import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.runtime.*
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.OrderedSet
 import java.io.PrintWriter
-import java.io.StringWriter
 
 data class AstSourceOptions(
     val indent: String = "    ",
@@ -15,19 +15,6 @@ data class AstSourceOptions(
 enum class AstSourceStyle {
     DEFAULT,
     CANONICAL,
-}
-
-val DefaultAstSourceContext = AstSourceContext()
-
-fun FoxFile.toSource() = with(DefaultAstSourceContext) { printToString { printFile(this@toSource) } }
-fun FoxFileElement.toSource() = with(DefaultAstSourceContext) { printToString { printFileElement(this@toSource) } }
-fun FoxType.toSource() = with(DefaultAstSourceContext) { printToString { printType(this@toSource) } }
-fun FoxStatement.toSource() = with(DefaultAstSourceContext) { printToString { printStatement(this@toSource) } }
-
-private fun printToString(block: PrintWriter.() -> Unit): String {
-    val result = StringWriter()
-    PrintWriter(result).block()
-    return result.toString()
 }
 
 class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {

@@ -49,7 +49,7 @@ class UniqueQueue<E> : AbstractQueue<E>() {
     
     override fun hashCode() = queue.hashCode()
     
-    override fun equals(other: Any?) = queue == other
+    override fun equals(other: Any?) = other is UniqueQueue<*> && queue == other.queue
     
     override fun toString() = queue.toString()
     

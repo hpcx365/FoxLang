@@ -1,11 +1,12 @@
-package pers.hpcx.foxlang.ast
+package pers.hpcx.foxlang.type
 
-import pers.hpcx.foxlang.type.*
+import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.utils.RleArrayList
 import pers.hpcx.foxlang.utils.orderedMapOf
 import kotlin.test.*
 
 class TypeShapeUtilsTest {
+    
     @Test
     fun tupleFactoryChoosesStorageByCompressionBenefit() {
         val plainTuple = listOf(FoxIntType, FoxStringType).toFoxTupleType()
