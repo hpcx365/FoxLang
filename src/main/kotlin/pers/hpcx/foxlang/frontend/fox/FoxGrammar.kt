@@ -1,1158 +1,1636 @@
 package pers.hpcx.foxlang.frontend.fox
 
 import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.frontend.common.GrammarRuleFactoryResult
 import pers.hpcx.foxlang.frontend.common.buildGrammar
-import pers.hpcx.foxlang.frontend.common.factoryError
-import pers.hpcx.foxlang.frontend.common.factorySuccess
+import pers.hpcx.foxlang.frontend.fox.FoxAssignOperatorSymbol.PlainAssign
+import pers.hpcx.foxlang.frontend.fox.FoxBinaryOperatorCategorySymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxExpressionSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxFormattedStringPartSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxKeywordSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxLiteralSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxSyntheticTypeKeywordSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.*
 import pers.hpcx.foxlang.runtime.*
-import pers.hpcx.foxlang.type.toFoxTupleType
-import pers.hpcx.foxlang.utils.*
+import pers.hpcx.foxlang.utils.AutoRegex.Companion.literals
+import pers.hpcx.foxlang.utils.AutoRegex.Companion.pattern
+import pers.hpcx.foxlang.utils.rleArrayListOfRuns
 
-internal val CamelWordRegex = AutoRegex.pattern("[a-z][a-zA-Z0-9_]*")
-internal val PascalWordRegex = AutoRegex.pattern("[A-Z][a-zA-Z0-9_]*")
-internal val ReservedKeywordRegex = AutoRegex.literals(Keywords.keys)
-internal val IdentifierRegex = CamelWordRegex - ReservedKeywordRegex
-internal val TypeNameRegex = PascalWordRegex - ReservedKeywordRegex
+internal val KeywordRegex = literals(FoxKeywordsByText.keys)
+internal val IdentifierRegex = pattern("[a-z][a-zA-Z0-9_]*") - KeywordRegex
+internal val TypeNameRegex = pattern("[A-Z][a-zA-Z0-9_]*") - KeywordRegex
 
-internal val BinIntRegex = AutoRegex.pattern(
-    "0b[01]+(_[01]+)*",
-)
-internal val DecIntRegex = AutoRegex.pattern(
-    "(0|[1-9][0-9]*(_[0-9]+)*)",
-)
-internal val HexIntRegex = AutoRegex.pattern(
-    "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*",
-)
-internal val BinLongRegex = AutoRegex.pattern(
-    "0b[01]+(_[01]+)*L",
-)
-internal val DecLongRegex = AutoRegex.pattern(
-    "(0|[1-9][0-9]*(_[0-9]+)*)L",
-)
-internal val HexLongRegex = AutoRegex.pattern(
-    "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L",
-)
-internal val DecFloatRegex = AutoRegex.pattern(
-    "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f",
-)
-internal val HexFloatRegex = AutoRegex.pattern(
-    "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+f",
-)
-internal val DecDoubleRegex = AutoRegex.pattern(
-    "(0|[1-9][0-9]*(_[0-9]+)*)(\\.[0-9]+(_[0-9]+)*)(e[+-]?[0-9]+)?|(0|[1-9][0-9]*(_[0-9]+)*)e[+-]?[0-9]+",
-)
-internal val HexDoubleRegex = AutoRegex.pattern(
-    "0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*(\\.[0-9a-fA-F]+(_[0-9a-fA-F]+)*)?p[+-]?[0-9]+",
-)
+internal val BinIntRegex = pattern("0b[01]+(_[01]+)*")
+internal val DecIntRegex = pattern("(0|[1-9][0-9]*(_[0-9]+)*)")
+internal val HexIntRegex = pattern("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*")
+internal val BinLongRegex = pattern("0b[01]+(_[01]+)*L")
+internal val DecLongRegex = DecIntRegex / pattern("L")
+internal val HexLongRegex = pattern("0x[0-9a-fA-F]+(_[0-9a-fA-F]+)*L")
+internal val DecFloatRegex = DecIntRegex / pattern("(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?f")
+internal val DecDoubleRegex = DecIntRegex / pattern("(\\.[0-9]+(_[0-9]+)*)?(e[+-]?[0-9]+)?") - DecIntRegex
 
-val FoxGrammar = buildGrammar {
-    sequence {
-        yieldAll(Punctuations.entries)
-        yieldAll(Operators.entries)
-        yieldAll(Keywords.entries)
-    }.forEach { (token, symbol) ->
-        rules(symbol) {
-            fixed(token) { }
+private fun checkRegexDisjoint() {
+    val regexList = listOf(
+        KeywordRegex,
+        IdentifierRegex,
+        TypeNameRegex,
+        BinIntRegex,
+        DecIntRegex,
+        HexIntRegex,
+        BinLongRegex,
+        DecLongRegex,
+        HexLongRegex,
+        DecFloatRegex,
+        DecDoubleRegex,
+    )
+    regexList.forEachIndexed { index, regex ->
+        (index + 1..<regexList.size).map { regexList[it] }.forEach { other ->
+            val intersection = regex * other
+            if (intersection.isNotEmpty()) {
+                error("Regex $regex and $other can match the same string '${intersection.shortestExample()}'")
+            }
         }
     }
-    rules(LParen) { fixed("(") { } }
-    rules(RParen) { fixed(")") { } }
-    rules(LBracket) { fixed("[") { } }
-    rules(RBracket) { fixed("]") { } }
-    rules(LBrace) { fixed("{") { } }
-    rules(RBrace) { fixed("}") { } }
-    rules(LAngle) { fixed("<") { } }
-    rules(RAngle) { fixed(">") { } }
+}
+
+val FoxGrammar = buildGrammar {
+    checkRegexDisjoint()
     
-    rules(LineBreak) { lineBreak { } }
-    rules(FormattedStringStart) { formattedStringStart { it } }
-    rules(FormattedStringEnd) { formattedStringEnd { } }
-    rules(FormattedExpressionOpen) { formattedExpressionStart { } }
-    rules(FormattedExpressionClose) { formattedExpressionEnd { } }
+    sequence {
+        yieldAll(FoxTerminalSymbol.entries.map { it.text to it })
+        yieldAll(FoxUnaryOperatorSymbol.entries.map { it.text to it })
+        yieldAll(FoxBinaryOperatorSymbol.entries.map { it.text to it })
+        yieldAll(FoxAssignOperatorSymbol.entries.map { it.text to it })
+        yieldAll(FoxKeywordsByText.entries.map { it.key to it.value })
+    }.forEach { (token, symbol) ->
+        rules(symbol) {
+            fixed(token) { span -> ParsedUnit(span) }
+        }
+    }
     
-    rules(Dot) { symbols(LineBreak, Dot) { _, _ -> } }
-    rules(Comma) { symbols(Comma, LineBreak) { _, _ -> } }
-    rules(ParenOpen) { symbols(ParenOpen, LineBreak) { _, _ -> } }
-    rules(ParenClose) { symbols(LineBreak, ParenClose) { _, _ -> } }
-    rules(BracketOpen) { symbols(BracketOpen, LineBreak) { _, _ -> } }
-    rules(BracketClose) { symbols(LineBreak, BracketClose) { _, _ -> } }
-    rules(BraceOpen) { symbols(BraceOpen, LineBreak) { _, _ -> } }
-    rules(BraceClose) { symbols(LineBreak, BraceClose) { _, _ -> } }
-    rules(AngleOpen) { symbols(AngleOpen, LineBreak) { _, _ -> } }
-    rules(AngleClose) { symbols(LineBreak, AngleClose) { _, _ -> } }
+    rules(LineBreak) { lineBreak { span -> ParsedUnit(span) } }
+    rules(FormattedStringStart) { formattedStringStart { span -> ParsedUnit(span) } }
+    rules(FormattedStringEnd) { formattedStringEnd { span -> ParsedUnit(span) } }
+    rules(FormattedExpressionOpen) { formattedExpressionStart { span -> ParsedUnit(span) } }
+    rules(FormattedExpressionClose) { formattedExpressionEnd { span -> ParsedUnit(span) } }
     
-    rules(CamelWord) { regex(CamelWordRegex) { it } }
-    rules(PascalWord) { regex(PascalWordRegex) { it } }
-    rules(Identifier) { regex(IdentifierRegex) { it } }
-    rules(TypeName) { regex(TypeNameRegex) { it } }
-    
-    rules(IdentifierEqual) { symbols(Identifier, Assign) { it, _ -> it } }
-    rules(IdentifierColon) { symbols(Identifier, Colon) { it, _ -> it } }
-    rules(TypeNameEqual) { symbols(TypeName, Assign) { it, _ -> it } }
-    rules(TypeNameColon) { symbols(TypeName, Colon) { it, _ -> it } }
-    
-    rules(LitUnit) { symbols(KwLowerUnit) {} }
-    rules(LitBool) {
-        symbols(KwTrue) { true }
-        symbols(KwFalse) { false }
+    rules(Dot) {
+        symbols(LineBreak, Dot) { _, it -> it }
     }
-    rules(LitInt) {
-        regex(BinIntRegex) { it.drop(2).replace("_", "").toInt(2) }
-        regex(DecIntRegex) { it.replace("_", "").toInt() }
-        regex(HexIntRegex) { it.drop(2).replace("_", "").toInt(16) }
+    rules(Comma) {
+        symbols(Comma, LineBreak) { it, _ -> it }
     }
-    rules(LitLong) {
-        regex(BinLongRegex) { it.drop(2).dropLast(1).replace("_", "").toLong(2) }
-        regex(DecLongRegex) { it.dropLast(1).replace("_", "").toLong() }
-        regex(HexLongRegex) { it.drop(2).dropLast(1).replace("_", "").toLong(16) }
+    rules(ParenOpen) {
+        symbols(LParen) { it }
+        symbols(LParen, LineBreak) { it, _ -> it }
     }
-    rules(LitFloat) {
-        regex(DecFloatRegex) { it.dropLast(1).replace("_", "").toFloat() }
-        regex(HexFloatRegex) { it.dropLast(1).replace("_", "").toFloat() }
+    rules(ParenClose) {
+        symbols(RParen) { it }
+        symbols(LineBreak, RParen) { _, it -> it }
     }
-    rules(LitDouble) {
-        regex(DecDoubleRegex) { it.replace("_", "").toDouble() }
-        regex(HexDoubleRegex) { it.replace("_", "").toDouble() }
+    rules(SquareOpen) {
+        symbols(LBracket) { it }
+        symbols(LBracket, LineBreak) { it, _ -> it }
     }
-    rules(LitChar) { charLiteral { it } }
-    rules(LitString) { stringLiteral { it } }
+    rules(SquareClose) {
+        symbols(RBracket) { it }
+        symbols(LineBreak, RBracket) { _, it -> it }
+    }
+    rules(BraceOpen) {
+        symbols(LBrace) { it }
+        symbols(LBrace, LineBreak) { it, _ -> it }
+    }
+    rules(BraceClose) {
+        symbols(RBrace) { it }
+        symbols(LineBreak, RBrace) { _, it -> it }
+    }
+    rules(AngleOpen) {
+        symbols(LAngle) { it }
+        symbols(LAngle, LineBreak) { it, _ -> it }
+    }
+    rules(AngleClose) {
+        symbols(RAngle) { it }
+        symbols(LineBreak, RAngle) { _, it -> it }
+    }
     
     rules(UnaryOperator) {
-        symbols(Not) { FoxNotOperator }
-        symbols(Sub) { FoxNegOperator }
+        FoxUnaryOperatorSymbol.entries.forEach { symbol ->
+            symbols(symbol) { ParsedFoxUnaryOperator(symbol.operator, it.span) }
+        }
+    }
+    
+    FoxBinaryOperatorSymbol.entries.forEach { symbol ->
+        rules(symbol.category) {
+            symbols(symbol) { ParsedFoxBinaryOperator(symbol.operator, it.span) }
+        }
+    }
+    rules(BinaryOperator) {
+        FoxBinaryOperatorCategorySymbol.entries.forEach { symbol ->
+            symbols(symbol) { it }
+        }
     }
     
     rules(AssignOperator) {
-        symbols(Assign) { FoxPlainAssignOperator }
-        symbols(DefAssign) { FoxTypeBindingAssignOperator }
-        symbols(AddAssign) { FoxAddAssignOperator }
-        symbols(SubAssign) { FoxSubAssignOperator }
-        symbols(MulAssign) { FoxMulAssignOperator }
-        symbols(DivAssign) { FoxDivAssignOperator }
-        symbols(RemAssign) { FoxRemAssignOperator }
-        symbols(AndAssign) { FoxAndAssignOperator }
-        symbols(OrAssign) { FoxOrAssignOperator }
-        symbols(XorAssign) { FoxXorAssignOperator }
-        symbols(LShiftAssign) { FoxShlAssignOperator }
-        symbols(RShiftAssign) { FoxShrAssignOperator }
-        symbols(URShiftAssign) { FoxUshrAssignOperator }
-        symbols(AndAndAssign) { FoxAndAndAssignOperator }
-        symbols(OrOrAssign) { FoxOrOrAssignOperator }
+        FoxAssignOperatorSymbol.entries.forEach { symbol ->
+            symbols(symbol) { ParsedFoxAssignOperator(symbol.operator, it.span) }
+        }
     }
     
-    rules(MultiplicativeOperator) {
-        symbols(Mul) { FoxMulOperator }
-        symbols(Div) { FoxDivOperator }
-        symbols(Rem) { FoxRemOperator }
-    }
-    rules(AdditiveOperator) {
-        symbols(Add) { FoxAddOperator }
-        symbols(Sub) { FoxSubOperator }
-    }
-    rules(ShiftOperator) {
-        symbols(LShift) { FoxShlOperator }
-        symbols(RShift) { FoxShrOperator }
-        symbols(URShift) { FoxUshrOperator }
-    }
-    rules(ComparisonOperator) {
-        symbols(Lt) { FoxLtOperator }
-        symbols(Gt) { FoxGtOperator }
-        symbols(Leq) { FoxLeOperator }
-        symbols(Geq) { FoxGeOperator }
-    }
-    rules(EqualityOperator) {
-        symbols(Eq) { FoxEqOperator }
-        symbols(Neq) { FoxNeqOperator }
-    }
-    rules(BitAndOperator) { symbols(And) { FoxAndOperator } }
-    rules(BitXorOperator) { symbols(Xor) { FoxXorOperator } }
-    rules(BitOrOperator) { symbols(Or) { FoxOrOperator } }
-    rules(LogicalAndOperator) { symbols(AndAnd) { FoxAndAndOperator } }
-    rules(LogicalOrOperator) { symbols(OrOr) { FoxOrOrOperator } }
+    rules(Identifier) { regex(IdentifierRegex) { it, span -> ParsedString(it, span) } }
+    rules(TypeName) { regex(TypeNameRegex) { it, span -> ParsedString(it, span) } }
     
-    rules(BinaryOperator) {
-        symbols(MultiplicativeOperator) { it }
-        symbols(AdditiveOperator) { it }
-        symbols(ShiftOperator) { it }
-        symbols(ComparisonOperator) { it }
-        symbols(EqualityOperator) { it }
-        symbols(BitAndOperator) { it }
-        symbols(BitXorOperator) { it }
-        symbols(BitOrOperator) { it }
-        symbols(LogicalAndOperator) { it }
-        symbols(LogicalOrOperator) { it }
+    rules(LitUnit) {
+        symbols(KwLowerUnit) { it }
     }
+    rules(LitBool) {
+        symbols(KwTrue) { ParsedBoolean(true, it.span) }
+        symbols(KwFalse) { ParsedBoolean(false, it.span) }
+    }
+    rules(LitInt) {
+        regex(BinIntRegex) { it, span -> ParsedInt(it.drop(2).replace("_", "").toInt(2), span) }
+        regex(DecIntRegex) { it, span -> ParsedInt(it.replace("_", "").toInt(), span) }
+        regex(HexIntRegex) { it, span -> ParsedInt(it.drop(2).replace("_", "").toInt(16), span) }
+    }
+    rules(LitLong) {
+        regex(BinLongRegex) { it, span -> ParsedLong(it.drop(2).dropLast(1).replace("_", "").toLong(2), span) }
+        regex(DecLongRegex) { it, span -> ParsedLong(it.dropLast(1).replace("_", "").toLong(), span) }
+        regex(HexLongRegex) { it, span -> ParsedLong(it.drop(2).dropLast(1).replace("_", "").toLong(16), span) }
+    }
+    rules(LitFloat) {
+        regex(DecFloatRegex) { it, span -> ParsedFloat(it.dropLast(1).replace("_", "").toFloat(), span) }
+    }
+    rules(LitDouble) {
+        regex(DecDoubleRegex) { it, span -> ParsedDouble(it.replace("_", "").toDouble(), span) }
+    }
+    rules(LitChar) { charLiteral { it, span -> ParsedChar(it, span) } }
+    rules(LitString) { stringLiteral { it, span -> ParsedString(it, span) } }
     
     rules(Type) {
-        symbols(KwVoid) { FoxVoidType }
-        symbols(KwUnit) { FoxUnitType }
-        symbols(KwBool) { FoxBoolType }
-        symbols(KwByte) { FoxByteType }
-        symbols(KwShort) { FoxShortType }
-        symbols(KwInt) { FoxIntType }
-        symbols(KwLong) { FoxLongType }
-        symbols(KwFloat) { FoxFloatType }
-        symbols(KwDouble) { FoxDoubleType }
-        symbols(KwChar) { FoxCharType }
-        symbols(KwString) { FoxStringType }
-        symbols(KwAny) { FoxAnyType }
-        symbols(KwAnyTuple) { FoxAnyTupleType }
-        symbols(KwAnyStruct) { FoxAnyStructType }
-        symbols(KwAnyObject) { FoxAnyObjectType }
-        symbols(KwAnyEnum) { FoxAnyEnumType }
-        symbols(KwAnyOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxAnyOfType(it)
+        FoxPrimitiveTypeKeywordSymbol.entries.forEach { symbol ->
+            symbols(symbol) { ParsedFoxPrimitiveType(symbol.type, it.span) }
         }
-        symbols(KwAllOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxAllOfType(it)
+        
+        symbols(KwTuple, TupleComponentParameterList) { kw, components ->
+            ParsedFoxTupleType(components, mergeSpan(kw, components))
         }
-        symbols(KwNoneOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxNoneOfType(it)
+        symbols(KwStruct, StructFieldParameterList) { kw, fields ->
+            ParsedFoxStructType(fields, mergeSpan(kw, fields))
         }
-        symbols(KwTuple, TupleComponentParameterList) { _, it ->
-            it.toFoxTupleType()
+        symbols(KwObject, ObjectMemberParameterList) { kw, members ->
+            ParsedFoxObjectType(members, mergeSpan(kw, members))
         }
-        symbolsResult(KwAnyTupleOf, AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) factoryError("AnyTupleOf type must have exactly one generic parameter")
-            else factorySuccess(FoxAnyTupleOfType(it.first()))
+        symbols(KwEnum, EnumEntryParameterList) { kw, entries ->
+            ParsedFoxEnumType(entries, mergeSpan(kw, entries))
         }
-        symbols(KwStruct, StructFieldParameterList) { _, it ->
-            FoxStructType(it)
+        symbols(KwArray, AnonymousActualGenericParameterSingleList) { kw, type ->
+            ParsedFoxArrayType(type.node.single(), mergeSpan(kw, type))
         }
-        symbolsResult(KwAnyStructOf, AnonymousActualGenericParameterList) { _, it ->
-            if (it.isEmpty()) factoryError("AnyStructOf type must have at least one generic parameter")
-            else factorySuccess(FoxAnyStructOfType(it))
+        symbols(KwRef, AnonymousActualGenericParameterSingleList) { kw, type ->
+            ParsedFoxRefType(type.node.single(), mergeSpan(kw, type))
         }
-        symbols(KwObject, ObjectMemberParameterList) { _, it ->
-            FoxObjectType(it)
+        symbols(KwMethod, MethodTypeParameterList) { kw, types ->
+            types.copy(span = mergeSpan(kw, types))
         }
-        symbols(KwEnum, EnumItemParameterList) { _, it ->
-            FoxEnumType(it)
+        
+        symbols(KwAny) {
+            ParsedFoxAnyType(it.span)
         }
-        symbolsResult(KwArray, AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) factoryError("Array type must have exactly one generic parameter")
-            else factorySuccess(FoxArrayType(it.first()))
+        symbols(KwAnyOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxAnyOfType(types.node, mergeSpan(kw, types))
         }
-        symbolsResult(KwRef, AnonymousActualGenericParameterList) { _, it ->
-            if (it.size != 1) factoryError("Ref type must have exactly one generic parameter")
-            else factorySuccess(FoxRefType(it.first()))
+        symbols(KwAllOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxAllOfType(types.node, mergeSpan(kw, types))
         }
-        symbolsResult(KwMethod, MethodTypeArgumentList) { _, items ->
-            items.toFoxMethodType()
+        symbols(KwNoneOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxNoneOfType(types.node, mergeSpan(kw, types))
         }
-        symbols(KwComponentAt, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, index, _ ->
-            FoxTupleComponentAtType(type, index)
+        symbols(KwAnyTuple) { kw ->
+            ParsedFoxAnyTupleType(kw.span)
         }
-        symbols(KwLastComponentAt, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, index, _ ->
-            FoxTupleLastComponentAtType(type, index)
+        symbols(KwAnyTupleOf, AnonymousActualGenericParameterSingleList) { kw, type ->
+            ParsedFoxAnyTupleOfType(type.node.single(), mergeSpan(kw, type))
         }
-        symbols(KwFirstComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleFirstComponentsOfType(type, count)
+        symbols(KwAnyStruct) { kw ->
+            ParsedFoxAnyStructType(kw.span)
         }
-        symbols(KwExactFirstComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleExactFirstComponentsOfType(type, count)
+        symbols(KwAnyStructOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxAnyStructOfType(types, mergeSpan(kw, types))
         }
-        symbols(KwLastComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleLastComponentsOfType(type, count)
+        symbols(KwAnyObject) { kw ->
+            ParsedFoxAnyObjectType(kw.span)
         }
-        symbols(KwExactLastComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleExactLastComponentsOfType(type, count)
+        symbols(KwAnyEnum) { kw ->
+            ParsedFoxAnyEnumType(kw.span)
         }
-        symbols(KwDropFirstComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleDropFirstComponentsOfType(type, count)
+        
+        symbols(KwComponentAt, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleComponentAtType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropFirstComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleExactDropFirstComponentsOfType(type, count)
+        symbols(KwLastComponentAt, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleLastComponentAtType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropLastComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleDropLastComponentsOfType(type, count)
+        symbols(KwFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropLastComponentsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxTupleExactDropLastComponentsOfType(type, count)
+        symbols(KwExactFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleExactFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMergeComponentsOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxTupleMergeComponentsOfType(it)
+        symbols(KwLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFieldOf, AngleOpen, Type, Comma, Identifier, AngleClose) { _, _, type, _, name, _ ->
-            FoxStructFieldOfType(type, name)
+        symbols(KwExactLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleExactLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFieldAt, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, index, _ ->
-            FoxStructFieldAtType(type, index)
+        symbols(KwDropFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastFieldAt, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, index, _ ->
-            FoxStructLastFieldAtType(type, index)
+        symbols(KwExactDropFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleExactDropFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFirstFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructFirstFieldsOfType(type, count)
+        symbols(KwDropLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactFirstFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructExactFirstFieldsOfType(type, count)
+        symbols(KwExactDropLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleExactDropLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructLastFieldsOfType(type, count)
+        symbols(KwMergeComponentsOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxTupleMergeComponentsOfType(types, mergeSpan(kw, types))
         }
-        symbols(KwExactLastFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructExactLastFieldsOfType(type, count)
+        
+        symbols(
+            KwFieldOf, AngleOpen, Type, Comma, Identifier, AngleClose,
+        ) { kw, open, type, comma, name, close ->
+            ParsedFoxStructFieldOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
         }
-        symbols(KwDropFirstFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructDropFirstFieldsOfType(type, count)
+        symbols(KwFieldAt, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructFieldAtType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropFirstFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructExactDropFirstFieldsOfType(type, count)
+        symbols(KwLastFieldAt, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructLastFieldAtType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropLastFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructDropLastFieldsOfType(type, count)
+        symbols(KwFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropLastFieldsOf, AngleOpen, Type, Comma, LitInt, AngleClose) { _, _, type, _, count, _ ->
-            FoxStructExactDropLastFieldsOfType(type, count)
+        symbols(KwExactFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructExactFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxStructFieldsOfType(type, names)
+        symbols(KwLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxStructDropFieldsOfType(type, names.toSet())
+        symbols(KwExactLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructExactLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMergeFieldsOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxStructMergeFieldsOfType(it)
+        symbols(KwDropFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMemberOf, AngleOpen, Type, Comma, Identifier, AngleClose) { _, _, type, _, name, _ ->
-            FoxObjectMemberOfType(type, name)
+        symbols(KwExactDropFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructExactDropFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxObjectMembersOfType(type, names)
+        symbols(KwDropLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxObjectDropMembersOfType(type, names)
+        symbols(KwExactDropLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructExactDropLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMergeMembersOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxObjectMergeMembersOfType(it)
+        symbols(
+            KwFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxStructFieldsOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwItemOf, AngleOpen, Type, Comma, TypeName, AngleClose) { _, _, type, _, name, _ ->
-            FoxEnumItemOfType(type, name)
+        symbols(
+            KwDropFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxStructDropFieldsOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwItemsOf, AngleOpen, Type, Comma, EnumItemNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxEnumItemsOfType(type, names)
+        symbols(KwMergeFieldsOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxStructMergeFieldsOfType(types, mergeSpan(kw, types))
         }
-        symbols(KwDropItemsOf, AngleOpen, Type, Comma, EnumItemNameList, AngleClose) { _, _, type, _, names, _ ->
-            FoxEnumDropItemsOfType(type, names)
+        symbols(
+            KwMemberOf, AngleOpen, Type, Comma, Identifier, AngleClose,
+        ) { kw, open, type, comma, name, close ->
+            ParsedFoxObjectMemberOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
         }
-        symbols(KwMergeItemsOf, AnonymousActualGenericParameterList) { _, it ->
-            FoxEnumMergeItemsOfType(it)
+        symbols(
+            KwMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectMembersOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwElementOf, AngleOpen, Type, AngleClose) { _, _, type, _ ->
-            FoxArrayElementOfType(type)
+        symbols(
+            KwDropMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectDropMembersOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwReferentOf, AngleOpen, Type, AngleClose) { _, _, type, _ ->
-            FoxRefReferentOfType(type)
+        symbols(KwMergeMembersOf, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxObjectMergeMembersOfType(types, mergeSpan(kw, types))
         }
-        symbols(KwMethodOf, AngleOpen, Type, Comma, Type, Comma, Type, AngleClose) { _, _, `this`, _, parameters, _, `return`, _ ->
-            FoxMethodOfType(`this`, parameters, `return`)
+        symbols(
+            KwEntryOf, AngleOpen, Type, Comma, TypeName, AngleClose,
+        ) { kw, open, type, comma, name, close ->
+            ParsedFoxEnumEntryOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
         }
-        symbols(KwThisOf, AngleOpen, Type, AngleClose) { _, _, type, _ ->
-            FoxMethodThisOfType(type)
+        symbols(
+            KwEntriesOf, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumEntriesOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwParametersOf, AngleOpen, Type, AngleClose) { _, _, type, _ ->
-            FoxMethodParametersOfType(type)
+        symbols(
+            KwDropEntriesOf, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumDropEntriesOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
-        symbols(KwReturnOf, AngleOpen, Type, AngleClose) { _, _, type, _ ->
-            FoxMethodReturnOfType(type)
+        symbols(KwMergeEntriesOf, AnonymousActualGenericParameterList) { kw, it ->
+            ParsedFoxEnumMergeEntriesOfType(it, mergeSpan(kw, it))
+        }
+        symbols(
+            KwElementOf, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxArrayElementOfType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwReferentOf, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxRefReferentOfType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwMethodOf, AngleOpen, Type, Comma, Type, Comma, Type, AngleClose,
+        ) { kw, open, `this`, comma0, parameters, comma1, `return`, close ->
+            ParsedFoxMethodOfType(
+                `this`, parameters, `return`,
+                mergeSpan(kw, open, `this`, comma0, parameters, comma1, `return`, close),
+            )
+        }
+        symbols(
+            KwThisOf, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodThisOfType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwParametersOf, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodParametersOfType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwReturnOf, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodReturnOfType(type, mergeSpan(kw, open, type, close))
         }
         symbols(TypeName) {
-            FoxUnresolvedType(it, null)
+            ParsedFoxUnresolvedType(it, null, it.span)
         }
-        symbols(TypeName, AnonymousActualGenericParameterList) { name, it ->
-            FoxUnresolvedType(name, it)
+        symbols(TypeName, AnonymousActualGenericParameterList) { name, types ->
+            ParsedFoxUnresolvedType(name, types, mergeSpan(name, types))
         }
     }
     
     rules(FormalParameter) {
-        symbols(IdentifierColon, Type) { name, type -> name to type }
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedPair(name to type, mergeSpan(name, colon, type))
+        }
     }
     rules(FormalParameterListHead) {
-        symbols(ParenOpen, FormalParameter) { _, it -> listOf(it) }
-        symbols(FormalParameterListHead, Comma, FormalParameter) { head, _, it -> head + it }
+        symbols(ParenOpen, FormalParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            FormalParameterListHead, Comma, FormalParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(FormalParameterList) {
-        symbols(LParen, ParenClose) { _, _ -> emptyOrderedMap() }
-        symbolsResult(FormalParameterListHead, ParenClose) { head, _ -> head.toOrderedMap("formal parameter") }
-        symbolsResult(FormalParameterListHead, Comma, RParen) { head, _, _ -> head.toOrderedMap("formal parameter") }
+        symbols(LParen, ParenClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(FormalParameterListHead, ParenClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            FormalParameterListHead, Comma, RParen,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(ActualParameter) {
-        symbols(Statement) { null to it }
-        symbols(ImplicitLambdaLiteral) { null to it }
-        symbols(IdentifierEqual, Statement) { name, value -> name to value }
-        symbols(IdentifierEqual, ImplicitLambdaLiteral) { name, value -> name to value }
+        symbols(LogicalOrExpression) {
+            ParsedPair(null to it, it.span)
+        }
+        symbols(ImplicitLambdaLiteral) {
+            ParsedPair(null to it, it.span)
+        }
+        symbols(
+            Identifier, PlainAssign, LogicalOrExpression,
+        ) { name, assign, expr ->
+            ParsedPair(name to expr, mergeSpan(name, assign, expr))
+        }
+        symbols(
+            Identifier, PlainAssign, ImplicitLambdaLiteral,
+        ) { name, assign, expr ->
+            ParsedPair(name to expr, mergeSpan(name, assign, expr))
+        }
     }
     rules(ActualParameterListHead) {
-        symbols(ParenOpen, ActualParameter) { _, it -> listOf(it) }
-        symbols(ActualParameterListHead, Comma, ActualParameter) { head, _, it -> head + it }
+        symbols(ParenOpen, ActualParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            ActualParameterListHead, Comma, ActualParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(ActualParameterList) {
-        symbols(LParen, ParenClose) { _, _ -> emptyList() }
-        symbols(ActualParameterListHead, ParenClose) { head, _ -> head }
-        symbols(ActualParameterListHead, Comma, RParen) { head, _, _ -> head }
-    }
-    
-    rules(LambdaParameter) {
-        symbols(Identifier) { name -> name to null }
-        symbols(IdentifierColon, Type) { name, type -> name to type }
-    }
-    rules(LambdaParameterListHead) {
-        symbols(LambdaParameter) { listOf(it) }
-        symbols(LineBreak, LambdaParameter) { _, it -> listOf(it) }
-        symbols(LambdaParameterListHead, Comma, LambdaParameter) { head, _, it -> head + it }
-    }
-    rules(LambdaParameterList) {
-        symbols(LambdaParameterListHead) { it }
-        symbols(LambdaParameterListHead, Comma) { head, _ -> head }
+        symbols(LParen, ParenClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(ActualParameterListHead, ParenClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            ActualParameterListHead, Comma, RParen,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(FormalGenericParameter) {
-        symbols(TypeName) { it to FoxAnyType }
-        symbols(TypeName, Assign, Type) { name, _, constraint -> name to constraint }
+        symbols(TypeName) {
+            ParsedPair(it to null, it.span)
+        }
+        symbols(
+            TypeName, PlainAssign, Type,
+        ) { name, assign, type ->
+            ParsedPair(name to type, mergeSpan(name, assign, type))
+        }
     }
     rules(FormalGenericParameterListHead) {
-        symbols(AngleOpen, FormalGenericParameter) { _, it -> listOf(it) }
-        symbols(FormalGenericParameterListHead, Comma, FormalGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, FormalGenericParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            FormalGenericParameterListHead, Comma, FormalGenericParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(FormalGenericParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyOrderedMap() }
-        symbolsResult(FormalGenericParameterListHead, AngleClose) { head, _ -> head.toOrderedMap("formal generic parameter") }
-        symbolsResult(FormalGenericParameterListHead, Comma, RAngle) { head, _, _ -> head.toOrderedMap("formal generic parameter") }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(FormalGenericParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            FormalGenericParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(FormalGenericParameterNoConstraints) {
         symbols(TypeName) { it }
     }
     rules(FormalGenericParameterNoConstraintsListHead) {
-        symbols(AngleOpen, FormalGenericParameterNoConstraints) { _, it -> listOf(it) }
-        symbols(FormalGenericParameterNoConstraintsListHead, Comma, FormalGenericParameterNoConstraints) { head, _, it -> head + it }
+        symbols(AngleOpen, FormalGenericParameterNoConstraints) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            FormalGenericParameterNoConstraintsListHead, Comma, FormalGenericParameterNoConstraints,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(FormalGenericParameterNoConstraintsList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyOrderedSet() }
-        symbolsResult(FormalGenericParameterNoConstraintsListHead, AngleClose) { head, _ -> head.toOrderedSet("formal generic parameter") }
-        symbolsResult(FormalGenericParameterNoConstraintsListHead, Comma, RAngle) { head, _, _ -> head.toOrderedSet("formal generic parameter") }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(FormalGenericParameterNoConstraintsListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            FormalGenericParameterNoConstraintsListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(ActualGenericParameter) {
-        symbols(Type) { null to it }
-        symbols(TypeNameEqual, Type) { name, type -> name to type }
+        symbols(Type) {
+            ParsedPair(null to it, it.span)
+        }
+        symbols(
+            TypeName, PlainAssign, Type,
+        ) { name, assign, type ->
+            ParsedPair(name to type, mergeSpan(name, assign, type))
+        }
     }
     rules(ActualGenericParameterListHead) {
-        symbols(AngleOpen, ActualGenericParameter) { _, it -> listOf(it) }
-        symbols(ActualGenericParameterListHead, Comma, ActualGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, ActualGenericParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            ActualGenericParameterListHead, Comma, ActualGenericParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(ActualGenericParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyList() }
-        symbols(ActualGenericParameterListHead, AngleClose) { head, _ -> head }
-        symbols(ActualGenericParameterListHead, Comma, RAngle) { head, _, _ -> head }
-    }
-    
-    rules(NamedActualGenericParameter) {
-        symbols(TypeNameEqual, Type) { name, type -> name to type }
-    }
-    rules(NamedActualGenericParameterListHead) {
-        symbols(AngleOpen, NamedActualGenericParameter) { _, it -> listOf(it) }
-        symbols(NamedActualGenericParameterListHead, Comma, NamedActualGenericParameter) { head, _, it -> head + it }
-    }
-    rules(NamedActualGenericParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyMap() }
-        symbolsResult(NamedActualGenericParameterListHead, AngleClose) { head, _ -> head.toMap("named actual generic parameter") }
-        symbolsResult(NamedActualGenericParameterListHead, Comma, RAngle) { head, _, _ -> head.toMap("named actual generic parameter") }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(ActualGenericParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            ActualGenericParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(AnonymousActualGenericParameter) {
         symbols(Type) { it }
     }
     rules(AnonymousActualGenericParameterListHead) {
-        symbols(AngleOpen, AnonymousActualGenericParameter) { _, it -> listOf(it) }
-        symbols(AnonymousActualGenericParameterListHead, Comma, AnonymousActualGenericParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, AnonymousActualGenericParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            AnonymousActualGenericParameterListHead, Comma, AnonymousActualGenericParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(AnonymousActualGenericParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyList() }
-        symbols(AnonymousActualGenericParameterListHead, AngleClose) { head, _ -> head }
-        symbols(AnonymousActualGenericParameterListHead, Comma, RAngle) { head, _, _ -> head }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(AnonymousActualGenericParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            AnonymousActualGenericParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
+    }
+    rules(AnonymousActualGenericParameterSingleList) {
+        symbols(
+            AngleOpen, AnonymousActualGenericParameter, AngleClose,
+        ) { open, it, close ->
+            ParsedList(listOf(it), mergeSpan(open, it, close))
+        }
+    }
+    
+    rules(ActualGenericIntParameterList) {
+        symbols(
+            AngleOpen, AnonymousActualGenericParameter, Comma, LitInt, AngleClose,
+        ) { open, it, comma, count, close ->
+            ParsedPair(it to count, mergeSpan(open, it, comma, count, close))
+        }
+    }
+    
+    rules(LambdaParameter) {
+        symbols(Identifier) {
+            ParsedPair(it to null, it.span)
+        }
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedPair(name to type, mergeSpan(name, colon, type))
+        }
+    }
+    rules(LambdaParameterListHead) {
+        symbols(LambdaParameter) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(LineBreak, LambdaParameter) { _, it ->
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(
+            LambdaParameterListHead, Comma, LambdaParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
+    }
+    rules(LambdaParameterList) {
+        symbols(LambdaParameterListHead) { it }
+        symbols(LambdaParameterListHead, Comma) { head, comma ->
+            ParsedList(head.node, mergeSpan(head, comma))
+        }
     }
     
     rules(TupleComponentParameter) {
-        symbols(Type) { it to 1 }
-        symbolsResult(Type, Colon, LitInt) { type, _, count ->
-            if (count <= 0) factoryError("Tuple component count must be positive")
-            else factorySuccess(type to count)
+        symbols(Type) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(
+            Type, Colon, LitInt,
+        ) { type, colon, count ->
+            ParsedList(rleArrayListOfRuns(type to count.node), mergeSpan(type, colon, count))
         }
     }
     rules(TupleComponentParameterListHead) {
-        symbols(AngleOpen, TupleComponentParameter) { _, it -> listOf(it) }
-        symbols(TupleComponentParameterListHead, Comma, TupleComponentParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, TupleComponentParameter) { open, it ->
+            ParsedList(it.node, mergeSpan(open, it))
+        }
+        symbols(
+            TupleComponentParameterListHead, Comma, TupleComponentParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it.node, mergeSpan(head, comma, it))
+        }
     }
     rules(TupleComponentParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyList() }
-        symbols(TupleComponentParameterListHead, AngleClose) { head, _ -> head }
-        symbols(TupleComponentParameterListHead, Comma, RAngle) { head, _, _ -> head }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(TupleComponentParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            TupleComponentParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(StructFieldParameter) {
-        symbols(IdentifierColon, Type) { name, type -> name to type }
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedPair(name to type, mergeSpan(name, colon, type))
+        }
     }
     rules(StructFieldParameterListHead) {
-        symbols(AngleOpen, StructFieldParameter) { _, it -> listOf(it) }
-        symbols(StructFieldParameterListHead, Comma, StructFieldParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, StructFieldParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            StructFieldParameterListHead, Comma, StructFieldParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(StructFieldParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyOrderedMap() }
-        symbolsResult(StructFieldParameterListHead, AngleClose) { head, _ -> head.toOrderedMap("struct field parameter") }
-        symbolsResult(StructFieldParameterListHead, Comma, RAngle) { head, _, _ -> head.toOrderedMap("struct field parameter") }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(StructFieldParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            StructFieldParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(StructFieldName) {
         symbols(Identifier) { it }
     }
-    rules(StructFieldNameListHead) {
-        symbols(StructFieldName) { listOf(it) }
-        symbols(StructFieldNameListHead, Comma, StructFieldName) { head, _, it -> head + it }
-    }
     rules(StructFieldNameList) {
-        symbolsResult(StructFieldNameListHead) { it.toOrderedSet("struct field name") }
+        symbols(StructFieldName) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(
+            StructFieldNameList, Comma, StructFieldName,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     
     rules(ObjectMemberParameter) {
-        symbols(IdentifierColon, Type) { name, type -> name to type }
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedPair(name to type, mergeSpan(name, colon, type))
+        }
     }
     rules(ObjectMemberParameterListHead) {
-        symbols(AngleOpen, ObjectMemberParameter) { _, it -> listOf(it) }
-        symbols(ObjectMemberParameterListHead, Comma, ObjectMemberParameter) { head, _, it -> head + it }
+        symbols(AngleOpen, ObjectMemberParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            ObjectMemberParameterListHead, Comma, ObjectMemberParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     rules(ObjectMemberParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyMap() }
-        symbolsResult(ObjectMemberParameterListHead, AngleClose) { head, _ -> head.toMap("object member parameter") }
-        symbolsResult(ObjectMemberParameterListHead, Comma, RAngle) { head, _, _ -> head.toMap("object member parameter") }
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(ObjectMemberParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            ObjectMemberParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
     rules(ObjectMemberName) {
         symbols(Identifier) { it }
     }
-    rules(ObjectMemberNameListHead) {
-        symbols(ObjectMemberName) { listOf(it) }
-        symbols(ObjectMemberNameListHead, Comma, ObjectMemberName) { head, _, it -> head + it }
-    }
     rules(ObjectMemberNameList) {
-        symbolsResult(ObjectMemberNameListHead) { it.toSet("object member name") }
+        symbols(ObjectMemberName) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(
+            ObjectMemberNameList, Comma, ObjectMemberName,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
     
-    rules(EnumItemParameter) {
-        symbols(TypeNameEqual, Type) { name, type -> name to type }
+    rules(EnumEntryParameter) {
+        symbols(
+            TypeName, PlainAssign, Type,
+        ) { name, assign, type ->
+            ParsedPair(name to type, mergeSpan(name, assign, type))
+        }
     }
-    rules(EnumItemParameterListHead) {
-        symbols(AngleOpen, EnumItemParameter) { _, it -> listOf(it) }
-        symbols(EnumItemParameterListHead, Comma, EnumItemParameter) { head, _, it -> head + it }
+    rules(EnumEntryParameterListHead) {
+        symbols(AngleOpen, EnumEntryParameter) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(
+            EnumEntryParameterListHead, Comma, EnumEntryParameter,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
-    rules(EnumItemParameterList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyMap() }
-        symbolsResult(EnumItemParameterListHead, AngleClose) { head, _ -> head.toMap("enum item parameter") }
-        symbolsResult(EnumItemParameterListHead, Comma, RAngle) { head, _, _ -> head.toMap("enum item parameter") }
+    rules(EnumEntryParameterList) {
+        symbols(LAngle, AngleClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(EnumEntryParameterListHead, AngleClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            EnumEntryParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
+        }
     }
     
-    rules(EnumItemName) {
+    rules(EnumEntryName) {
         symbols(TypeName) { it }
     }
-    rules(EnumItemNameListHead) {
-        symbols(EnumItemName) { listOf(it) }
-        symbols(EnumItemNameListHead, Comma, EnumItemName) { head, _, it -> head + it }
-    }
-    rules(EnumItemNameList) {
-        symbolsResult(EnumItemNameListHead) { it.toSet("enum item name") }
-    }
-    
-    rules(MethodTypeArgument) {
-        symbols(KwThis, Colon, Type) { _, _, type ->
-            ParsedMethodTypeArgument.This(type)
+    rules(EnumEntryNameList) {
+        symbols(EnumEntryName) {
+            ParsedList(listOf(it), it.span)
         }
-        symbols(KwReturn, Colon, Type) { _, _, type ->
-            ParsedMethodTypeArgument.Return(type)
-        }
-        symbols(FormalParameter) { (name, type) ->
-            ParsedMethodTypeArgument.Parameter(name, type)
-        }
-        symbols(Type) { type ->
-            ParsedMethodTypeArgument.AnonymousType(type)
-        }
-    }
-    rules(MethodTypeArgumentListHead) {
-        symbols(AngleOpen, MethodTypeArgument) { _, it -> listOf(it) }
-        symbols(MethodTypeArgumentListHead, Comma, MethodTypeArgument) { head, _, it -> head + it }
-    }
-    rules(MethodTypeArgumentList) {
-        symbols(LAngle, AngleClose) { _, _ -> emptyList() }
-        symbols(MethodTypeArgumentListHead, AngleClose) { head, _ -> head }
-        symbols(MethodTypeArgumentListHead, Comma, RAngle) { head, _, _ -> head }
-    }
-    
-    rules(Label) { symbols(Hash, Identifier) { _, it -> it } }
-    rules(ParenthesizedStatement) { symbols(ParenOpen, Statement, ParenClose) { _, node, _ -> node } }
-    
-    rules(FormattedStringPart) {
-        formattedStringText { FoxFormattedText(it) }
-        symbols(FormattedExpressionOpen, AssignmentExpression, FormattedExpressionClose) { _, expression, _ ->
-            FoxFormattedExpression(expression)
+        symbols(
+            EnumEntryNameList, Comma, EnumEntryName,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
         }
     }
     
-    rules(FormattedStringPartListHead) {
-        symbols(FormattedStringPart) { listOf(it) }
-        symbols(FormattedStringPartListHead, FormattedStringPart) { head, part -> head + part }
-    }
-    
-    rules(LambdaStatementBlockHead) {
-        symbols(LineBreak, StatementLine) { _, it -> listOf(it) }
-        symbols(LambdaStatementBlockHead, StatementLine) { head, it -> head + it }
-    }
-    
-    rules(LambdaBody) {
-        symbols(Statement) { it }
-        symbols(LineBreak, Statement) { _, it -> it }
-        symbols(LambdaStatementBlockHead) { FoxBlock(null, it) }
-    }
-    
-    rules(ExplicitLambdaLiteral) {
-        symbols(BraceOpen, Arrow, BraceClose) { _, _, _ ->
-            FoxLambda(emptyList(), FoxBlock(null, emptyList()))
-        }
-        symbols(BraceOpen, Arrow, LambdaBody, RBrace) { _, _, body, _ ->
-            FoxLambda(emptyList(), body)
-        }
-        symbols(BraceOpen, LambdaParameterList, Arrow, BraceClose) { _, parameters, _, _ ->
-            FoxLambda(parameters, FoxBlock(null, emptyList()))
-        }
-        symbols(BraceOpen, LambdaParameterList, Arrow, LambdaBody, RBrace) { _, parameters, _, body, _ ->
-            FoxLambda(parameters, body)
+    rules(MethodTypeParameter) {
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedPair(name to type, mergeSpan(name, colon, type))
         }
     }
-    
-    rules(InlineImplicitLambdaLiteral) {
-        symbols(LBrace, Statement, RBrace) { _, body, _ ->
-            FoxLambda(null, body)
+    rules(MethodTypeParameterListHead) {
+        symbols(AngleOpen, MethodTypeParameter) { open, it ->
+            ParsedFoxMethodTypeHead(null, ParsedList(listOf(it), it.span), mergeSpan(open, it))
+        }
+        symbols(
+            AngleOpen, KwThis, Colon, Type, Comma, MethodTypeParameter,
+        ) { open, kw, colon, type, comma, it ->
+            ParsedFoxMethodTypeHead(
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                ParsedList(listOf(it), it.span),
+                mergeSpan(open, kw, colon, type, comma, it),
+            )
+        }
+        symbols(
+            MethodTypeParameterListHead, Comma, MethodTypeParameter,
+        ) { head, comma, it ->
+            ParsedFoxMethodTypeHead(
+                head.`this`,
+                ParsedList(head.parameters.node + it, mergeSpan(head.parameters, comma, it)),
+                mergeSpan(head, comma, it),
+            )
+        }
+    }
+    rules(MethodTypeParameterList) {
+        symbols(
+            LAngle, AngleClose,
+        ) { open, close ->
+            ParsedFoxMethodType(null, null, null, mergeSpan(open, close))
+        }
+        symbols(
+            AngleOpen, KwReturn, Colon, Type, AngleClose,
+        ) { open, kw, colon, type, close ->
+            ParsedFoxMethodType(
+                null,
+                null,
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                mergeSpan(open, kw, colon, type, close),
+            )
+        }
+        symbols(
+            AngleOpen, KwReturn, Colon, Type, Comma, RAngle,
+        ) { open, kw, colon, type, comma, close ->
+            ParsedFoxMethodType(
+                null,
+                null,
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                mergeSpan(open, kw, colon, type, comma, close),
+            )
+        }
+        symbols(
+            AngleOpen, KwThis, Colon, Type, AngleClose,
+        ) { open, kw, colon, type, close ->
+            ParsedFoxMethodType(
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                null,
+                null,
+                mergeSpan(open, kw, colon, type, close),
+            )
+        }
+        symbols(
+            AngleOpen, KwThis, Colon, Type, Comma, RAngle,
+        ) { open, kw, colon, type, comma, close ->
+            ParsedFoxMethodType(
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                null,
+                null,
+                mergeSpan(open, kw, colon, type, comma, close),
+            )
+        }
+        symbols(
+            AngleOpen, KwThis, Colon, Type, Comma, KwReturn, Colon, Type, AngleClose,
+        ) { open, kw0, colon0, type0, comma, kw1, colon1, type1, close ->
+            ParsedFoxMethodType(
+                ParsedPair(kw0 to type0, mergeSpan(kw0, colon0, type0)),
+                null,
+                ParsedPair(kw1 to type1, mergeSpan(kw1, colon1, type1)),
+                mergeSpan(open, kw0, colon0, type0, comma, kw1, colon1, type1, close),
+            )
+        }
+        symbols(
+            AngleOpen, KwThis, Colon, Type, Comma, KwReturn, Colon, Type, Comma, RAngle,
+        ) { open, kw0, colon0, type0, comma0, kw1, colon1, type1, comma1, close ->
+            ParsedFoxMethodType(
+                ParsedPair(kw0 to type0, mergeSpan(kw0, colon0, type0)),
+                null,
+                ParsedPair(kw1 to type1, mergeSpan(kw1, colon1, type1)),
+                mergeSpan(open, kw0, colon0, type0, comma0, kw1, colon1, type1, comma1, close),
+            )
+        }
+        symbols(
+            MethodTypeParameterListHead, AngleClose,
+        ) { head, close ->
+            ParsedFoxMethodType(
+                head.`this`,
+                head.parameters,
+                null,
+                mergeSpan(head, close),
+            )
+        }
+        symbols(
+            MethodTypeParameterListHead, Comma, RAngle,
+        ) { head, comma, close ->
+            ParsedFoxMethodType(
+                head.`this`,
+                head.parameters,
+                null,
+                mergeSpan(head, comma, close),
+            )
+        }
+        symbols(
+            MethodTypeParameterListHead, Comma, KwReturn, Colon, Type, AngleClose,
+        ) { head, comma, kw, colon, type, close ->
+            ParsedFoxMethodType(
+                head.`this`,
+                head.parameters,
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                mergeSpan(head, comma, kw, colon, type, close),
+            )
+        }
+        symbols(
+            MethodTypeParameterListHead, Comma, KwReturn, Colon, Type, Comma, RAngle,
+        ) { head, comma0, kw, colon, type, comma1, close ->
+            ParsedFoxMethodType(
+                head.`this`,
+                head.parameters,
+                ParsedPair(kw to type, mergeSpan(kw, colon, type)),
+                mergeSpan(head, comma0, kw, colon, type, comma1, close),
+            )
         }
     }
     
-    rules(ImplicitLambdaLiteral) {
-        symbols(LBrace, BraceClose) { _, _ ->
-            FoxLambda(null, FoxBlock(null, emptyList()))
-        }
-        symbols(InlineImplicitLambdaLiteral) { it }
-        symbols(BraceOpen, LambdaStatementBlockHead, BraceClose) { _, statements, _ ->
-            FoxLambda(null, FoxBlock(null, statements))
+    rules(ParenthesizedExpression) {
+        symbols(
+            ParenOpen, Statement, ParenClose,
+        ) { _, it, _ ->
+            it
         }
     }
     
-    rules(LambdaLiteral) {
-        symbols(ExplicitLambdaLiteral) { it }
-        symbols(ImplicitLambdaLiteral) { it }
-    }
-    
-    rules(SingleLineStatementBlock) {
-        symbols(LBrace, Statement, RBrace) { _, statement, _ ->
-            FoxBlock(null, listOf(statement))
+    rules(IndexArgumentListHead) {
+        symbols(SquareOpen, Statement) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
         }
-        symbols(Label, LBrace, Statement, RBrace) { label, _, statement, _ ->
-            FoxBlock(label, listOf(statement))
+        symbols(
+            IndexArgumentListHead, Comma, Statement,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
+    }
+    rules(IndexArgumentList) {
+        symbols(IndexArgumentListHead, SquareClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+        symbols(
+            IndexArgumentListHead, Comma, RBracket,
+        ) { head, comma, close ->
+            ParsedList(head.node, mergeSpan(head, comma, close))
         }
     }
     
     rules(PrimaryExpression) {
-        symbols(LitUnit) { FoxEntityStatement(FoxUnit) }
-        symbols(LitBool) { FoxEntityStatement(FoxBool(it)) }
-        symbols(LitInt) { FoxEntityStatement(FoxInt(it)) }
-        symbols(LitLong) { FoxEntityStatement(FoxLong(it)) }
-        symbols(LitFloat) { FoxEntityStatement(FoxFloat(it)) }
-        symbols(LitDouble) { FoxEntityStatement(FoxDouble(it)) }
-        symbols(LitChar) { FoxEntityStatement(FoxChar(it)) }
-        symbols(LitString) { FoxEntityStatement(FoxString(it)) }
-        symbols(KwThis) { FoxThis }
-        symbols(Identifier) { FoxSymbol(it) }
-        symbols(ParenthesizedStatement) { it }
+        symbols(ParenthesizedExpression) { it }
+        
+        symbols(LitUnit) { ParsedFoxEntityStatement(FoxUnit, it.span) }
+        symbols(LitBool) { ParsedFoxEntityStatement(FoxBool(it.node), it.span) }
+        symbols(LitInt) { ParsedFoxEntityStatement(FoxInt(it.node), it.span) }
+        symbols(LitLong) { ParsedFoxEntityStatement(FoxLong(it.node), it.span) }
+        symbols(LitFloat) { ParsedFoxEntityStatement(FoxFloat(it.node), it.span) }
+        symbols(LitDouble) { ParsedFoxEntityStatement(FoxDouble(it.node), it.span) }
+        symbols(LitChar) { ParsedFoxEntityStatement(FoxChar(it.node), it.span) }
+        symbols(LitString) { ParsedFoxEntityStatement(FoxString(it.node), it.span) }
+        
+        symbols(KwThis) { ParsedFoxThis(it.span) }
+        
+        symbols(Identifier) { ParsedFoxSymbol(it, it.span) }
+        
+        symbols(FormattedStringStart, FormattedStringEnd) { st, ed ->
+            ParsedFoxFormattedString(null, mergeSpan(st, ed))
+        }
+        symbols(
+            FormattedStringStart, FormattedStringPartList, FormattedStringEnd,
+        ) { st, parts, ed ->
+            ParsedFoxFormattedString(parts, mergeSpan(st, ed))
+        }
+        
         symbols(ExplicitLambdaLiteral) { it }
-        symbols(FormattedStringStart, FormattedStringEnd) { isRaw, _ ->
-            FoxFormattedString(emptyList(), isRaw)
-        }
-        symbols(FormattedStringStart, FormattedStringPartListHead, FormattedStringEnd) { isRaw, parts, _ ->
-            FoxFormattedString(parts, isRaw)
-        }
     }
     
     rules(PostfixExpression) {
         symbols(PrimaryExpression) { it }
-        symbols(PostfixExpression, Dot, Identifier) { target, _, name ->
-            FoxFieldAccess(target, name)
+        
+        symbols(
+            PostfixExpression, Dot, Identifier,
+        ) { target, dot, name ->
+            ParsedFoxFieldAccess(target, name, mergeSpan(target, dot, name))
         }
-        symbols(PostfixExpression, Dot, LitInt) { target, _, index ->
-            FoxComponentAccess(target, index)
+        symbols(
+            PostfixExpression, IndexArgumentList,
+        ) { target, indices ->
+            ParsedFoxIndexAccess(target, indices, mergeSpan(target, indices))
         }
-        symbols(Identifier, ActualGenericParameterList, ActualParameterList) { name, generics, parameters ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters)
-        }
-        symbols(Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral) { name, generics, parameters, lambda ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, generics, parameters + listOf(null to lambda))
-        }
-        symbols(Identifier, ActualGenericParameterList, LambdaLiteral) { name, generics, lambda ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, generics, listOf(null to lambda))
-        }
-        symbols(Identifier, ActualParameterList) { name, parameters ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters)
-        }
-        symbols(Identifier, ActualParameterList, LambdaLiteral) { name, parameters, lambda ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, null, parameters + listOf(null to lambda))
-        }
-        symbols(Identifier, LambdaLiteral) { name, lambda ->
-            FoxCall(FoxEntityStatement(FoxUnit), name, null, listOf(null to lambda))
-        }
-        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList) { target, _, name, generics, parameters ->
-            FoxCall(target, name, generics, parameters)
-        }
-        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral) { target, _, name, generics, parameters, lambda ->
-            FoxCall(target, name, generics, parameters + listOf(null to lambda))
-        }
-        symbols(PostfixExpression, Dot, Identifier, ActualGenericParameterList, LambdaLiteral) { target, _, name, generics, lambda ->
-            FoxCall(target, name, generics, listOf(null to lambda))
-        }
-        symbols(PostfixExpression, Dot, Identifier, ActualParameterList) { target, _, name, parameters ->
-            FoxCall(target, name, null, parameters)
-        }
-        symbols(PostfixExpression, Dot, Identifier, ActualParameterList, LambdaLiteral) { target, _, name, parameters, lambda ->
-            FoxCall(target, name, null, parameters + listOf(null to lambda))
-        }
-        symbols(PostfixExpression, Dot, Identifier, LambdaLiteral) { target, _, name, lambda ->
-            FoxCall(target, name, null, listOf(null to lambda))
-        }
+        
         symbols(Type, ActualParameterList) { type, parameters ->
-            FoxConstruct(type, parameters)
-        }
-        symbols(Type, ActualParameterList, LambdaLiteral) { type, parameters, lambda ->
-            FoxConstruct(type, parameters + listOf(null to lambda))
+            ParsedFoxConstruct(type, parameters, mergeSpan(type, parameters))
         }
         symbols(Type, LambdaLiteral) { type, lambda ->
-            FoxConstruct(type, listOf(null to lambda))
+            ParsedFoxConstruct(
+                type,
+                ParsedList(
+                    listOf(ParsedPair(null to lambda, lambda.span)),
+                    lambda.span,
+                ),
+                mergeSpan(type, lambda),
+            )
         }
-        symbols(ParenthesizedStatement, ActualParameterList) { method, parameters ->
-            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters)
+        symbols(
+            Type, ActualParameterList, LambdaLiteral,
+        ) { type, parameters, lambda ->
+            ParsedFoxConstruct(
+                type,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(type, parameters, lambda),
+            )
         }
-        symbols(ParenthesizedStatement, ActualParameterList, LambdaLiteral) { method, parameters, lambda ->
-            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, parameters + listOf(null to lambda))
+        
+        symbols(Identifier, ActualParameterList) { name, parameters ->
+            ParsedFoxCall(null, name, null, parameters, mergeSpan(name, parameters))
         }
-        symbols(ParenthesizedStatement, LambdaLiteral) { method, lambda ->
-            FoxIndirectCall(FoxEntityStatement(FoxUnit), method, listOf(null to lambda))
+        symbols(Identifier, LambdaLiteral) { name, lambda ->
+            ParsedFoxCall(
+                null, name, null,
+                ParsedList(
+                    listOf(ParsedPair(null to lambda, lambda.span)),
+                    lambda.span,
+                ),
+                mergeSpan(name, lambda),
+            )
         }
-        symbols(PostfixExpression, Dot, ParenthesizedStatement, ActualParameterList) { target, _, method, parameters ->
-            FoxIndirectCall(target, method, parameters)
+        symbols(
+            Identifier, ActualParameterList, LambdaLiteral,
+        ) { name, parameters, lambda ->
+            ParsedFoxCall(
+                null, name, null,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(name, parameters, lambda),
+            )
         }
-        symbols(PostfixExpression, Dot, ParenthesizedStatement, ActualParameterList, LambdaLiteral) { target, _, method, parameters, lambda ->
-            FoxIndirectCall(target, method, parameters + listOf(null to lambda))
+        symbols(
+            Identifier, ActualGenericParameterList, ActualParameterList,
+        ) { name, generics, parameters ->
+            ParsedFoxCall(null, name, generics, parameters, mergeSpan(name, generics, parameters))
         }
-        symbols(PostfixExpression, Dot, ParenthesizedStatement, LambdaLiteral) { target, _, method, lambda ->
-            FoxIndirectCall(target, method, listOf(null to lambda))
+        symbols(
+            Identifier, ActualGenericParameterList, LambdaLiteral,
+        ) { name, generics, lambda ->
+            ParsedFoxCall(
+                null, name, generics,
+                ParsedList(
+                    listOf(ParsedPair(null to lambda, lambda.span)),
+                    lambda.span,
+                ),
+                mergeSpan(name, generics, lambda),
+            )
+        }
+        symbols(
+            Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral,
+        ) { name, generics, parameters, lambda ->
+            ParsedFoxCall(
+                null, name, generics,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(name, generics, parameters, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, ActualParameterList,
+        ) { target, dot, name, parameters ->
+            ParsedFoxCall(target, name, null, parameters, mergeSpan(target, dot, name, parameters))
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, LambdaLiteral,
+        ) { target, dot, name, lambda ->
+            ParsedFoxCall(
+                target, name, null,
+                ParsedList(
+                    listOf(ParsedPair(null to lambda, lambda.span)),
+                    lambda.span,
+                ),
+                mergeSpan(target, dot, name, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, ActualParameterList, LambdaLiteral,
+        ) { target, dot, name, parameters, lambda ->
+            ParsedFoxCall(
+                target, name, null,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(target, dot, name, parameters, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList,
+        ) { target, dot, name, generics, parameters ->
+            ParsedFoxCall(target, name, generics, parameters, mergeSpan(target, dot, name, generics, parameters))
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, ActualGenericParameterList, LambdaLiteral,
+        ) { target, dot, name, generics, lambda ->
+            ParsedFoxCall(
+                target, name, generics,
+                ParsedList(
+                    listOf(ParsedPair(null to lambda, lambda.span)),
+                    lambda.span,
+                ),
+                mergeSpan(target, dot, name, generics, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, Identifier, ActualGenericParameterList, ActualParameterList, LambdaLiteral,
+        ) { target, dot, name, generics, parameters, lambda ->
+            ParsedFoxCall(
+                target, name, generics,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(target, dot, name, generics, parameters, lambda),
+            )
+        }
+        
+        symbols(ParenthesizedExpression, ActualParameterList) { method, parameters ->
+            ParsedFoxIndirectCall(null, method, parameters, mergeSpan(method, parameters))
+        }
+        symbols(ParenthesizedExpression, LambdaLiteral) { method, lambda ->
+            ParsedFoxIndirectCall(
+                null, method,
+                ParsedList(listOf(ParsedPair(null to lambda, lambda.span)), lambda.span),
+                mergeSpan(method, lambda),
+            )
+        }
+        symbols(
+            ParenthesizedExpression, ActualParameterList, LambdaLiteral,
+        ) { method, parameters, lambda ->
+            ParsedFoxIndirectCall(
+                null, method,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(method, parameters, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, ParenthesizedExpression, ActualParameterList,
+        ) { target, dot, method, parameters ->
+            ParsedFoxIndirectCall(target, method, parameters, mergeSpan(target, dot, method, parameters))
+        }
+        symbols(
+            PostfixExpression, Dot, ParenthesizedExpression, LambdaLiteral,
+        ) { target, dot, method, lambda ->
+            ParsedFoxIndirectCall(
+                target, method,
+                ParsedList(listOf(ParsedPair(null to lambda, lambda.span)), lambda.span),
+                mergeSpan(target, dot, method, lambda),
+            )
+        }
+        symbols(
+            PostfixExpression, Dot, ParenthesizedExpression, ActualParameterList, LambdaLiteral,
+        ) { target, dot, method, parameters, lambda ->
+            ParsedFoxIndirectCall(
+                target, method,
+                ParsedList(
+                    parameters.node + ParsedPair(null to lambda, lambda.span),
+                    mergeSpan(parameters, lambda),
+                ),
+                mergeSpan(target, dot, method, parameters, lambda),
+            )
         }
     }
     
     rules(UnaryExpression) {
         symbols(PostfixExpression) { it }
         symbols(UnaryOperator, UnaryExpression) { operator, node ->
-            FoxUnary(operator, node)
+            ParsedFoxUnary(operator, node, mergeSpan(operator, node))
         }
     }
     
     rules(MultiplicativeExpression) {
         symbols(UnaryExpression) { it }
-        symbols(MultiplicativeExpression, MultiplicativeOperator, UnaryExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            MultiplicativeExpression, MultiplicativeOperator, UnaryExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(AdditiveExpression) {
         symbols(MultiplicativeExpression) { it }
-        symbols(AdditiveExpression, AdditiveOperator, MultiplicativeExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            AdditiveExpression, AdditiveOperator, MultiplicativeExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(ShiftExpression) {
         symbols(AdditiveExpression) { it }
-        symbols(ShiftExpression, ShiftOperator, AdditiveExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            ShiftExpression, ShiftOperator, AdditiveExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(ComparisonExpression) {
         symbols(ShiftExpression) { it }
-        symbols(ComparisonExpression, ComparisonOperator, ShiftExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            ComparisonExpression, ComparisonOperator, ShiftExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(EqualityExpression) {
         symbols(ComparisonExpression) { it }
-        symbols(EqualityExpression, EqualityOperator, ComparisonExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            EqualityExpression, EqualityOperator, ComparisonExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(BitAndExpression) {
         symbols(EqualityExpression) { it }
-        symbols(BitAndExpression, BitAndOperator, EqualityExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            BitAndExpression, BitAndOperator, EqualityExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(BitXorExpression) {
         symbols(BitAndExpression) { it }
-        symbols(BitXorExpression, BitXorOperator, BitAndExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            BitXorExpression, BitXorOperator, BitAndExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(BitOrExpression) {
         symbols(BitXorExpression) { it }
-        symbols(BitOrExpression, BitOrOperator, BitXorExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            BitOrExpression, BitOrOperator, BitXorExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(LogicalAndExpression) {
         symbols(BitOrExpression) { it }
-        symbols(LogicalAndExpression, LogicalAndOperator, BitOrExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            LogicalAndExpression, LogicalAndOperator, BitOrExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
     rules(LogicalOrExpression) {
         symbols(LogicalAndExpression) { it }
-        symbols(LogicalOrExpression, LogicalOrOperator, LogicalAndExpression) { left, operator, right ->
-            FoxBinary(left, operator, right)
+        symbols(
+            LogicalOrExpression, LogicalOrOperator, LogicalAndExpression,
+        ) { left, operator, right ->
+            ParsedFoxBinary(left, operator, right, mergeSpan(left, operator, right))
         }
     }
     
-    rules(AssignableExpression) {
-        symbols(PostfixExpression) { it }
+    rules(FormattedStringPart) {
+        formattedStringText { text, span -> ParsedFoxFormattedText(text, span) }
+        symbols(
+            FormattedExpressionOpen, Statement, FormattedExpressionClose,
+        ) { open, expr, close ->
+            ParsedFoxFormattedExpression(expr, mergeSpan(open, expr, close))
+        }
     }
-    
-    rules(AssignmentExpression) {
-        symbols(LogicalOrExpression) { it }
-        symbols(AssignableExpression, AssignOperator, Statement) { left, operator, right ->
-            FoxAssign(left, operator, right, beforeEvaluation = true)
+    rules(FormattedStringPartList) {
+        symbols(FormattedStringPart) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(FormattedStringPartList, FormattedStringPart) { head, part ->
+            ParsedList(head.node + part, mergeSpan(head, part))
         }
     }
     
-    rules(StatementLine) {
-        symbols(Statement, LineBreak) { statement, _ -> statement }
-        symbols(SingleLineStatementBlock, LineBreak) { statement, _ -> statement }
+    rules(LambdaStatementBlockHead) {
+        symbols(LineBreak, StatementLine) { _, stmt ->
+            ParsedList(listOf(stmt), stmt.span)
+        }
+        symbols(LambdaStatementBlockHead, StatementLine) { head, stmt ->
+            ParsedList(head.node + stmt, mergeSpan(head, stmt))
+        }
     }
+    rules(LambdaBody) {
+        symbols(Statement) { it }
+        symbols(LineBreak, Statement) { _, it -> it }
+        symbols(LambdaStatementBlockHead) { ParsedFoxBlock(null, it, it.span) }
+    }
+    rules(ExplicitLambdaLiteral) {
+        symbols(
+            BraceOpen, Arrow, BraceClose,
+        ) { open, arrow, close ->
+            val span = mergeSpan(open, arrow, close)
+            ParsedFoxLambda(null, ParsedFoxBlock(null, ParsedList(emptyList(), span), span), span)
+        }
+        symbols(
+            BraceOpen, Arrow, LambdaBody, RBrace,
+        ) { open, arrow, body, close ->
+            val span = mergeSpan(open, arrow, body, close)
+            ParsedFoxLambda(null, body, span)
+        }
+        symbols(
+            BraceOpen, LambdaParameterList, Arrow, BraceClose,
+        ) { open, params, arrow, close ->
+            val span = mergeSpan(open, params, arrow, close)
+            ParsedFoxLambda(params, ParsedFoxBlock(null, ParsedList(emptyList(), span), span), span)
+        }
+        symbols(
+            BraceOpen, LambdaParameterList, Arrow, LambdaBody, RBrace,
+        ) { open, params, arrow, body, close ->
+            val span = mergeSpan(open, params, arrow, body, close)
+            ParsedFoxLambda(params, body, span)
+        }
+    }
+    rules(InlineImplicitLambdaLiteral) {
+        symbols(
+            LBrace, Statement, RBrace,
+        ) { open, body, close ->
+            ParsedFoxLambda(null, body, mergeSpan(open, body, close))
+        }
+    }
+    rules(ImplicitLambdaLiteral) {
+        symbols(InlineImplicitLambdaLiteral) { it }
+        symbols(LBrace, BraceClose) { open, close ->
+            val span = mergeSpan(open, close)
+            ParsedFoxLambda(null, ParsedFoxBlock(null, ParsedList(emptyList(), span), span), span)
+        }
+        symbols(
+            BraceOpen, LambdaStatementBlockHead, BraceClose,
+        ) { open, stmts, close ->
+            val span = mergeSpan(open, stmts, close)
+            ParsedFoxLambda(null, ParsedFoxBlock(null, stmts, span), span)
+        }
+    }
+    rules(LambdaLiteral) {
+        symbols(ExplicitLambdaLiteral) { it }
+        symbols(ImplicitLambdaLiteral) { it }
+    }
+    
+    rules(Label) { symbols(Hash, Identifier) { _, it -> it } }
     
     rules(StatementBlockHead) {
-        symbols(BraceOpen, StatementLine) { _, it -> listOf(it) }
-        symbols(StatementBlockHead, StatementLine) { head, it -> head + it }
+        symbols(BraceOpen, StatementLine) { open, it ->
+            ParsedList(listOf(it), mergeSpan(open, it))
+        }
+        symbols(StatementBlockHead, StatementLine) { head, it ->
+            ParsedList(head.node + it, mergeSpan(head, it))
+        }
     }
     rules(StatementBlockCore) {
-        symbols(LBrace, BraceClose) { _, _ -> emptyList() }
-        symbols(StatementBlockHead, BraceClose) { head, _ -> head }
+        symbols(LBrace, BraceClose) { open, close ->
+            ParsedList(emptyList(), mergeSpan(open, close))
+        }
+        symbols(StatementBlockHead, BraceClose) { head, close ->
+            ParsedList(head.node, mergeSpan(head, close))
+        }
+    }
+    rules(StatementBlock) {
+        symbols(StatementBlockCore) {
+            ParsedFoxBlock(null, it, it.span)
+        }
+        symbols(Label, StatementBlockCore) { label, core ->
+            ParsedFoxBlock(label, core, mergeSpan(label, core))
+        }
     }
     
     rules(Statement) {
-        symbols(AssignmentExpression) { it }
-        symbols(Identifier, Colon, Type) { name, _, type -> FoxTypeBinding(name, type) }
-        symbols(KwBreak) { FoxBreak(null) }
-        symbols(KwBreak, Label) { _, label -> FoxBreak(label) }
-        symbols(KwContinue) { FoxContinue(null) }
-        symbols(KwContinue, Label) { _, label -> FoxContinue(label) }
-        symbols(KwReturn) { FoxReturn(null) }
-        symbols(KwReturn, Statement) { _, value -> FoxReturn(value) }
-        symbols(KwYield, Statement) { _, value -> FoxYield(null, value) }
-        symbols(KwYield, Label, Statement) { _, label, value -> FoxYield(label, value) }
+        symbols(LogicalOrExpression) { it }
+        
+        symbols(
+            PostfixExpression, AssignOperator, Statement,
+        ) { left, operator, right ->
+            ParsedFoxAssign(left, operator, right, beforeEvaluation = true, mergeSpan(left, operator, right))
+        }
+        
         symbols(StatementBlock) { it }
-        symbols(IfCore) { core -> FoxIf(null, core.condition, core.thenBody, core.elseBody) }
-        symbols(WhileCore) { core -> FoxWhile(null, core.condition, core.body) }
-        symbols(DoWhileCore) { core -> FoxDoWhile(null, core.body, core.condition) }
-        symbols(WhenCore) { core -> FoxWhen(null, core.value, core.cases) }
-        symbols(Label, IfCore) { label, core -> FoxIf(label, core.condition, core.thenBody, core.elseBody) }
-        symbols(Label, WhileCore) { label, core -> FoxWhile(label, core.condition, core.body) }
-        symbols(Label, DoWhileCore) { label, core -> FoxDoWhile(label, core.body, core.condition) }
-        symbols(Label, WhenCore) { label, core -> FoxWhen(label, core.value, core.cases) }
+        
+        symbols(
+            Identifier, Colon, Type,
+        ) { name, colon, type ->
+            ParsedFoxTypeBinding(name, type, mergeSpan(name, colon, type))
+        }
+        
+        symbols(KwBreak) {
+            ParsedFoxBreak(null, it.span)
+        }
+        symbols(KwBreak, Label) { kw, label ->
+            ParsedFoxBreak(label, mergeSpan(kw, label))
+        }
+        symbols(KwContinue) {
+            ParsedFoxContinue(null, it.span)
+        }
+        symbols(KwContinue, Label) { kw, label ->
+            ParsedFoxContinue(label, mergeSpan(kw, label))
+        }
+        symbols(KwReturn) {
+            ParsedFoxReturn(null, it.span)
+        }
+        symbols(KwReturn, LogicalOrExpression) { kw, value ->
+            ParsedFoxReturn(value, mergeSpan(kw, value))
+        }
+        symbols(KwYield, LogicalOrExpression) { kw, value ->
+            ParsedFoxYield(null, value, mergeSpan(kw, value))
+        }
+        symbols(
+            KwYield, Label, LogicalOrExpression,
+        ) { kw, label, value ->
+            ParsedFoxYield(label, value, mergeSpan(kw, label, value))
+        }
+        
+        symbols(IfCore) { core ->
+            ParsedFoxIf(null, core.condition, core.thenBody, core.elseBody, core.span)
+        }
+        symbols(WhileCore) { core ->
+            ParsedFoxWhile(null, core.condition, core.body, core.span)
+        }
+        symbols(DoWhileCore) { core ->
+            ParsedFoxDoWhile(null, core.body, core.condition, core.span)
+        }
+        symbols(WhenCore) { core ->
+            ParsedFoxWhen(null, core.value, core.cases, core.span)
+        }
+        symbols(Label, IfCore) { label, core ->
+            ParsedFoxIf(label, core.condition, core.thenBody, core.elseBody, mergeSpan(label, core))
+        }
+        symbols(Label, WhileCore) { label, core ->
+            ParsedFoxWhile(label, core.condition, core.body, mergeSpan(label, core))
+        }
+        symbols(Label, DoWhileCore) { label, core ->
+            ParsedFoxDoWhile(label, core.body, core.condition, mergeSpan(label, core))
+        }
+        symbols(Label, WhenCore) { label, core ->
+            ParsedFoxWhen(label, core.value, core.cases, mergeSpan(label, core))
+        }
     }
-    
-    rules(StatementBlock) {
-        symbols(StatementBlockCore) { FoxBlock(null, it) }
-        symbols(Label, StatementBlockCore) { label, it -> FoxBlock(label, it) }
-    }
-    
-    rules(ControlBody) {
-        symbols(Statement) { it }
-        symbols(LineBreak, Statement) { _, it -> it }
+    rules(StatementLine) {
+        symbols(Statement, LineBreak) { stmt, _ -> stmt }
     }
     
     rules(IfCore) {
         symbols(
-            KwIf,
-            ParenthesizedStatement,
-            ControlBody,
-        ) { _, condition, body -> FoxIf(null, condition, body, null) }
+            KwIf, ParenthesizedExpression, Statement,
+        ) { kw, condition, body ->
+            ParsedFoxIf(null, condition, body, null, mergeSpan(kw, condition, body))
+        }
         symbols(
-            KwIf,
-            ParenthesizedStatement,
-            ControlBody,
-            KwElse,
-            ControlBody,
-        ) { _, condition, thenBody, _, elseBody -> FoxIf(null, condition, thenBody, elseBody) }
+            KwIf, ParenthesizedExpression, Statement, KwElse, Statement,
+        ) { kw0, condition, thenBody, kw1, elseBody ->
+            ParsedFoxIf(null, condition, thenBody, elseBody, mergeSpan(kw0, condition, thenBody, kw1, elseBody))
+        }
     }
     
     rules(WhileCore) {
         symbols(
-            KwWhile,
-            ParenthesizedStatement,
-            ControlBody,
-        ) { _, condition, body -> FoxWhile(null, condition, body) }
+            KwWhile, ParenthesizedExpression, Statement,
+        ) { kw, condition, body ->
+            ParsedFoxWhile(null, condition, body, mergeSpan(kw, condition, body))
+        }
     }
     
     rules(DoWhileCore) {
         symbols(
-            KwDo,
-            ControlBody,
-            KwWhile,
-            ParenthesizedStatement,
-        ) { _, body, _, condition -> FoxDoWhile(null, body, condition) }
+            KwDo, Statement, KwWhile, ParenthesizedExpression,
+        ) { kw0, body, kw1, condition ->
+            ParsedFoxDoWhile(null, body, condition, mergeSpan(kw0, body, kw1, condition))
+        }
     }
     
-    rules(WhenCaseConditionListHead) {
-        symbols(Statement) { listOf(it) }
-        symbols(WhenCaseConditionListHead, Comma, Statement) { head, _, it -> head + it }
-    }
     rules(WhenCaseConditionList) {
-        symbols(WhenCaseConditionListHead, Arrow) { it, _ -> it }
+        symbols(LogicalOrExpression) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(
+            WhenCaseConditionList, Comma, LogicalOrExpression,
+        ) { head, comma, it ->
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
+        }
     }
-    
     rules(WhenCase) {
         symbols(
-            WhenCaseConditionList,
-            ControlBody,
-        ) { conditions, body -> FoxCase(conditions, body) }
+            WhenCaseConditionList, Arrow, Statement,
+        ) { conditions, arrow, body ->
+            ParsedFoxCase(conditions, body, mergeSpan(conditions, arrow, body))
+        }
         symbols(
-            KwElse,
-            Arrow,
-            ControlBody,
-        ) { _, _, body -> FoxCase(emptyList(), body) }
+            KwElse, Arrow, Statement,
+        ) { kw, arrow, body ->
+            ParsedFoxCase(null, body, mergeSpan(kw, arrow, body))
+        }
     }
-    
     rules(WhenCaseLine) {
         symbols(WhenCase, LineBreak) { case, _ -> case }
     }
-    
     rules(WhenCaseListHead) {
-        symbols(WhenCaseLine) { listOf(it) }
-        symbols(WhenCaseListHead, WhenCaseLine) { head, it -> head + it }
+        symbols(WhenCaseLine) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(WhenCaseListHead, WhenCaseLine) { head, it ->
+            ParsedList(head.node + it, mergeSpan(head, it))
+        }
     }
     rules(WhenCaseList) {
-        symbols(LBrace, BraceClose) { _, _ -> emptyList() }
-        symbols(BraceOpen, WhenCaseListHead, BraceClose) { _, it, _ -> it }
+        symbols(
+            BraceOpen, WhenCaseListHead, BraceClose,
+        ) { open, it, close ->
+            ParsedList(it.node, mergeSpan(open, it, close))
+        }
     }
     
     rules(WhenCore) {
+        symbols(KwWhen, WhenCaseList) { kw, cases ->
+            ParsedFoxWhen(null, null, cases, mergeSpan(kw, cases))
+        }
         symbols(
-            KwWhen,
-            WhenCaseList,
-        ) { _, cases -> FoxWhen(null, null, cases) }
-        symbols(
-            KwWhen,
-            ParenthesizedStatement,
-            WhenCaseList,
-        ) { _, value, cases -> FoxWhen(null, value, cases) }
+            KwWhen, ParenthesizedExpression, WhenCaseList,
+        ) { kw, value, cases ->
+            ParsedFoxWhen(null, value, cases, mergeSpan(kw, value, cases))
+        }
     }
     
     rules(TypeAlias) {
         symbols(
-            KwType,
-            TypeName,
-            FormalGenericParameterNoConstraintsList,
-            Assign,
-            Type,
-        ) { _, name, generics, _, type -> FoxTypeAlias(name, generics, type) }
-        symbols(
-            KwType,
-            TypeName,
-            Assign,
-            Type,
-        ) { _, name, _, type -> FoxTypeAlias(name, emptyOrderedSet(), type) }
-    }
-    
-    rules(ThisTypeQualifier) { symbols(Type, Dot) { type, _ -> type } }
-    rules(ReturnTypeClause) { symbols(Colon, Type) { _, type -> type } }
-    
-    rules(MethodHead) {
-        symbols(
-            KwDef,
-            FormalGenericParameterList,
-            ThisTypeQualifier,
-            Identifier,
-            FormalParameterList,
-        ) { _, generics, thisType, name, parameters ->
-            FoxMethodDefinition(generics, thisType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+            KwType, TypeName, PlainAssign, Type,
+        ) { kw, name, assign, type ->
+            ParsedFoxTypeAlias(name, null, type, mergeSpan(kw, name, assign, type))
         }
         symbols(
-            KwDef,
-            FormalGenericParameterList,
-            Identifier,
-            FormalParameterList,
-        ) { _, generics, name, parameters ->
-            FoxMethodDefinition(generics, FoxUnitType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
-        }
-        symbols(
-            KwDef,
-            ThisTypeQualifier,
-            Identifier,
-            FormalParameterList,
-        ) { _, thisType, name, parameters ->
-            FoxMethodDefinition(emptyOrderedMap(), thisType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
-        }
-        symbols(
-            KwDef,
-            Identifier,
-            FormalParameterList,
-        ) { _, name, parameters ->
-            FoxMethodDefinition(emptyOrderedMap(), FoxUnitType, name, parameters, FoxUnitType, FoxEntityStatement(FoxUnit))
+            KwType, TypeName, FormalGenericParameterNoConstraintsList, PlainAssign, Type,
+        ) { kw, name, generics, assign, type ->
+            ParsedFoxTypeAlias(name, generics, type, mergeSpan(kw, name, generics, assign, type))
         }
     }
     
     rules(MethodDefinition) {
         symbols(
-            MethodHead,
-            ReturnTypeClause,
-            StatementBlock,
-        ) { head, returnType, body -> FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, returnType, body) }
+            KwDef, Identifier, FormalParameterList, StatementBlock,
+        ) { kw, name, parameters, body ->
+            val span = mergeSpan(kw, name, parameters, body)
+            ParsedFoxMethodDefinition(null, null, name, parameters, null, body, span)
+        }
         symbols(
-            MethodHead,
-            StatementBlock,
-        ) { head, body -> FoxMethodDefinition(head.generics, head.thisType, head.name, head.parameters, FoxUnitType, body) }
+            KwDef, Type, Dot, Identifier, FormalParameterList, StatementBlock,
+        ) { kw, thisType, dot, name, parameters, body ->
+            val span = mergeSpan(kw, thisType, dot, name, parameters, body)
+            ParsedFoxMethodDefinition(null, thisType, name, parameters, null, body, span)
+        }
+        symbols(
+            KwDef, FormalGenericParameterList, Identifier, FormalParameterList, StatementBlock,
+        ) { kw, generics, name, parameters, body ->
+            val span = mergeSpan(kw, generics, name, parameters, body)
+            ParsedFoxMethodDefinition(generics, null, name, parameters, null, body, span)
+        }
+        symbols(
+            KwDef, FormalGenericParameterList, Type, Dot, Identifier, FormalParameterList, StatementBlock,
+        ) { kw, generics, thisType, dot, name, parameters, body ->
+            val span = mergeSpan(kw, generics, thisType, dot, name, parameters, body)
+            ParsedFoxMethodDefinition(generics, thisType, name, parameters, null, body, span)
+        }
+        symbols(
+            KwDef, Identifier, FormalParameterList, Colon, Type, StatementBlock,
+        ) { kw, name, parameters, colon, returnType, body ->
+            val span = mergeSpan(kw, name, parameters, colon, returnType, body)
+            ParsedFoxMethodDefinition(null, null, name, parameters, returnType, body, span)
+        }
+        symbols(
+            KwDef, Type, Dot, Identifier, FormalParameterList, Colon, Type, StatementBlock,
+        ) { kw, thisType, dot, name, parameters, colon, returnType, body ->
+            val span = mergeSpan(kw, thisType, dot, name, parameters, colon, returnType, body)
+            ParsedFoxMethodDefinition(null, thisType, name, parameters, returnType, body, span)
+        }
+        symbols(
+            KwDef, FormalGenericParameterList, Identifier, FormalParameterList, Colon, Type, StatementBlock,
+        ) { kw, generics, name, parameters, colon, returnType, body ->
+            val span = mergeSpan(kw, generics, name, parameters, colon, returnType, body)
+            ParsedFoxMethodDefinition(generics, null, name, parameters, returnType, body, span)
+        }
+        symbols(
+            KwDef, FormalGenericParameterList, Type, Dot, Identifier, FormalParameterList, Colon, Type, StatementBlock,
+        ) { kw, generics, thisType, dot, name, parameters, colon, returnType, body ->
+            val span = mergeSpan(kw, generics, thisType, dot, name, parameters, colon, returnType, body)
+            ParsedFoxMethodDefinition(generics, thisType, name, parameters, returnType, body, span)
+        }
     }
     
     rules(FileElement) {
         symbols(TypeAlias) { it }
         symbols(MethodDefinition) { it }
     }
-    
     rules(FileElementLine) {
         symbols(FileElement, LineBreak) { element, _ -> element }
     }
-    
     rules(FileElementList) {
-        symbols(FileElementLine) { listOf(it) }
-        symbols(FileElementList, FileElementLine) { head, it -> head + it }
+        symbols(FileElementLine) {
+            ParsedList(listOf(it), it.span)
+        }
+        symbols(FileElementList, FileElementLine) { head, it ->
+            ParsedList(head.node + it, mergeSpan(head, it))
+        }
     }
     rules(File) {
-        symbols(FileElementList) { FoxFile(it) }
-    }
-}
-
-internal sealed interface ParsedMethodTypeArgument {
-    data class This(val type: FoxType) : ParsedMethodTypeArgument
-    data class Return(val type: FoxType) : ParsedMethodTypeArgument
-    data class Parameter(val name: String, val type: FoxType) : ParsedMethodTypeArgument
-    data class AnonymousType(val type: FoxType) : ParsedMethodTypeArgument
-}
-
-private fun List<String>.toSet(itemName: String): GrammarRuleFactoryResult<Set<String>> {
-    val result = LinkedHashSet<String>()
-    forEach { name ->
-        if (name in result) return factoryError("Duplicate $itemName name '$name'")
-        result += name
-    }
-    return factorySuccess(result)
-}
-
-private fun <V : Any> List<Pair<String, V>>.toMap(itemName: String): GrammarRuleFactoryResult<Map<String, V>> {
-    val result = LinkedHashMap<String, V>()
-    forEach { (name, value) ->
-        if (name in result) return factoryError("Duplicate $itemName name '$name'")
-        result[name] = value
-    }
-    return factorySuccess(result)
-}
-
-private fun List<String>.toOrderedSet(itemName: String): GrammarRuleFactoryResult<OrderedSet<String>> {
-    val result = mutableOrderedSetOf<String>()
-    forEach { name ->
-        if (name in result) return factoryError("Duplicate $itemName name '$name'")
-        result += name
-    }
-    return factorySuccess(result)
-}
-
-private fun <V : Any> List<Pair<String, V>>.toOrderedMap(itemName: String): GrammarRuleFactoryResult<OrderedMap<String, V>> {
-    val result = mutableOrderedMapOf<String, V>()
-    forEach { (name, value) ->
-        if (name in result) return factoryError("Duplicate $itemName name '$name'")
-        result[name] = value
-    }
-    return factorySuccess(result)
-}
-
-private fun List<ParsedMethodTypeArgument>.toFoxMethodType(): GrammarRuleFactoryResult<FoxMethodType> {
-    if (count { it is ParsedMethodTypeArgument.This } > 1) {
-        return factoryError("Method type cannot declare more than one 'this' type")
-    }
-    if (count { it is ParsedMethodTypeArgument.Return } > 1) {
-        return factoryError("Method type cannot declare more than one 'return' type")
-    }
-    forEachIndexed { index, item ->
-        if (item is ParsedMethodTypeArgument.This && index != 0) {
-            return factoryError("Method type 'this' must be the first item")
-        }
-        if (item is ParsedMethodTypeArgument.Return && index != lastIndex) {
-            return factoryError("Method type 'return' must be the last item")
+        symbols(FileElementList) {
+            ParsedFoxFile(it.node, it.span)
         }
     }
-    if (size == 1 && firstOrNull() is ParsedMethodTypeArgument.AnonymousType) {
-        return factoryError("Method<T> is ambiguous; use 'this: T' or 'return: T' explicitly")
-    }
-    
-    var start = 0
-    val thisType = when (val first = firstOrNull()) {
-        is ParsedMethodTypeArgument.This -> {
-            start = 1
-            first.type
-        }
-        is ParsedMethodTypeArgument.AnonymousType -> {
-            start = 1
-            first.type
-        }
-        else -> FoxUnitType
-    }
-    
-    var endExclusive = size
-    val returnType = when (val last = lastOrNull()) {
-        is ParsedMethodTypeArgument.Return -> {
-            endExclusive -= 1
-            last.type
-        }
-        is ParsedMethodTypeArgument.AnonymousType -> {
-            endExclusive -= 1
-            last.type
-        }
-        else -> FoxUnitType
-    }
-    
-    val parameters = mutableOrderedMapOf<String, FoxType>()
-    subList(start, endExclusive).forEach { item ->
-        when (item) {
-            is ParsedMethodTypeArgument.Parameter -> {
-                if (item.name in parameters) {
-                    return factoryError("Duplicate method type parameter name '${item.name}'")
-                }
-                parameters[item.name] = item.type
-            }
-            is ParsedMethodTypeArgument.This ->
-                return factoryError("Method type 'this' must be the first item")
-            is ParsedMethodTypeArgument.Return ->
-                return factoryError("Method type 'return' must be the last item")
-            is ParsedMethodTypeArgument.AnonymousType ->
-                return factoryError("Anonymous method type items may only appear as leading 'this' or trailing 'return'")
-        }
-    }
-    return factorySuccess(FoxMethodType(thisType, parameters, returnType))
 }

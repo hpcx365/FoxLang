@@ -28,16 +28,9 @@ fun interface TerminalMatcher<N, U> {
 }
 
 data class TerminalMatch<N>(
-    val span: SourceSpan,
     val node: N,
+    val span: SourceSpan,
 )
-
-fun <N> factorySuccess(node: N): GrammarRuleFactoryResult<N> = GrammarRuleFactorySuccess(node)
-fun factoryError(message: String): GrammarRuleFactoryResult<Nothing> = GrammarRuleFactoryFailure(message)
-
-sealed interface GrammarRuleFactoryResult<out N>
-data class GrammarRuleFactorySuccess<N>(val node: N) : GrammarRuleFactoryResult<N>
-data class GrammarRuleFactoryFailure(val message: String) : GrammarRuleFactoryResult<Nothing>
 
 sealed interface GrammarRule<N> {
     
@@ -47,7 +40,7 @@ sealed interface GrammarRule<N> {
     
     data class MatchSymbols<N>(
         val components: List<GrammarSymbol<*>>,
-        val factory: (List<*>) -> GrammarRuleFactoryResult<N>,
+        val factory: (List<*>) -> N,
     ) : GrammarRule<N> {
         init {
             require(components.isNotEmpty())
@@ -90,16 +83,6 @@ class GrammarRuleSetBuilder<N> {
         comp0: GrammarSymbol<N0>,
         factory: (N0) -> N,
     ) {
-        symbolsResult(comp0) { item0 ->
-            factorySuccess(factory(item0))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        factory: (N0) -> GrammarRuleFactoryResult<N>,
-    ) {
         set += GrammarRule.MatchSymbols(listOf(comp0)) { list ->
             factory(list[0] as N0)
         }
@@ -110,17 +93,6 @@ class GrammarRuleSetBuilder<N> {
         comp0: GrammarSymbol<N0>,
         comp1: GrammarSymbol<N1>,
         factory: (N0, N1) -> N,
-    ) {
-        symbolsResult(comp0, comp1) { item0, item1 ->
-            factorySuccess(factory(item0, item1))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        factory: (N0, N1) -> GrammarRuleFactoryResult<N>,
     ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1)) { list ->
             factory(list[0] as N0, list[1] as N1)
@@ -133,18 +105,6 @@ class GrammarRuleSetBuilder<N> {
         comp1: GrammarSymbol<N1>,
         comp2: GrammarSymbol<N2>,
         factory: (N0, N1, N2) -> N,
-    ) {
-        symbolsResult(comp0, comp1, comp2) { item0, item1, item2 ->
-            factorySuccess(factory(item0, item1, item2))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        comp2: GrammarSymbol<N2>,
-        factory: (N0, N1, N2) -> GrammarRuleFactoryResult<N>,
     ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2)) { list ->
             factory(list[0] as N0, list[1] as N1, list[2] as N2)
@@ -159,19 +119,6 @@ class GrammarRuleSetBuilder<N> {
         comp3: GrammarSymbol<N3>,
         factory: (N0, N1, N2, N3) -> N,
     ) {
-        symbolsResult(comp0, comp1, comp2, comp3) { item0, item1, item2, item3 ->
-            factorySuccess(factory(item0, item1, item2, item3))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2, N3> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        comp2: GrammarSymbol<N2>,
-        comp3: GrammarSymbol<N3>,
-        factory: (N0, N1, N2, N3) -> GrammarRuleFactoryResult<N>,
-    ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3)) { list ->
             factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3)
         }
@@ -185,20 +132,6 @@ class GrammarRuleSetBuilder<N> {
         comp3: GrammarSymbol<N3>,
         comp4: GrammarSymbol<N4>,
         factory: (N0, N1, N2, N3, N4) -> N,
-    ) {
-        symbolsResult(comp0, comp1, comp2, comp3, comp4) { item0, item1, item2, item3, item4 ->
-            factorySuccess(factory(item0, item1, item2, item3, item4))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2, N3, N4> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        comp2: GrammarSymbol<N2>,
-        comp3: GrammarSymbol<N3>,
-        comp4: GrammarSymbol<N4>,
-        factory: (N0, N1, N2, N3, N4) -> GrammarRuleFactoryResult<N>,
     ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4)) { list ->
             factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4)
@@ -215,21 +148,6 @@ class GrammarRuleSetBuilder<N> {
         comp5: GrammarSymbol<N5>,
         factory: (N0, N1, N2, N3, N4, N5) -> N,
     ) {
-        symbolsResult(comp0, comp1, comp2, comp3, comp4, comp5) { item0, item1, item2, item3, item4, item5 ->
-            factorySuccess(factory(item0, item1, item2, item3, item4, item5))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2, N3, N4, N5> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        comp2: GrammarSymbol<N2>,
-        comp3: GrammarSymbol<N3>,
-        comp4: GrammarSymbol<N4>,
-        comp5: GrammarSymbol<N5>,
-        factory: (N0, N1, N2, N3, N4, N5) -> GrammarRuleFactoryResult<N>,
-    ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5)) { list ->
             factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5)
         }
@@ -245,22 +163,6 @@ class GrammarRuleSetBuilder<N> {
         comp5: GrammarSymbol<N5>,
         comp6: GrammarSymbol<N6>,
         factory: (N0, N1, N2, N3, N4, N5, N6) -> N,
-    ) {
-        symbolsResult(comp0, comp1, comp2, comp3, comp4, comp5, comp6) { item0, item1, item2, item3, item4, item5, item6 ->
-            factorySuccess(factory(item0, item1, item2, item3, item4, item5, item6))
-        }
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2, N3, N4, N5, N6> symbolsResult(
-        comp0: GrammarSymbol<N0>,
-        comp1: GrammarSymbol<N1>,
-        comp2: GrammarSymbol<N2>,
-        comp3: GrammarSymbol<N3>,
-        comp4: GrammarSymbol<N4>,
-        comp5: GrammarSymbol<N5>,
-        comp6: GrammarSymbol<N6>,
-        factory: (N0, N1, N2, N3, N4, N5, N6) -> GrammarRuleFactoryResult<N>,
     ) {
         set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6)) { list ->
             factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6)
@@ -279,13 +181,13 @@ class GrammarRuleSetBuilder<N> {
         comp7: GrammarSymbol<N7>,
         factory: (N0, N1, N2, N3, N4, N5, N6, N7) -> N,
     ) {
-        symbolsResult(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7) { item0, item1, item2, item3, item4, item5, item6, item7 ->
-            factorySuccess(factory(item0, item1, item2, item3, item4, item5, item6, item7))
+        set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7)) { list ->
+            factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6, list[7] as N7)
         }
     }
     
     @Suppress("UNCHECKED_CAST")
-    fun <N0, N1, N2, N3, N4, N5, N6, N7> symbolsResult(
+    fun <N0, N1, N2, N3, N4, N5, N6, N7, N8> symbols(
         comp0: GrammarSymbol<N0>,
         comp1: GrammarSymbol<N1>,
         comp2: GrammarSymbol<N2>,
@@ -294,10 +196,30 @@ class GrammarRuleSetBuilder<N> {
         comp5: GrammarSymbol<N5>,
         comp6: GrammarSymbol<N6>,
         comp7: GrammarSymbol<N7>,
-        factory: (N0, N1, N2, N3, N4, N5, N6, N7) -> GrammarRuleFactoryResult<N>,
+        comp8: GrammarSymbol<N8>,
+        factory: (N0, N1, N2, N3, N4, N5, N6, N7, N8) -> N,
     ) {
-        set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7)) { list ->
-            factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6, list[7] as N7)
+        set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7, comp8)) { list ->
+            factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6, list[7] as N7, list[8] as N8)
+        }
+    }
+    
+    @Suppress("UNCHECKED_CAST")
+    fun <N0, N1, N2, N3, N4, N5, N6, N7, N8, N9> symbols(
+        comp0: GrammarSymbol<N0>,
+        comp1: GrammarSymbol<N1>,
+        comp2: GrammarSymbol<N2>,
+        comp3: GrammarSymbol<N3>,
+        comp4: GrammarSymbol<N4>,
+        comp5: GrammarSymbol<N5>,
+        comp6: GrammarSymbol<N6>,
+        comp7: GrammarSymbol<N7>,
+        comp8: GrammarSymbol<N8>,
+        comp9: GrammarSymbol<N9>,
+        factory: (N0, N1, N2, N3, N4, N5, N6, N7, N8, N9) -> N,
+    ) {
+        set += GrammarRule.MatchSymbols(listOf(comp0, comp1, comp2, comp3, comp4, comp5, comp6, comp7, comp8, comp9)) { list ->
+            factory(list[0] as N0, list[1] as N1, list[2] as N2, list[3] as N3, list[4] as N4, list[5] as N5, list[6] as N6, list[7] as N7, list[8] as N8, list[9] as N9)
         }
     }
 }

@@ -11,9 +11,7 @@ class Parser<N>(
     val start: GrammarSymbol<N>,
 ) {
     
-    fun parse(source: Source<*>): N? {
-        return (analyze(source).buildResult as? ParseContextBuildSuccess)?.node
-    }
+    fun parse(source: Source<*>) = analyze(source).buildResult
     
     fun analyze(source: Source<*>): ParseAnalysis<N> {
         val context = ParseContext(grammar, source)
@@ -34,7 +32,7 @@ data class ParseAnalysis<N>(
     val start: GrammarSymbol<N>,
     val source: Source<*>,
     val context: ParseContext,
-    val buildResult: ParseContextBuildResult<N>,
+    val buildResult: Opt<N>,
 )
 
 data class ParseMatch<N>(
@@ -83,22 +81,6 @@ enum class ParseMatchType {
         Synthetic -> false
     }
 }
-
-sealed interface ParseContextBuildResult<out N>
-
-data class ParseContextBuildSuccess<N>(
-    val node: N,
-) : ParseContextBuildResult<N>
-
-data class ParseContextBuildFailure(
-    val errors: Set<GrammarRuleFactoryError>,
-) : ParseContextBuildResult<Nothing>
-
-data class GrammarRuleFactoryError(
-    val symbol: GrammarSymbol<*>,
-    val span: SourceSpan,
-    val message: String,
-)
 
 class ParseContext(val grammar: Grammar, val source: Source<*>) {
     
@@ -216,19 +198,10 @@ class ParseContext(val grammar: Grammar, val source: Source<*>) {
     }
     
     @Suppress("UNCHECKED_CAST")
-    fun <N> build(symbol: GrammarSymbol<N>, span: SourceSpan = source.span): ParseContextBuildResult<N> {
-        val errors = mutableSetOf<GrammarRuleFactoryError>()
-        build(symbol, span, errors).ifPresent { node ->
-            return ParseContextBuildSuccess(node)
-        }
-        return ParseContextBuildFailure(errors)
-    }
-    
-    @Suppress("UNCHECKED_CAST")
-    private fun <N> build(symbol: GrammarSymbol<N>, span: SourceSpan, errors: MutableSet<GrammarRuleFactoryError>): Opt<N> {
+    fun <N> build(symbol: GrammarSymbol<N>, span: SourceSpan = source.span): Opt<N> {
         val candidates = (matches[symbol to span] ?: return none())
             .asSequence()
-            .map { build(it, errors) }
+            .map { build(it) }
             .filter { it.isPresent() }
             .map { it.value() as N }
             .toList()
@@ -238,33 +211,21 @@ class ParseContext(val grammar: Grammar, val source: Source<*>) {
     }
     
     @Suppress("UNCHECKED_CAST")
-    private fun <N> build(match: ParseMatch<N>, errors: MutableSet<GrammarRuleFactoryError>): Opt<N> {
+    private fun <N> build(match: ParseMatch<N>): Opt<N> {
         if (!match.matchType.isBuildable()) return none()
         return when (val rule = checkNotNull(match.grammarRule)) {
-            is GrammarRule.MatchTerminal<*, *> -> {
-                some(terminalNodes.getValue(rule to match.span) as N)
-            }
-            is GrammarRule.MatchSymbols -> {
-                when (
-                    val result = rule.factory(
-                        rule.components.zip(match.segments).map { (component, segment) ->
-                            val node = build(component, segment, errors)
-                            if (node.isEmpty()) return none()
-                            node.value() as N
-                        },
-                    )
-                ) {
-                    is GrammarRuleFactorySuccess -> some(result.node)
-                    is GrammarRuleFactoryFailure -> {
-                        errors += GrammarRuleFactoryError(
-                            symbol = match.symbol,
-                            span = match.span,
-                            message = result.message,
-                        )
-                        none()
-                    }
-                }
-            }
+            is GrammarRule.MatchTerminal<*, *> -> some(
+                terminalNodes.getValue(rule to match.span) as N,
+            )
+            is GrammarRule.MatchSymbols -> some(
+                rule.factory(
+                    rule.components.zip(match.segments).map { (component, segment) ->
+                        val node = build(component, segment)
+                        if (node.isEmpty()) return none()
+                        node.value() as N
+                    },
+                ),
+            )
         }
     }
     

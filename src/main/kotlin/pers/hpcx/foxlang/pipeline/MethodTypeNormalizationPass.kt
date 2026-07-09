@@ -42,8 +42,11 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
         )
         is FoxTypeBinding -> FoxTypeBinding(statement.name, normalizeType(method, statement.type))
         is FoxAssign -> FoxAssign(statement.left, statement.operator, normalizeStatement(method, statement.right), statement.beforeEvaluation)
-        is FoxComponentAccess -> FoxComponentAccess(normalizeStatement(method, statement.target), statement.index)
         is FoxFieldAccess -> FoxFieldAccess(normalizeStatement(method, statement.target), statement.name)
+        is FoxIndexAccess -> FoxIndexAccess(
+            normalizeStatement(method, statement.target),
+            statement.indices.map { normalizeStatement(method, it) },
+        )
         is FoxFormattedString -> FoxFormattedString(
             statement.parts.map { part ->
                 when (part) {
@@ -51,7 +54,6 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
                     is FoxFormattedExpression -> FoxFormattedExpression(normalizeStatement(method, part.expression))
                 }
             },
-            statement.isRaw,
         )
         is FoxLambda -> FoxLambda(
             statement.parameters?.map { (name, type) -> name to type?.let { normalizeType(method, it) } },
@@ -84,7 +86,7 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
             statement.value?.let { normalizeStatement(method, it) },
             statement.cases.map { case ->
                 FoxCase(
-                    case.conditions.map { normalizeStatement(method, it) },
+                    case.conditions?.map { normalizeStatement(method, it) },
                     normalizeStatement(method, case.body),
                 )
             },

@@ -1,6 +1,5 @@
 package pers.hpcx.foxlang.frontend.fox
 
-import pers.hpcx.foxlang.ast.FoxFile
 import pers.hpcx.foxlang.frontend.common.*
 
 data class FoxSymbolDiagnosticProfile(
@@ -38,12 +37,12 @@ object FoxDiagnosticScoringStrategy : DiagnosticScoringStrategy {
             symbols.forEach { register(it, profile) }
         }
         
-        Keywords.forEach { (string, symbol) -> register(symbol, keywordToken.copy(label = string)) }
-        Punctuations.forEach { (string, symbol) -> register(symbol, delimiterToken.copy(label = string)) }
-        Operators.forEach { (string, symbol) -> register(symbol, operatorToken.copy(label = string)) }
+        FoxKeywordsByText.forEach { (string, symbol) -> register(symbol, keywordToken.copy(label = string)) }
+        FoxPunctuationSymbolsByText.forEach { (string, symbol) -> register(symbol, delimiterToken.copy(label = string)) }
+        FoxOperatorTokenSymbolsByText.forEach { (string, symbol) -> register(symbol, operatorToken.copy(label = string)) }
         
         registerAll(FoxLexicalSymbols, lexical)
-        registerAll(FoxDiagnosticDelimiterSymbols, delimiterToken)
+        registerAll(FoxDelimiterSymbols, delimiterToken)
         registerAll(FoxLiteralSymbols, literal)
         registerAll(FoxCommaListItemSymbols, typedItem)
         registerAll(FoxListSymbols, list)
@@ -95,8 +94,4 @@ object FoxDiagnosticScoringStrategy : DiagnosticScoringStrategy {
         abstractionPenalty = abstractionPenalty,
         reportable = reportable,
     )
-}
-
-fun ParseAnalysis<FoxFile>.diagnoseFox(): DiagnosticTree? {
-    return context.best(start, FoxDiagnosticScoringStrategy)
 }

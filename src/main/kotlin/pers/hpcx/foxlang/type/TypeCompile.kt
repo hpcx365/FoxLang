@@ -20,7 +20,7 @@ private fun compileBuiltInType(type: FoxBuiltInType): Space<FoxType> = when (typ
         ) { name, type -> structFieldSpace(name, type) },
     )
     is FoxObjectType -> objectPattern(type.members.mapValues { compileType(it.value) })
-    is FoxEnumType -> enumPattern(type.items.mapValues { compileType(it.value) })
+    is FoxEnumType -> enumPattern(type.entries.mapValues { compileType(it.value) })
     is FoxArrayType -> arraySpace(compileType(type.element))
     is FoxRefType -> refSpace(compileType(type.referent))
     is FoxMethodType -> methodSpace(
@@ -86,10 +86,10 @@ private fun compileTransformType(type: FoxTransformType): Space<FoxType> = when 
     is FoxObjectDropMembersOfType -> objectDropMembersOf(compileGeneric(type.type), type.names)
     is FoxObjectMergeMembersOfType -> objectMerge(type.types.map { compileType(it) })
     
-    is FoxEnumItemOfType -> enumItem(compileGeneric(type.type), type.name)
-    is FoxEnumItemsOfType -> enumItemsOf(compileGeneric(type.type), type.names)
-    is FoxEnumDropItemsOfType -> enumDropItemsOf(compileGeneric(type.type), type.names)
-    is FoxEnumMergeItemsOfType -> enumMerge(type.types.map { compileType(it) })
+    is FoxEnumEntryOfType -> enumEntry(compileGeneric(type.type), type.name)
+    is FoxEnumEntriesOfType -> enumEntriesOf(compileGeneric(type.type), type.names)
+    is FoxEnumDropEntriesOfType -> enumDropEntriesOf(compileGeneric(type.type), type.names)
+    is FoxEnumMergeEntriesOfType -> enumMerge(type.types.map { compileType(it) })
     
     is FoxArrayElementOfType -> arrayElementOf(compileGeneric(type.type))
     is FoxRefReferentOfType -> refReferentOf(compileGeneric(type.type))

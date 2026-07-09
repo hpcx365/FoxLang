@@ -35,6 +35,11 @@ data class SourceSpan(val start: SourcePosition, val end: SourcePosition) : Comp
     fun isNotEmpty() = start < end
     val length get() = end.fragIndex - start.fragIndex
     
+    operator fun plus(other: SourceSpan): SourceSpan {
+        require(end <= other.start) { "End: $end must be less than or equal to other start: ${other.start}" }
+        return SourceSpan(start, other.end)
+    }
+    
     override fun compareTo(other: SourceSpan): Int {
         check(start == other.start) { "Start must be equal: $start, ${other.start}" }
         return end.compareTo(other.end)

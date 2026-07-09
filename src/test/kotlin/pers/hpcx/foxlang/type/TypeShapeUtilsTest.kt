@@ -157,11 +157,11 @@ class TypeShapeUtilsTest {
             ),
         )
         
-        assertEquals(FoxStringType, left.item("B"))
-        assertEquals(listOf("C", "A"), left.selectItems(listOf("C", "A")).items.keys.toList())
-        assertEquals(listOf("A", "C"), left.dropItems(listOf("B")).items.keys.toList())
-        val merged = listOf(left, right).mergeEnumItems()
-        assertEquals(listOf("A", "B", "C", "D"), merged.items.keys.toList())
-        assertEquals(FoxBoolType, merged.items.getValue("B"))
+        assertEquals(FoxStringType, left.entry("B"))
+        assertEquals(listOf("C", "A"), left.selectEntries(listOf("C", "A")).entries.keys.toList())
+        assertEquals(listOf("A", "C"), left.dropEntries(listOf("B")).entries.keys.toList())
+        val merged = listOf(left, right).mergeEnumEntries()
+        assertEquals(listOf("A", "B", "C", "D"), merged.entries.keys.toList())
+        assertEquals(FoxBoolType, merged.entries.getValue("B"))
     }
 }

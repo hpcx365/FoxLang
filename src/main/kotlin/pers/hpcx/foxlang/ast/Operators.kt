@@ -1,5 +1,7 @@
 package pers.hpcx.foxlang.ast
 
+import pers.hpcx.foxlang.frontend.common.SourceSpan
+
 sealed interface FoxUnaryOperator
 object FoxNotOperator : FoxUnaryOperator
 object FoxNegOperator : FoxUnaryOperator
@@ -20,14 +22,14 @@ object FoxEqOperator : FoxBinaryOperator
 object FoxNeqOperator : FoxBinaryOperator
 object FoxLtOperator : FoxBinaryOperator
 object FoxGtOperator : FoxBinaryOperator
-object FoxLeOperator : FoxBinaryOperator
-object FoxGeOperator : FoxBinaryOperator
+object FoxLeqOperator : FoxBinaryOperator
+object FoxGeqOperator : FoxBinaryOperator
 object FoxAndAndOperator : FoxBinaryOperator
 object FoxOrOrOperator : FoxBinaryOperator
 
 sealed interface FoxAssignOperator
 object FoxPlainAssignOperator : FoxAssignOperator
-object FoxTypeBindingAssignOperator : FoxAssignOperator
+object FoxDefAssignOperator : FoxAssignOperator
 object FoxAddAssignOperator : FoxAssignOperator
 object FoxSubAssignOperator : FoxAssignOperator
 object FoxMulAssignOperator : FoxAssignOperator
@@ -41,3 +43,18 @@ object FoxShrAssignOperator : FoxAssignOperator
 object FoxUshrAssignOperator : FoxAssignOperator
 object FoxAndAndAssignOperator : FoxAssignOperator
 object FoxOrOrAssignOperator : FoxAssignOperator
+
+data class ParsedFoxUnaryOperator(
+    override val node: FoxUnaryOperator,
+    override val span: SourceSpan,
+) : Parsed<FoxUnaryOperator>
+
+data class ParsedFoxBinaryOperator(
+    override val node: FoxBinaryOperator,
+    override val span: SourceSpan,
+) : Parsed<FoxBinaryOperator>
+
+data class ParsedFoxAssignOperator(
+    override val node: FoxAssignOperator,
+    override val span: SourceSpan,
+) : Parsed<FoxAssignOperator>

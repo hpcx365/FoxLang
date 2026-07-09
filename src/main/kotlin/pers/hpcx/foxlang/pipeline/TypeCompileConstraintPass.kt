@@ -56,7 +56,7 @@ private fun collectTypeCompileConstraintErrors(method: FoxMethodDefinition): Lis
                 is FoxTupleType -> type.components.forEach { validateType(it) }
                 is FoxStructType -> type.fields.values.forEach { validateType(it) }
                 is FoxObjectType -> type.members.values.forEach { validateType(it) }
-                is FoxEnumType -> type.items.values.forEach { validateType(it) }
+                is FoxEnumType -> type.entries.values.forEach { validateType(it) }
                 is FoxArrayType -> validateType(type.element)
                 is FoxRefType -> validateType(type.referent)
                 is FoxMethodType -> {
@@ -95,10 +95,10 @@ private fun collectTypeCompileConstraintErrors(method: FoxMethodDefinition): Lis
                 is FoxObjectMembersOfType -> requireBareGeneric(type, type.type)
                 is FoxObjectDropMembersOfType -> requireBareGeneric(type, type.type)
                 is FoxObjectMergeMembersOfType -> type.types.forEach { validateType(it) }
-                is FoxEnumItemOfType -> requireBareGeneric(type, type.type)
-                is FoxEnumItemsOfType -> requireBareGeneric(type, type.type)
-                is FoxEnumDropItemsOfType -> requireBareGeneric(type, type.type)
-                is FoxEnumMergeItemsOfType -> type.types.forEach { validateType(it) }
+                is FoxEnumEntryOfType -> requireBareGeneric(type, type.type)
+                is FoxEnumEntriesOfType -> requireBareGeneric(type, type.type)
+                is FoxEnumDropEntriesOfType -> requireBareGeneric(type, type.type)
+                is FoxEnumMergeEntriesOfType -> type.types.forEach { validateType(it) }
                 is FoxArrayElementOfType -> requireBareGeneric(type, type.type)
                 is FoxRefReferentOfType -> requireBareGeneric(type, type.type)
                 is FoxMethodOfType -> {

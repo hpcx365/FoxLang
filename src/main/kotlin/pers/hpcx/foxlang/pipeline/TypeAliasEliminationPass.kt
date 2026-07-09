@@ -69,8 +69,8 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
     is FoxBinary -> FoxBinary(left.mapTypes(transform), operator, right.mapTypes(transform))
     is FoxTypeBinding -> FoxTypeBinding(name, transform(type))
     is FoxAssign -> FoxAssign(left, operator, right.mapTypes(transform), beforeEvaluation)
-    is FoxComponentAccess -> FoxComponentAccess(target.mapTypes(transform), index)
     is FoxFieldAccess -> FoxFieldAccess(target.mapTypes(transform), name)
+    is FoxIndexAccess -> FoxIndexAccess(target.mapTypes(transform), indices.map { it.mapTypes(transform) })
     is FoxFormattedString -> FoxFormattedString(
         parts.map { part ->
             when (part) {
@@ -78,7 +78,6 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
                 is FoxFormattedExpression -> FoxFormattedExpression(part.expression.mapTypes(transform))
             }
         },
-        isRaw,
     )
     is FoxLambda -> FoxLambda(
         parameters?.map { (name, type) -> name to type?.mapTypes(transform) },
@@ -112,7 +111,7 @@ fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when 
     is FoxWhen -> FoxWhen(
         label,
         value?.mapTypes(transform),
-        cases.map { FoxCase(it.conditions.map { condition -> condition.mapTypes(transform) }, it.body.mapTypes(transform)) },
+        cases.map { FoxCase(it.conditions?.map { condition -> condition.mapTypes(transform) }, it.body.mapTypes(transform)) },
     )
     is FoxWhile -> FoxWhile(label, condition.mapTypes(transform), body.mapTypes(transform))
     is FoxDoWhile -> FoxDoWhile(label, body.mapTypes(transform), condition.mapTypes(transform))

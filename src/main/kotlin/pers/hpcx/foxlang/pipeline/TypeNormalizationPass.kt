@@ -167,9 +167,9 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
         names: Iterable<String>,
     ): FoxType {
         names.forEach { name ->
-            if (name !in enumType.items) return nameNotFound(transform, name)
+            if (name !in enumType.entries) return nameNotFound(transform, name)
         }
-        return enumType.selectItems(names)
+        return enumType.selectEntries(names)
     }
     
     fun normalizeStructNameDrop(
@@ -200,9 +200,9 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
         names: Iterable<String>,
     ): FoxType {
         names.forEach { name ->
-            if (name !in enumType.items) return nameNotFound(transform, name)
+            if (name !in enumType.entries) return nameNotFound(transform, name)
         }
-        return enumType.dropItems(names)
+        return enumType.dropEntries(names)
     }
     
     fun normalizeTupleCount(transform: FoxType, count: Int, size: Int, action: () -> FoxType): FoxType {
@@ -242,10 +242,10 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
         return FoxObjectType(result)
     }
     
-    fun mergeEnumItemsStrict(transform: FoxType, enums: List<FoxEnumType>): FoxType {
+    fun mergeEnumEntriesStrict(transform: FoxType, enums: List<FoxEnumType>): FoxType {
         val result = LinkedHashMap<String, FoxType>()
         enums.forEach { enumType ->
-            enumType.items.forEach { (name, itemType) ->
+            enumType.entries.forEach { (name, itemType) ->
                 if (name in result) return duplicateName(transform, name)
                 result[name] = itemType
             }
@@ -300,17 +300,17 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
     
     fun normalizeMergeEnum(types: List<FoxType>): FoxType {
         val normalizedTypes = types.map { normalizeType(it) }
-        if (errors.isNotEmpty()) return FoxEnumMergeItemsOfType(normalizedTypes)
+        if (errors.isNotEmpty()) return FoxEnumMergeEntriesOfType(normalizedTypes)
         if (normalizedTypes.any { it is FoxUnresolvedType || it is FoxTransformType }) {
-            return FoxEnumMergeItemsOfType(normalizedTypes)
+            return FoxEnumMergeEntriesOfType(normalizedTypes)
         }
         val enums = normalizedTypes.map { normalizedType ->
             when (normalizedType) {
                 is FoxEnumType -> normalizedType
-                else -> return familyMismatch(FoxEnumMergeItemsOfType(normalizedTypes), "Enum", normalizedType)
+                else -> return familyMismatch(FoxEnumMergeEntriesOfType(normalizedTypes), "Enum", normalizedType)
             }
         }
-        return mergeEnumItemsStrict(FoxEnumMergeItemsOfType(normalizedTypes), enums)
+        return mergeEnumEntriesStrict(FoxEnumMergeEntriesOfType(normalizedTypes), enums)
     }
     
     normalizeType = { currentType ->
@@ -321,7 +321,7 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
             is FoxTupleType -> currentType.components.map(normalizeType).toFoxTupleType()
             is FoxStructType -> FoxStructType(currentType.fields.mapValues { normalizeType(it.value) })
             is FoxObjectType -> FoxObjectType(currentType.members.mapValues { normalizeType(it.value) })
-            is FoxEnumType -> FoxEnumType(currentType.items.mapValues { normalizeType(it.value) })
+            is FoxEnumType -> FoxEnumType(currentType.entries.mapValues { normalizeType(it.value) })
             is FoxArrayType -> FoxArrayType(normalizeType(currentType.element))
             is FoxRefType -> FoxRefType(normalizeType(currentType.referent))
             is FoxMethodType -> FoxMethodType(
@@ -518,29 +518,29 @@ fun runTypeNormalization(type: FoxType): TypeNormalizationResult {
                     }
                 }
                 is FoxObjectMergeMembersOfType -> normalizeMergeObject(currentType.types)
-                is FoxEnumItemOfType -> {
+                is FoxEnumEntryOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
-                    val transform = FoxEnumItemOfType(normalizedBase, currentType.name)
+                    val transform = FoxEnumEntryOfType(normalizedBase, currentType.name)
                     normalizeEnumTransform(transform, normalizedBase) { enumType ->
-                        if (currentType.name !in enumType.items) nameNotFound(transform, currentType.name)
-                        else enumType.items.getValue(currentType.name)
+                        if (currentType.name !in enumType.entries) nameNotFound(transform, currentType.name)
+                        else enumType.entries.getValue(currentType.name)
                     }
                 }
-                is FoxEnumItemsOfType -> {
+                is FoxEnumEntriesOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
-                    val transform = FoxEnumItemsOfType(normalizedBase, currentType.names)
+                    val transform = FoxEnumEntriesOfType(normalizedBase, currentType.names)
                     normalizeEnumTransform(transform, normalizedBase) { enumType ->
                         normalizeEnumNameSelection(transform, enumType, currentType.names)
                     }
                 }
-                is FoxEnumDropItemsOfType -> {
+                is FoxEnumDropEntriesOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
-                    val transform = FoxEnumDropItemsOfType(normalizedBase, currentType.names)
+                    val transform = FoxEnumDropEntriesOfType(normalizedBase, currentType.names)
                     normalizeEnumTransform(transform, normalizedBase) { enumType ->
                         normalizeEnumNameDrop(transform, enumType, currentType.names)
                     }
                 }
-                is FoxEnumMergeItemsOfType -> normalizeMergeEnum(currentType.types)
+                is FoxEnumMergeEntriesOfType -> normalizeMergeEnum(currentType.types)
                 is FoxArrayElementOfType -> {
                     val normalizedBase = normalizeType(currentType.type)
                     val transform = FoxArrayElementOfType(normalizedBase)

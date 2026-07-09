@@ -1,6 +1,16 @@
 package pers.hpcx.foxlang.frontend.fox
 
 import pers.hpcx.foxlang.frontend.common.*
+import pers.hpcx.foxlang.frontend.fox.FoxAssignOperatorSymbol.PlainAssign
+import pers.hpcx.foxlang.frontend.fox.FoxBinaryOperatorCategorySymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxExpressionSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxFormattedStringPartSymbol.FormattedStringEnd
+import pers.hpcx.foxlang.frontend.fox.FoxFormattedStringPartSymbol.FormattedStringStart
+import pers.hpcx.foxlang.frontend.fox.FoxKeywordSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxLiteralSymbol.*
+import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.*
 
 val FoxRepairStrategy = RepairStrategy(
     File to { expect(FileElementList) },
@@ -9,46 +19,43 @@ val FoxRepairStrategy = RepairStrategy(
     FileElement to { repairFileElement() },
     TypeAlias to { repairTypeAlias() },
     MethodDefinition to { repairMethodDefinition() },
-    MethodHead to { repairMethodHead() },
-    ReturnTypeClause to { repairReturnTypeClause() },
     Type to { repairType() },
     
     *FoxDelimitedCommaListSpecs.map { it.repairEntry() }.toTypedArray(),
     *FoxUndelimitedCommaListSpecs.map { it.repairEntry() }.toTypedArray(),
     
     ActualParameterList to { repairActualParameterList() },
-    FormalParameter to { repairColonTypedItem(IdentifierColon) },
+    ActualGenericParameterList to { repairDelimitedCommaList(AngleOpen, AngleClose, ActualGenericParameter) },
+    AnonymousActualGenericParameterSingleList to {
+        repairFixedArityAngleArguments(listOf(AnonymousActualGenericParameter))
+    },
+    MethodTypeParameterList to { repairMethodTypeParameterList() },
+    FormalParameter to { repairColonTypedItem(Identifier) },
     LambdaParameter to { repairOptionalColonTypedItem(Identifier, Type) },
-    FormalGenericParameter to { repairEqualTypedItem(TypeName, Type) },
-    ActualGenericParameter to { repairOptionalEqualTypedItem(TypeName, Type) },
-    NamedActualGenericParameter to { repairEqualTypedItem(TypeName, Type) },
+    FormalGenericParameter to { repairOptionalEqualNamedType(TypeName, Type) },
+    FormalGenericParameterNoConstraints to { expect(TypeName) },
+    ActualGenericParameter to { repairActualGenericParameter() },
     AnonymousActualGenericParameter to { expect(Type) },
     TupleComponentParameter to { repairTupleComponentParameter() },
-    StructFieldParameter to { repairColonTypedItem(IdentifierColon) },
+    StructFieldParameter to { repairColonTypedItem(Identifier) },
     StructFieldName to { expect(Identifier) },
-    ObjectMemberParameter to { repairColonTypedItem(IdentifierColon) },
+    ObjectMemberParameter to { repairColonTypedItem(Identifier) },
     ObjectMemberName to { expect(Identifier) },
-    EnumItemParameter to { repairEqualTypedItem(TypeName, Type) },
-    EnumItemName to { expect(TypeName) },
-    MethodTypeArgument to { repairMethodTypeArgument() },
+    EnumEntryParameter to { repairEqualTypedItem(TypeName, Type) },
+    EnumEntryName to { expect(TypeName) },
+    MethodTypeParameter to { repairMethodTypeParameter() },
     ActualParameter to { repairActualParameter() },
     
-    IdentifierColon to { repairSymbolThenToken(Identifier, Colon) },
-    TypeNameColon to { repairSymbolThenToken(TypeName, Colon) },
-    IdentifierEqual to { repairSymbolThenToken(Identifier, Assign) },
-    TypeNameEqual to { repairSymbolThenToken(TypeName, Assign) },
     Label to { repairLabel() },
     
     StatementBlock to { repairBlock() },
     StatementBlockCore to { repairStatementBlock() },
     StatementLine to { repairStatementLine() },
     Statement to { repairStatement() },
-    ParenthesizedStatement to { repairParenthesizedStatement() },
+    ParenthesizedExpression to { repairParenthesizedStatement() },
     PrimaryExpression to { repairPrimaryExpression() },
     PostfixExpression to { repairPostfixExpression() },
     UnaryExpression to { repairUnaryExpression() },
-    AssignableExpression to { expect(PostfixExpression) },
-    AssignmentExpression to { repairAssignmentExpression() },
     LogicalOrExpression to { repairBinaryExpression(LogicalOrExpression, LogicalAndExpression, LogicalOrOperator) },
     LogicalAndExpression to { repairBinaryExpression(LogicalAndExpression, BitOrExpression, LogicalAndOperator) },
     BitOrExpression to { repairBinaryExpression(BitOrExpression, BitXorExpression, BitOrOperator) },
@@ -65,7 +72,6 @@ val FoxRepairStrategy = RepairStrategy(
     ImplicitLambdaLiteral to { repairImplicitLambdaLiteral() },
     LambdaBody to { repairLambdaBody() },
     LambdaStatementBlockHead to { repairLambdaStatementBlockHead() },
-    ControlBody to { repairControlBody() },
     IfCore to { repairIfCore() },
     WhileCore to { repairWhileCore() },
     DoWhileCore to { repairDoWhileCore() },
@@ -77,6 +83,11 @@ val FoxRepairStrategy = RepairStrategy(
 )
 
 private const val MaxListFrames = 8
+
+private data class PostfixIndexSpan(
+    val open: SourceSpan,
+    val close: SourceSpan?,
+)
 
 private fun FoxDelimitedCommaListSpec.repairEntry(): Pair<GrammarSymbol<*>, ExpectationStrategy> {
     return list to { repairDelimitedCommaList(open, close, item) }
@@ -154,7 +165,7 @@ private fun ExpectationReceiver.repairFileElement() {
 
 private fun ExpectationReceiver.repairTypeAlias() {
     val span = trimOuterLineBreaks(currentSpan())
-    val equals = withSpan(span).lastInside(Assign)
+    val equals = withSpan(span).lastInside(PlainAssign)
     val typeName = withSpan(span).firstInside(TypeName)
     if (typeName != null) {
         expect(KwType, trimOuterLineBreaks(SourceSpan(span.start, typeName.span.start)))
@@ -167,7 +178,7 @@ private fun ExpectationReceiver.repairTypeAlias() {
         val aliasSpan = trimOuterLineBreaks(SourceSpan(equals.span.end, span.end))
         if (aliasSpan.isNotEmpty()) expect(Type, aliasSpan)
     } else {
-        if (typeName != null) expectAt(Assign, typeName.span.end)
+        if (typeName != null) expectAt(PlainAssign, typeName.span.end)
         val tail = trimOuterLineBreaks(SourceSpan(typeName?.span?.end ?: span.start, span.end))
         if (tail.isNotEmpty()) expect(Type, tail)
     }
@@ -177,24 +188,16 @@ private fun ExpectationReceiver.repairMethodDefinition() {
     val span = trimOuterLineBreaks(currentSpan())
     val receiver = withSpan(span)
     val blockSpan = receiver.lastInside(StatementBlock)?.span ?: receiver.lastDelimited(BraceOpen, BraceClose)
-    if (blockSpan == null) {
-        expect(MethodHead, span)
+    if (blockSpan != null) {
+        expect(StatementBlock, blockSpan)
+    } else {
         expectAt(StatementBlock, span.end)
-        return
     }
     
-    expect(StatementBlock, blockSpan)
-    val beforeBlock = trimOuterLineBreaks(SourceSpan(span.start, blockSpan.start))
+    val beforeBlock = trimOuterLineBreaks(SourceSpan(span.start, blockSpan?.start ?: span.end))
     if (beforeBlock.isEmpty()) return
     
     val headAndReturn = withSpan(beforeBlock)
-    val returnType = headAndReturn.matchesEndingAt(ReturnTypeClause, beforeBlock.end).maxByOrNull { it.span.length }
-    if (returnType != null) {
-        val headSpan = trimOuterLineBreaks(SourceSpan(beforeBlock.start, returnType.span.start))
-        if (headSpan.isNotEmpty()) expect(MethodHead, headSpan)
-        return
-    }
-    
     val parametersEnd = headAndReturn.lastInside(FormalParameterList)?.span?.end
         ?: headAndReturn.lastDelimited(ParenOpen, ParenClose)?.end
     val returnColon = headAndReturn.matchesInside(Colon)
@@ -202,61 +205,78 @@ private fun ExpectationReceiver.repairMethodDefinition() {
         .maxByOrNull { it.span.start.fragIndex }
     if (returnColon != null) {
         val headSpan = trimOuterLineBreaks(SourceSpan(beforeBlock.start, returnColon.span.start))
-        val returnSpan = trimOuterLineBreaks(SourceSpan(returnColon.span.start, beforeBlock.end))
-        if (headSpan.isNotEmpty()) expect(MethodHead, headSpan)
-        if (returnSpan.isNotEmpty()) expect(ReturnTypeClause, returnSpan)
+        if (headSpan.isNotEmpty()) repairMethodDefinitionHead(headSpan)
+        expect(Colon, returnColon.span)
+        val returnType = trimOuterLineBreaks(SourceSpan(returnColon.span.end, beforeBlock.end))
+        if (returnType.isNotEmpty()) {
+            expect(Type, returnType)
+        } else {
+            expectAt(Type, returnColon.span.end)
+        }
     } else {
-        expect(MethodHead, beforeBlock)
+        repairMethodDefinitionHead(beforeBlock)
     }
 }
 
-private fun ExpectationReceiver.repairMethodHead() {
-    val span = trimOuterLineBreaks(currentSpan())
-    val receiver = withSpan(span)
-    val parametersSpan = receiver.lastInside(FormalParameterList)?.span ?: receiver.lastDelimited(ParenOpen, ParenClose)
-    if (parametersSpan != null) {
-        expect(FormalParameterList, parametersSpan)
-        repairMethodHeadPrefix(trimOuterLineBreaks(SourceSpan(span.start, parametersSpan.start)))
-    } else {
-        repairMethodHeadPrefix(span)
-        expectAt(FormalParameterList, span.end)
-    }
-}
-
-private fun ExpectationReceiver.repairMethodHeadPrefix(prefix: SourceSpan) {
+private fun ExpectationReceiver.repairMethodDefinitionHead(prefix: SourceSpan) {
     if (prefix.isEmpty()) return
+    
     val receiver = withSpan(prefix)
     val def = receiver.firstInside(KwDef)
-    if (def == null) {
-        expectAt(KwDef, prefix.start)
-    }
+    if (def == null) expectAt(KwDef, prefix.start)
     
     val afterDef = trimOuterLineBreaks(SourceSpan(def?.span?.end ?: prefix.start, prefix.end))
     if (afterDef.isEmpty()) return
-    val tail = withSpan(afterDef)
-    tail.firstDelimited(AngleOpen, AngleClose)?.let { expect(FormalGenericParameterList, it) }
     
-    val dot = tail.lastInside(Dot)
-    val name = tail.lastInside(Identifier)
-    if (dot != null) {
-        val thisTypeSpan = trimOuterLineBreaks(SourceSpan(afterDef.start, dot.span.end))
-        if (thisTypeSpan.isNotEmpty()) expect(ThisTypeQualifier, thisTypeSpan)
-        val nameSpan = trimOuterLineBreaks(SourceSpan(dot.span.end, afterDef.end))
-        if (nameSpan.isNotEmpty()) expect(Identifier, nameSpan)
-    } else if (name == null) {
-        expect(Identifier, afterDef)
+    val tail = withSpan(afterDef)
+    val generics = tail.firstDelimited(AngleOpen, AngleClose)
+    if (generics != null) expect(FormalGenericParameterList, generics)
+    
+    val afterGenerics = trimOuterLineBreaks(SourceSpan(generics?.end ?: afterDef.start, afterDef.end))
+    val parameterReceiver = withSpan(afterGenerics)
+    val parametersSpan = parameterReceiver.lastInside(FormalParameterList)?.span
+        ?: parameterReceiver.lastDelimited(ParenOpen, ParenClose)
+    
+    if (parametersSpan != null) {
+        expect(FormalParameterList, parametersSpan)
+    } else {
+        expectAt(FormalParameterList, afterDef.end)
     }
+    
+    val namePrefixEnd = parametersSpan?.start ?: afterGenerics.end
+    repairMethodNamePrefix(trimOuterLineBreaks(SourceSpan(afterGenerics.start, namePrefixEnd)))
 }
 
-private fun ExpectationReceiver.repairReturnTypeClause() {
-    val colon = firstInside(Colon)
-    if (colon != null) {
-        val typeSpan = trimOuterLineBreaks(SourceSpan(colon.span.end, currentSpan().end))
-        if (typeSpan.isNotEmpty()) expect(Type, typeSpan)
+private fun ExpectationReceiver.repairMethodNamePrefix(prefix: SourceSpan) {
+    if (prefix.isEmpty()) {
+        expectAt(Identifier, prefix.start)
+        return
+    }
+    
+    val receiver = withSpan(prefix)
+    val dot = receiver.lastInside(Dot)
+    if (dot != null) {
+        val thisTypeSpan = trimOuterLineBreaks(SourceSpan(prefix.start, dot.span.start))
+        if (thisTypeSpan.isNotEmpty()) {
+            expect(Type, thisTypeSpan)
+        } else {
+            expectAt(Type, dot.span.start)
+        }
+        expect(Dot, dot.span)
+        val nameSpan = trimOuterLineBreaks(SourceSpan(dot.span.end, prefix.end))
+        if (nameSpan.isNotEmpty()) {
+            expect(Identifier, nameSpan)
+        } else {
+            expectAt(Identifier, dot.span.end)
+        }
+        return
+    }
+    
+    val name = receiver.lastInside(Identifier)
+    if (name != null) {
+        expect(Identifier, name.span)
     } else {
-        expectAt(Colon, currentSpan().start)
-        val typeSpan = trimOuterLineBreaks(currentSpan())
-        if (typeSpan.isNotEmpty()) expect(Type, typeSpan)
+        expect(Identifier, prefix)
     }
 }
 
@@ -268,7 +288,7 @@ private fun ExpectationReceiver.repairType() {
         return
     }
     
-    val firstKeyword = Keywords[receiver.firstPlainText()]
+    val firstKeyword = FoxKeywordsByText[receiver.firstPlainText()]
     if (firstKeyword != null) {
         FoxTypeArgumentLists[firstKeyword]?.let {
             receiver.repairTypeArgumentList(firstKeyword, it)
@@ -384,25 +404,41 @@ private fun ExpectationReceiver.repairActualParameterList() {
     }
 }
 
-private fun ExpectationReceiver.repairColonTypedItem(nameColon: GrammarSymbol<*>) {
+private fun ExpectationReceiver.repairColonTypedItem(name: GrammarSymbol<*>) {
     val span = trimOuterLineBreaks(currentSpan())
     val receiver = withSpan(span)
     val colon = receiver.firstInside(Colon)
     if (colon != null) {
-        val head = trimOuterLineBreaks(SourceSpan(span.start, colon.span.end))
+        val head = trimOuterLineBreaks(SourceSpan(span.start, colon.span.start))
         val type = trimOuterLineBreaks(SourceSpan(colon.span.end, span.end))
-        if (head.isNotEmpty()) expect(nameColon, head)
-        if (type.isNotEmpty()) expect(Type, type)
+        if (head.isNotEmpty()) {
+            expect(name, head)
+        } else {
+            expectAt(name, colon.span.start)
+        }
+        expect(Colon, colon.span)
+        if (type.isNotEmpty()) {
+            expect(Type, type)
+        } else {
+            expectAt(Type, colon.span.end)
+        }
         return
     }
     
-    val identifier = receiver.firstInside(Identifier) ?: receiver.firstInside(TypeName)
+    val identifier = receiver.firstInside(name) ?: receiver.firstInside(Identifier) ?: receiver.firstInside(TypeName)
     if (identifier != null) {
-        expect(nameColon, trimOuterLineBreaks(SourceSpan(identifier.span.start, identifier.span.end)))
+        expect(name, trimOuterLineBreaks(SourceSpan(identifier.span.start, identifier.span.end)))
+        expectAt(Colon, identifier.span.end)
         val type = trimOuterLineBreaks(SourceSpan(identifier.span.end, span.end))
-        if (type.isNotEmpty()) expect(Type, type)
+        if (type.isNotEmpty()) {
+            expect(Type, type)
+        } else {
+            expectAt(Type, identifier.span.end)
+        }
     } else {
-        expect(nameColon, span)
+        expect(name, span)
+        expectAt(Colon, span.end)
+        expectAt(Type, span.end)
     }
 }
 
@@ -414,19 +450,28 @@ private fun ExpectationReceiver.repairOptionalColonTypedItem(name: GrammarSymbol
     } else {
         val nameSpan = trimOuterLineBreaks(SourceSpan(span.start, colon.span.start))
         val typeSpan = trimOuterLineBreaks(SourceSpan(colon.span.end, span.end))
-        if (nameSpan.isNotEmpty()) expect(name, nameSpan)
-        if (typeSpan.isNotEmpty()) expect(type, typeSpan)
+        if (nameSpan.isNotEmpty()) {
+            expect(name, nameSpan)
+        } else {
+            expectAt(name, colon.span.start)
+        }
+        expect(Colon, colon.span)
+        if (typeSpan.isNotEmpty()) {
+            expect(type, typeSpan)
+        } else {
+            expectAt(type, colon.span.end)
+        }
     }
 }
 
 private fun ExpectationReceiver.repairEqualTypedItem(name: GrammarSymbol<*>, type: GrammarSymbol<*>) {
     val span = trimOuterLineBreaks(currentSpan())
-    val equals = withSpan(span).firstInside(Assign)
+    val equals = withSpan(span).firstInside(PlainAssign)
     if (equals == null) {
         val nameMatch = withSpan(span).firstInside(name)
         if (nameMatch != null) {
             expect(name, nameMatch.span)
-            expectAt(Assign, nameMatch.span.end)
+            expectAt(PlainAssign, nameMatch.span.end)
             val typeSpan = trimOuterLineBreaks(SourceSpan(nameMatch.span.end, span.end))
             if (typeSpan.isNotEmpty()) expect(type, typeSpan)
         } else {
@@ -435,101 +480,144 @@ private fun ExpectationReceiver.repairEqualTypedItem(name: GrammarSymbol<*>, typ
     } else {
         val nameSpan = trimOuterLineBreaks(SourceSpan(span.start, equals.span.start))
         val typeSpan = trimOuterLineBreaks(SourceSpan(equals.span.end, span.end))
-        if (nameSpan.isNotEmpty()) expect(name, nameSpan)
-        if (typeSpan.isNotEmpty()) expect(type, typeSpan)
+        if (nameSpan.isNotEmpty()) expect(name, nameSpan) else expectAt(name, equals.span.start)
+        expect(PlainAssign, equals.span)
+        if (typeSpan.isNotEmpty()) expect(type, typeSpan) else expectAt(type, equals.span.end)
     }
 }
 
-private fun ExpectationReceiver.repairOptionalEqualTypedItem(name: GrammarSymbol<*>, type: GrammarSymbol<*>) {
-    if (withSpan(trimOuterLineBreaks(currentSpan())).containsBuildable(Assign)) {
+private fun ExpectationReceiver.repairOptionalEqualNamedType(name: GrammarSymbol<*>, type: GrammarSymbol<*>) {
+    if (withSpan(trimOuterLineBreaks(currentSpan())).containsBuildable(PlainAssign)) {
         repairEqualTypedItem(name, type)
     } else {
         val span = trimOuterLineBreaks(currentSpan())
-        if (span.isNotEmpty()) expect(type, span)
+        if (span.isNotEmpty()) expect(name, span) else expectAt(name, span.start)
     }
 }
 
+private fun ExpectationReceiver.repairActualGenericParameter() {
+    val span = trimOuterLineBreaks(currentSpan())
+    val equals = withSpan(span).firstInside(PlainAssign)
+    if (equals == null) {
+        if (span.isNotEmpty()) expect(Type, span) else expectAt(Type, span.start)
+        return
+    }
+    
+    val name = trimOuterLineBreaks(SourceSpan(span.start, equals.span.start))
+    val type = trimOuterLineBreaks(SourceSpan(equals.span.end, span.end))
+    if (name.isNotEmpty()) expect(TypeName, name) else expectAt(TypeName, equals.span.start)
+    expect(PlainAssign, equals.span)
+    if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, equals.span.end)
+}
+
 private fun ExpectationReceiver.repairTupleComponentParameter() {
-    val colon = firstInside(Colon)
+    val span = trimOuterLineBreaks(currentSpan())
+    val receiver = withSpan(span)
+    val colon = receiver.matchesInside(Colon)
+        .filter { receiver.isTopLevelSourcePosition(it.span.start) }
+        .maxByOrNull { it.span.start.fragIndex }
+        ?.span
+        ?: receiver.firstTopLevelPlainTextSpan(":")
     if (colon == null) {
         expect(Type)
-    } else {
-        val type = trimOuterLineBreaks(SourceSpan(currentSpan().start, colon.span.start))
-        val count = trimOuterLineBreaks(SourceSpan(colon.span.end, currentSpan().end))
-        if (type.isNotEmpty()) expect(Type, type)
-        if (count.isNotEmpty()) expect(LitInt, count)
+        return
     }
+    
+    val type = trimOuterLineBreaks(SourceSpan(span.start, colon.start))
+    val count = trimOuterLineBreaks(SourceSpan(colon.end, span.end))
+    if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, colon.start)
+    expect(Colon, colon)
+    if (count.isNotEmpty()) expect(LitInt, count) else expectAt(LitInt, colon.end)
 }
 
 private fun ExpectationReceiver.repairActualParameter() {
     val span = trimOuterLineBreaks(currentSpan())
     if (span.isEmpty()) {
-        expectAt(Statement, span.start)
+        expectAt(LogicalOrExpression, span.start)
         return
     }
     
     val receiver = withSpan(span)
-    val assign = receiver.firstInside(Assign)
+    val assign = receiver.firstInside(PlainAssign)
         ?.takeIf { receiver.isTopLevelSourcePosition(it.span.start) }
         ?.span
         ?: receiver.firstTopLevelPlainTextSpan("=")
     if (assign == null) {
-        if (receiver.startsWithArgumentClose()) {
-            expectAt(Statement, span.start)
-        } else if (receiver.startsWithBraceOpen()) {
-            expect(ImplicitLambdaLiteral, span)
-        } else {
-            expect(Statement, span)
-        }
+        receiver.repairActualParameterValue(span)
         return
     }
     
     val name = trimOuterLineBreaks(SourceSpan(span.start, assign.end))
     val value = trimOuterLineBreaks(SourceSpan(assign.end, span.end))
     if (name.isNotEmpty()) {
-        expect(IdentifierEqual, name)
+        expect(Identifier, trimOuterLineBreaks(SourceSpan(span.start, assign.start)))
     } else {
         expectAt(Identifier, assign.start)
     }
+    expect(PlainAssign, assign)
     if (value.isNotEmpty()) {
-        if (withSpan(value).startsWithArgumentClose()) {
-            expectAt(Statement, value.start)
-        } else if (withSpan(value).startsWithBraceOpen()) {
-            expect(ImplicitLambdaLiteral, value)
-        } else {
-            expect(Statement, value)
-        }
+        withSpan(value).repairActualParameterValue(value)
     } else {
-        expectAt(Statement, assign.end)
+        expectAt(LogicalOrExpression, assign.end)
     }
 }
 
-private fun ExpectationReceiver.repairMethodTypeArgument() {
-    when (val first = Keywords[firstPlainText()]) {
-        KwThis, KwReturn -> {
-            val colon = firstInside(Colon)
-            if (colon == null) {
-                expectAt(Colon, firstInside(first)?.span?.end ?: currentSpan().start)
-            }
-            val type = trimOuterLineBreaks(SourceSpan(colon?.span?.end ?: currentSpan().start, currentSpan().end))
-            if (type.isNotEmpty()) expect(Type, type)
-        }
-        else -> {
-            repairColonTypedItem(IdentifierColon)
-            expect(Type)
-        }
+private fun ExpectationReceiver.repairActualParameterValue(span: SourceSpan) {
+    when {
+        startsWithArgumentClose() -> expectAt(LogicalOrExpression, span.start)
+        startsWithBraceOpen() -> expect(ImplicitLambdaLiteral, span)
+        else -> expect(LogicalOrExpression, span)
     }
 }
 
-private fun ExpectationReceiver.repairSymbolThenToken(symbol: GrammarSymbol<*>, trailing: GrammarSymbol<*>) {
+private fun ExpectationReceiver.repairMethodTypeParameter() {
+    repairColonTypedItem(Identifier)
+}
+
+private fun ExpectationReceiver.repairMethodTypeParameterList() {
+    repairDelimitedCommaList(AngleOpen, AngleClose, MethodTypeParameter)
+    
     val span = trimOuterLineBreaks(currentSpan())
-    val head = withSpan(span).firstInside(symbol)
-    if (head == null) {
-        expect(symbol, span)
-        expectAt(trailing, span.end)
+    val open = withSpan(span).firstInside(AngleOpen)
+    val close = withSpan(span).lastInside(AngleClose) ?: withSpan(span).lastInside(RAngle)
+    val content = trimOuterLineBreaks(SourceSpan(open?.span?.end ?: span.start, close?.span?.start ?: span.end))
+    if (content.isEmpty()) return
+    
+    val receiver = withSpan(content)
+    val separators = receiver.matchesInside(Comma)
+        .filter { receiver.isTopLevelSourcePosition(it.span.start) }
+        .distinctBy { it.span }
+        .sortedBy { it.span.start.fragIndex }
+    val starts = listOf(content.start) + separators.map { it.span.end }
+    val ends = separators.map { it.span.start } + listOf(content.end)
+    starts.zip(ends).forEach { (start, end) ->
+        val segment = trimOuterLineBreaks(SourceSpan(start, end))
+        when (FoxKeywordsByText[withSpan(segment).firstPlainText()]) {
+            KwThis -> withSpan(segment).repairKeywordTypedItem(KwThis)
+            KwReturn -> withSpan(segment).repairKeywordTypedItem(KwReturn)
+            else -> {}
+        }
+    }
+}
+
+private fun ExpectationReceiver.repairKeywordTypedItem(keyword: FoxGrammarSymbol<*>) {
+    val span = trimOuterLineBreaks(currentSpan())
+    val keywordMatch = withSpan(span).firstInside(keyword)
+    val colon = withSpan(span).firstInside(Colon)
+    if (keywordMatch != null) {
+        expect(keyword, keywordMatch.span)
     } else {
-        expect(symbol, head.span)
-        expectAt(trailing, head.span.end)
+        expectAt(keyword, span.start)
+    }
+    if (colon != null) {
+        expect(Colon, colon.span)
+        val type = trimOuterLineBreaks(SourceSpan(colon.span.end, span.end))
+        if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, colon.span.end)
+    } else {
+        val colonPosition = keywordMatch?.span?.end ?: span.start
+        expectAt(Colon, colonPosition)
+        val type = trimOuterLineBreaks(SourceSpan(colonPosition, span.end))
+        if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, colonPosition)
     }
 }
 
@@ -728,7 +816,7 @@ private fun ExpectationReceiver.repairStatement() {
         receiver.repairLabelledStatement()
         return
     }
-    when (Keywords[receiver.firstPlainText()]) {
+    when (FoxKeywordsByText[receiver.firstPlainText()]) {
         KwIf -> expect(IfCore)
         KwWhile -> expect(WhileCore)
         KwDo -> expect(DoWhileCore)
@@ -747,12 +835,12 @@ private fun ExpectationReceiver.repairStatement() {
                 if (operator != null) {
                     val left = trimOuterLineBreaks(SourceSpan(span.start, operator.span.start))
                     val right = trimOuterLineBreaks(SourceSpan(operator.span.end, span.end))
-                    if (left.isNotEmpty()) expect(AssignableExpression, left) else expectAt(AssignableExpression, operator.span.start)
+                    if (left.isNotEmpty()) expect(PostfixExpression, left) else expectAt(PostfixExpression, operator.span.start)
                     if (right.isNotEmpty()) expect(Statement, right) else expectAt(Statement, operator.span.end)
                 } else if (receiver.startsWithParenOpen() && receiver.containsBuildable(ParenClose)) {
-                    receiver.firstDelimited(ParenOpen, ParenClose)?.let { expect(ParenthesizedStatement, it) }
+                    receiver.firstDelimited(ParenOpen, ParenClose)?.let { expect(ParenthesizedExpression, it) }
                 } else {
-                    expect(AssignmentExpression)
+                    repairAssignmentExpression()
                 }
             }
         }
@@ -767,7 +855,7 @@ private fun ExpectationReceiver.repairPrimaryExpression() {
     }
     
     val receiver = withSpan(span)
-    when (Keywords[receiver.firstPlainText()]) {
+    when (FoxKeywordsByText[receiver.firstPlainText()]) {
         KwThis -> expect(KwThis, span)
         KwLowerUnit -> expect(LitUnit, span)
         KwTrue, KwFalse -> expect(LitBool, span)
@@ -777,7 +865,7 @@ private fun ExpectationReceiver.repairPrimaryExpression() {
                 if (receiver.lastInside(FormattedStringEnd) == null) expectAt(FormattedStringEnd, span.end)
             }
             receiver.containsBuildable(ParenOpen) || receiver.containsBuildable(ParenClose) -> {
-                expect(ParenthesizedStatement, span)
+                expect(ParenthesizedExpression, span)
             }
             receiver.containsBuildable(LitInt) -> expect(LitInt, span)
             receiver.containsBuildable(LitLong) -> expect(LitLong, span)
@@ -800,6 +888,12 @@ private fun ExpectationReceiver.repairPostfixExpression() {
     
     val receiver = withSpan(span)
     val dot = receiver.topLevelMatches(Dot).maxByOrNull { it.span.start.fragIndex }
+    val index = receiver.postfixIndexAccessSpan()
+    if (index != null && (dot == null || dot.span.start < index.open.start)) {
+        receiver.repairIndexedPostfixExpression(index)
+        return
+    }
+    
     if (dot != null) {
         receiver.repairDottedPostfixExpression(dot)
         return
@@ -836,6 +930,19 @@ private fun ExpectationReceiver.repairPostfixExpression() {
     }
     
     expect(PrimaryExpression, span)
+}
+
+private fun ExpectationReceiver.repairIndexedPostfixExpression(index: PostfixIndexSpan) {
+    val span = trimOuterLineBreaks(currentSpan())
+    val target = trimOuterLineBreaks(SourceSpan(span.start, index.open.start))
+    if (target.isNotEmpty()) {
+        expect(PostfixExpression, target)
+    } else {
+        expectAt(PostfixExpression, index.open.start)
+    }
+    
+    val indexEnd = index.close?.end ?: span.end
+    expect(IndexArgumentList, SourceSpan(index.open.start, indexEnd))
 }
 
 private fun ExpectationReceiver.repairDottedPostfixExpression(dot: ParseMatch<*>) {
@@ -884,7 +991,7 @@ private fun ExpectationReceiver.repairPostfixMember(member: SourceSpan) {
     
     val receiver = withSpan(span)
     if (receiver.startsWithParenOpen()) {
-        expect(ParenthesizedStatement, span)
+        expect(ParenthesizedExpression, span)
         return
     }
     
@@ -920,7 +1027,7 @@ private fun ExpectationReceiver.repairCallablePrefix() {
     }
     
     when {
-        receiver.startsWithParenOpen() -> expect(ParenthesizedStatement, span)
+        receiver.startsWithParenOpen() -> expect(ParenthesizedExpression, span)
         receiver.containsBuildable(TypeName) || receiver.startsWithTypeKeyword() -> expect(Type, span)
         receiver.containsBuildable(Identifier) -> expect(Identifier, span)
         else -> expect(PrimaryExpression, span)
@@ -964,9 +1071,9 @@ private fun ExpectationReceiver.repairAssignmentExpression() {
     val left = trimOuterLineBreaks(SourceSpan(span.start, operator.span.start))
     val right = trimOuterLineBreaks(SourceSpan(operator.span.end, span.end))
     if (left.isNotEmpty()) {
-        expect(AssignableExpression, left)
+        expect(PostfixExpression, left)
     } else {
-        expectAt(AssignableExpression, operator.span.start)
+        expectAt(PostfixExpression, operator.span.start)
     }
     if (right.isNotEmpty()) {
         expect(Statement, right)
@@ -1135,15 +1242,6 @@ private fun ExpectationReceiver.repairParenthesizedStatement() {
     }
 }
 
-private fun ExpectationReceiver.repairControlBody() {
-    val span = trimOuterLineBreaks(currentSpan())
-    if (span.isNotEmpty()) {
-        expect(Statement, span)
-    } else {
-        expectAt(Statement, span.start)
-    }
-}
-
 private fun ExpectationReceiver.repairIfCore() {
     val span = trimOuterLineBreaks(currentSpan())
     val keywordMatch = withSpan(span).firstInside(KwIf)
@@ -1153,27 +1251,27 @@ private fun ExpectationReceiver.repairIfCore() {
     if (condition == null) {
         val conditionSpan = trimOuterLineBreaks(SourceSpan(keywordMatch?.span?.end ?: span.start, elseMatch?.span?.start ?: span.end))
         if (conditionSpan.isNotEmpty()) {
-            expect(ParenthesizedStatement, conditionSpan)
+            expect(ParenthesizedExpression, conditionSpan)
         } else {
-            expectAt(ParenthesizedStatement, keywordMatch?.span?.end ?: span.start)
+            expectAt(ParenthesizedExpression, keywordMatch?.span?.end ?: span.start)
         }
     } else {
-        expect(ParenthesizedStatement, condition)
+        expect(ParenthesizedExpression, condition)
         val thenEnd = elseMatch?.span?.start ?: span.end
         val thenBody = trimOuterLineBreaks(SourceSpan(condition.end, thenEnd))
         if (thenBody.isNotEmpty()) {
-            expect(ControlBody, thenBody)
+            expect(Statement, thenBody)
         } else {
-            expectAt(ControlBody, condition.end)
+            expectAt(Statement, condition.end)
         }
     }
     
     if (elseMatch != null) {
         val elseBody = trimOuterLineBreaks(SourceSpan(elseMatch.span.end, span.end))
         if (elseBody.isNotEmpty()) {
-            expect(ControlBody, elseBody)
+            expect(Statement, elseBody)
         } else {
-            expectAt(ControlBody, elseMatch.span.end)
+            expectAt(Statement, elseMatch.span.end)
         }
     }
 }
@@ -1190,26 +1288,26 @@ private fun ExpectationReceiver.repairDoWhileCore() {
         val body = trimOuterLineBreaks(SourceSpan(doMatch?.span?.end ?: span.start, whileMatch.span.start))
         val condition = trimOuterLineBreaks(SourceSpan(whileMatch.span.end, span.end))
         if (body.isNotEmpty()) {
-            expect(ControlBody, body)
+            expect(Statement, body)
         } else {
-            expectAt(ControlBody, doMatch?.span?.end ?: span.start)
+            expectAt(Statement, doMatch?.span?.end ?: span.start)
         }
         if (condition.isNotEmpty()) {
-            expect(ParenthesizedStatement, condition)
+            expect(ParenthesizedExpression, condition)
         } else {
-            expectAt(ParenthesizedStatement, whileMatch.span.end)
+            expectAt(ParenthesizedExpression, whileMatch.span.end)
         }
         return
     }
     
     val body = trimOuterLineBreaks(SourceSpan(doMatch?.span?.end ?: span.start, span.end))
     if (body.isNotEmpty()) {
-        expect(ControlBody, body)
+        expect(Statement, body)
     } else {
-        expectAt(ControlBody, doMatch?.span?.end ?: span.start)
+        expectAt(Statement, doMatch?.span?.end ?: span.start)
     }
     expectAt(KwWhile, span.end)
-    expectAt(ParenthesizedStatement, span.end)
+    expectAt(ParenthesizedExpression, span.end)
 }
 
 private fun ExpectationReceiver.repairWhenCore() {
@@ -1217,7 +1315,7 @@ private fun ExpectationReceiver.repairWhenCore() {
     if (cases != null) {
         expect(WhenCaseList, cases)
         val beforeCases = trimOuterLineBreaks(SourceSpan(currentSpan().start, cases.start))
-        withSpan(beforeCases).firstDelimited(ParenOpen, ParenClose)?.let { expect(ParenthesizedStatement, it) }
+        withSpan(beforeCases).firstDelimited(ParenOpen, ParenClose)?.let { expect(ParenthesizedExpression, it) }
     } else {
         expectAt(WhenCaseList, currentSpan().end)
     }
@@ -1250,9 +1348,9 @@ private fun ExpectationReceiver.repairWhenCase() {
         val body = trimOuterLineBreaks(SourceSpan(arrow.span.end, currentSpan().end))
         if (conditions.isNotEmpty()) expect(WhenCaseConditionList, conditions)
         if (body.isNotEmpty()) {
-            expect(ControlBody, body)
+            expect(Statement, body)
         } else {
-            expectAt(ControlBody, arrow.span.end)
+            expectAt(Statement, arrow.span.end)
         }
     } else if (firstPlainText() == "else") {
         expectAt(Arrow, firstInside(KwElse)?.span?.end ?: currentSpan().start)
@@ -1281,19 +1379,19 @@ private fun ExpectationReceiver.repairKeywordConditionBody(keyword: FoxGrammarSy
     val keywordMatch = firstInside(keyword)
     val condition = firstDelimited(ParenOpen, ParenClose)
     if (condition != null) {
-        expect(ParenthesizedStatement, condition)
+        expect(ParenthesizedExpression, condition)
         val body = trimOuterLineBreaks(SourceSpan(condition.end, currentSpan().end))
         if (body.isNotEmpty()) {
-            expect(ControlBody, body)
+            expect(Statement, body)
         } else {
-            expectAt(ControlBody, condition.end)
+            expectAt(Statement, condition.end)
         }
     } else {
         val conditionSpan = trimOuterLineBreaks(SourceSpan(keywordMatch?.span?.end ?: currentSpan().start, currentSpan().end))
         if (conditionSpan.isNotEmpty()) {
-            expect(ParenthesizedStatement, conditionSpan)
+            expect(ParenthesizedExpression, conditionSpan)
         } else {
-            expectAt(ParenthesizedStatement, keywordMatch?.span?.end ?: currentSpan().start)
+            expectAt(ParenthesizedExpression, keywordMatch?.span?.end ?: currentSpan().start)
         }
     }
 }
@@ -1317,27 +1415,12 @@ private fun ExpectationReceiver.topLevelBinaryOperators(
 }
 
 private fun ExpectationReceiver.topLevelMatches(symbol: GrammarSymbol<*>): List<ParseMatch<*>> {
-    val nested = listOf(
-        PrimaryExpression,
-        PostfixExpression,
-        UnaryExpression,
-        MultiplicativeExpression,
-        AdditiveExpression,
-        ShiftExpression,
-        ComparisonExpression,
-        EqualityExpression,
-        BitAndExpression,
-        BitXorExpression,
-        BitOrExpression,
-        LogicalAndExpression,
-        LogicalOrExpression,
-        AssignmentExpression,
+    val nested = (FoxExpressionSymbol.entries + listOf(
         Type,
         ActualParameterList,
         ActualGenericParameterList,
         LambdaLiteral,
-        ParenthesizedStatement,
-    ).flatMap { matchesInside(it) }
+    )).flatMap { matchesInside(it) }
     return matchesInside(symbol)
         .filter { candidate -> nested.none { match -> match.span != candidate.span && match.span.contains(candidate.span) } }
         .nonOverlapping()
@@ -1353,6 +1436,28 @@ private fun ExpectationReceiver.postfixActualParameterListSpan(): SourceSpan? {
 private fun ExpectationReceiver.postfixActualGenericParameterListSpan(): SourceSpan? {
     matchesInside(ActualGenericParameterList).maxByOrNull { it.span.end.fragIndex }?.let { return it.span }
     return lastDelimited(AngleOpen, AngleClose) ?: firstCallOpenWithoutClose(AngleOpen)
+}
+
+private fun ExpectationReceiver.postfixIndexAccessSpan(): PostfixIndexSpan? {
+    val open = matchesInside(SquareOpen)
+        .filter { it.span.start > currentSpan().start && isTopLevelSourcePosition(it.span.start) }
+        .maxByOrNull { it.span.start.fragIndex }
+        ?.span
+        ?: return null
+    
+    var depth = 0
+    var cursor = open.start
+    while (cursor < currentSpan().end) {
+        when ((source()[cursor] as? PlainFragment)?.text) {
+            "[" -> depth += 1
+            "]" -> {
+                depth -= 1
+                if (depth == 0) return PostfixIndexSpan(open, SourceSpan(cursor, cursor + 1))
+            }
+        }
+        cursor += 1
+    }
+    return PostfixIndexSpan(open, null)
 }
 
 private fun ExpectationReceiver.sourceDelimitedSpan(open: String, close: String): SourceSpan? {
@@ -1495,25 +1600,11 @@ private fun ExpectationReceiver.startsWithArgumentClose(): Boolean {
 }
 
 private fun ExpectationReceiver.startsWithTypeKeyword(): Boolean {
-    val keyword = Keywords[firstPlainText()] ?: return false
-    return keyword in FoxTypeArgumentLists.keys || keyword in FoxFixedArityTypeArguments.keys || keyword in listOf(
-        KwVoid,
-        KwUnit,
-        KwBool,
-        KwByte,
-        KwShort,
-        KwInt,
-        KwLong,
-        KwFloat,
-        KwDouble,
-        KwChar,
-        KwString,
-        KwAny,
-        KwAnyTuple,
-        KwAnyStruct,
-        KwAnyObject,
-        KwAnyEnum,
-    )
+    val keyword = FoxKeywordsByText[firstPlainText()] ?: return false
+    return keyword in FoxTypeArgumentLists.keys
+        || keyword in FoxFixedArityTypeArguments.keys
+        || keyword is FoxPrimitiveTypeKeywordSymbol
+        || keyword is FoxSyntheticTypeKeywordSymbol
 }
 
 private fun ExpectationReceiver.repairLineItems(item: GrammarSymbol<*>) {

@@ -3,7 +3,7 @@ package pers.hpcx.foxlang.type.space
 import pers.hpcx.foxlang.ast.FoxEnumType
 import pers.hpcx.foxlang.ast.FoxType
 import pers.hpcx.foxlang.type.arity
-import pers.hpcx.foxlang.type.selectItems
+import pers.hpcx.foxlang.type.selectEntries
 
 fun enumPattern(items: Map<String, Space<FoxType>>) = EnumPatternSpace(items)
 
@@ -13,7 +13,7 @@ data class EnumPatternSpace(val items: Map<String, Space<FoxType>>) : Space<FoxT
         if (that !is FoxEnumType) return false
         if (that.arity != items.size) return false
         return items.all { (name, type) ->
-            val actual = that.items[name] ?: return false
+            val actual = that.entries[name] ?: return false
             type.contains(actual)
         }
     }
@@ -29,7 +29,7 @@ data class EnumRepeatSpace(val item: Space<FoxType>, val minArity: Int, val maxA
     }
     
     override fun contains(that: FoxType): Boolean {
-        return that is FoxEnumType && that.arity in minArity..maxArity && that.items.values.all(item::contains)
+        return that is FoxEnumType && that.arity in minArity..maxArity && that.entries.values.all(item::contains)
     }
 }
 
@@ -39,7 +39,7 @@ data class EnumMergeSpace(val parts: List<Space<FoxType>>) : Space<FoxType> {
     
     override fun contains(that: FoxType): Boolean {
         if (that !is FoxEnumType) return false
-        val allKeys = that.items.keys.toList()
+        val allKeys = that.entries.keys.toList()
         val totalBounds = enumArityBoundsOf(this)
         if (totalBounds != null && that.arity !in totalBounds.min..totalBounds.max) return false
         val partBounds = parts.map { enumArityBoundsOf(it) }
@@ -60,7 +60,7 @@ data class EnumMergeSpace(val parts: List<Space<FoxType>>) : Space<FoxType> {
                 }
                 sizeRange.any { pieceSize ->
                     chooseSubsets(allKeys, remainingKeys, pieceSize).any { selected ->
-                        val piece = that.selectItems(selected)
+                        val piece = that.selectEntries(selected)
                         part.contains(piece) && accepts(partIndex + 1, remainingKeys - selected)
                     }
                 }
@@ -162,14 +162,14 @@ private fun chooseSubsets(
     }
 }
 
-fun enumItem(generic: String, name: String) = EnumItemProjectionSpace(generic, name)
+fun enumEntry(generic: String, name: String) = EnumEntryProjectionSpace(generic, name)
 
-data class EnumItemProjectionSpace(val generic: String, val name: String) : PlaceHolderSpace<FoxType>
+data class EnumEntryProjectionSpace(val generic: String, val name: String) : PlaceHolderSpace<FoxType>
 
-fun enumItemsOf(generic: String, names: Set<String>) = EnumItemsProjectionSpace(generic, names)
+fun enumEntriesOf(generic: String, names: Set<String>) = EnumEntriesProjectionSpace(generic, names)
 
-data class EnumItemsProjectionSpace(val generic: String, val names: Set<String>) : PlaceHolderSpace<FoxType>
+data class EnumEntriesProjectionSpace(val generic: String, val names: Set<String>) : PlaceHolderSpace<FoxType>
 
-fun enumDropItemsOf(generic: String, names: Set<String>) = EnumDropItemsProjectionSpace(generic, names)
+fun enumDropEntriesOf(generic: String, names: Set<String>) = EnumDropItemsProjectionSpace(generic, names)
 
 data class EnumDropItemsProjectionSpace(val generic: String, val names: Set<String>) : PlaceHolderSpace<FoxType>

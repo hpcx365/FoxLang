@@ -173,7 +173,7 @@ class TypeNormalizationPassTest {
     
     @Test
     fun detectsDuplicateItemDuringEnumMerge() {
-        val type = FoxEnumMergeItemsOfType(
+        val type = FoxEnumMergeEntriesOfType(
             listOf(
                 FoxEnumType(mapOf("Ok" to FoxStringType)),
                 FoxEnumType(mapOf("Ok" to FoxIntType)),

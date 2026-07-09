@@ -155,10 +155,10 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             is FoxObjectMembersOfType -> printTypeAndNamesArgument("MembersOf", type.type, type.names)
             is FoxObjectDropMembersOfType -> printTypeAndNamesArgument("DropMembersOf", type.type, type.names)
             is FoxObjectMergeMembersOfType -> printTypeListArgument("MergeMembersOf", type.types)
-            is FoxEnumItemOfType -> printTypeAndNameArgument("ItemOf", type.type, type.name)
-            is FoxEnumItemsOfType -> printTypeAndNamesArgument("ItemsOf", type.type, type.names)
-            is FoxEnumDropItemsOfType -> printTypeAndNamesArgument("DropItemsOf", type.type, type.names)
-            is FoxEnumMergeItemsOfType -> printTypeListArgument("MergeItemsOf", type.types)
+            is FoxEnumEntryOfType -> printTypeAndNameArgument("EntryOf", type.type, type.name)
+            is FoxEnumEntriesOfType -> printTypeAndNamesArgument("EntriesOf", type.type, type.names)
+            is FoxEnumDropEntriesOfType -> printTypeAndNamesArgument("DropEntriesOf", type.type, type.names)
+            is FoxEnumMergeEntriesOfType -> printTypeListArgument("MergeEntriesOf", type.types)
             is FoxArrayElementOfType -> printSingleTypeArgument("ElementOf", type.type)
             is FoxRefReferentOfType -> printSingleTypeArgument("ReferentOf", type.type)
             is FoxMethodOfType -> printTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`))
@@ -218,7 +218,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     
     private fun PrintWriter.printEnumType(type: FoxEnumType) {
         print("Enum<")
-        printCommaSeparated(type.items.entries) { item ->
+        printCommaSeparated(type.entries.entries) { item ->
             print(item.key)
             print(" = ")
             printType(item.value)
@@ -228,6 +228,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     
     private fun PrintWriter.printMethodType(type: FoxMethodType) {
         print("Method<")
+        print("this")
+        print(": ")
         printType(type.`this`)
         print(", ")
         type.parameters.forEach {
@@ -236,6 +238,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             printType(it.value)
             print(", ")
         }
+        print("return")
+        print(": ")
         printType(type.`return`)
         print('>')
     }
@@ -324,10 +328,13 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
                 print('.')
                 print(statement.name)
             }
-            is FoxComponentAccess -> {
+            is FoxIndexAccess -> {
                 printStatement(statement.target, indentLevel, PostfixTarget)
-                print('.')
-                print(statement.index)
+                print('[')
+                printCommaSeparated(statement.indices) {
+                    printStatement(it, indentLevel, Standalone)
+                }
+                print(']')
             }
             is FoxCall -> printCall(statement, indentLevel)
             is FoxConstruct -> {
@@ -412,7 +419,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun PrintWriter.printCall(statement: FoxCall, indentLevel: Int) {
-        if (canonical || statement.target != FoxUnit) {
+        if (canonical || statement.target != FoxEntityStatement(FoxUnit)) {
             printStatement(statement.target, indentLevel, PostfixTarget)
             print('.')
         }
@@ -422,7 +429,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun PrintWriter.printIndirectCall(statement: FoxIndirectCall, indentLevel: Int) {
-        if (canonical || statement.target != FoxUnit) {
+        if (canonical || statement.target != FoxEntityStatement(FoxUnit)) {
             printStatement(statement.target, indentLevel, PostfixTarget)
             print('.')
         }
@@ -459,7 +466,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print(" {\n")
         statement.cases.forEachIndexed { index, case ->
             print(indent(indentLevel + 1))
-            if (case.conditions.isEmpty()) {
+            if (case.conditions == null) {
                 print("else")
             } else {
                 printCommaSeparated(case.conditions) { condition ->
@@ -493,8 +500,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun PrintWriter.printMethodBody(statement: FoxStatement) {
-        if (canonical) printBlockBody(statement, 0)
-        else printStatement(statement, 0, Standalone)
+        if (statement is FoxBlock) printBlock(statement, 0)
+        else printBlockBody(statement, 0)
     }
     
     private fun PrintWriter.printControlBody(statement: FoxStatement, indentLevel: Int, allowElseIfChain: Boolean = false) {
@@ -604,11 +611,12 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun PrintWriter.printFormattedString(statement: FoxFormattedString) {
-        print(if (statement.isRaw) "rf\"" else "f\"")
+        val isRaw = false
+        print(if (isRaw) "rf\"" else "f\"")
         statement.parts.forEach { part ->
             when (part) {
                 is FoxFormattedText ->
-                    print(if (statement.isRaw) escapeRawFormattedText(part.text) else escapeFormattedText(part.text))
+                    print(if (isRaw) escapeRawFormattedText(part.text) else escapeFormattedText(part.text))
                 
                 is FoxFormattedExpression -> {
                     print('{')
@@ -633,9 +641,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
                     }
                 }
             }
-            print(" ->")
         }
-        
+        print(" ->")
         when (val body = statement.body) {
             is FoxBlock -> {
                 if (body.statements.isEmpty()) {
@@ -718,15 +725,15 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         FoxNeqOperator -> "!="
         FoxLtOperator -> "<"
         FoxGtOperator -> ">"
-        FoxLeOperator -> "<="
-        FoxGeOperator -> ">="
+        FoxLeqOperator -> "<="
+        FoxGeqOperator -> ">="
         FoxAndAndOperator -> "&&"
         FoxOrOrOperator -> "||"
     }
     
     private fun assignOperatorText(operator: FoxAssignOperator) = when (operator) {
         FoxPlainAssignOperator -> "="
-        FoxTypeBindingAssignOperator -> ":="
+        FoxDefAssignOperator -> ":="
         FoxAddAssignOperator -> "+="
         FoxSubAssignOperator -> "-="
         FoxMulAssignOperator -> "*="
@@ -760,7 +767,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         is FoxBinary -> binaryPrecedence(statement.operator)
         is FoxUnary -> 120
         is FoxFieldAccess,
-        is FoxComponentAccess,
+        is FoxIndexAccess,
         is FoxCall,
         is FoxConstruct,
         is FoxIndirectCall,
@@ -780,7 +787,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         FoxXorOperator -> 50
         FoxAndOperator -> 60
         FoxEqOperator, FoxNeqOperator -> 70
-        FoxLtOperator, FoxGtOperator, FoxLeOperator, FoxGeOperator -> 80
+        FoxLtOperator, FoxGtOperator, FoxLeqOperator, FoxGeqOperator -> 80
         FoxShlOperator, FoxShrOperator, FoxUshrOperator -> 90
         FoxAddOperator, FoxSubOperator -> 100
         FoxMulOperator, FoxDivOperator, FoxRemOperator -> 110

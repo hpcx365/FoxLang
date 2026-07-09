@@ -13,7 +13,48 @@ val FoxObjectType.arity: Int
     get() = members.size
 
 val FoxEnumType.arity: Int
-    get() = items.size
+    get() = entries.size
+
+@JvmName("tupleComponentListOptionalCountToFoxTupleType")
+fun List<Pair<FoxType, Int?>>.toFoxTupleType() = map { it.first to (it.second ?: 1) }.toFoxTupleType()
+
+@JvmName("tupleComponentListToFoxTupleType")
+fun List<Pair<FoxType, Int>>.toFoxTupleType(): FoxTupleType {
+    if (isEmpty()) return FoxTupleType(emptyList())
+    val expandedSize = fold(0) { acc, (_, count) ->
+        require(count > 0) { "Tuple component count must be positive: $count" }
+        Math.addExact(acc, count)
+    }
+    val result = ArrayList<FoxType>(expandedSize)
+    var previous: FoxType? = null
+    var hasPrevious = false
+    var shouldUseRle = false
+    forEach { (type, count) ->
+        if (count > 1 || hasPrevious && previous == type) {
+            shouldUseRle = true
+        }
+        repeat(count) {
+            result += type
+        }
+        previous = type
+        hasPrevious = true
+    }
+    return FoxTupleType(if (shouldUseRle) toRleArrayListFromRuns() else result)
+}
+
+@JvmName("typeListToFoxTupleType")
+fun List<FoxType>.toFoxTupleType(): FoxTupleType {
+    if (isEmpty()) return FoxTupleType(emptyList())
+    val copied = toList()
+    val shouldUseRle = copied.zipWithNext().any { (left, right) -> left == right }
+    return FoxTupleType(if (shouldUseRle) copied.toRleArrayList() else copied)
+}
+
+fun List<Pair<String, FoxType>>.toFoxStructType() = FoxStructType(toOrderedMap())
+
+fun List<Pair<String, FoxType>>.toFoxObjectType() = FoxObjectType(toMap())
+
+fun List<Pair<String, FoxType>>.toFoxEnumType() = FoxEnumType(toMap())
 
 fun FoxTupleType.componentAt(index: Int): FoxType {
     require(index in 0 until arity) { "Tuple component index out of bounds: $index, size=$arity" }
@@ -59,38 +100,6 @@ fun FoxTupleType.dropLastComponents(count: Int): FoxTupleType {
 
 fun Iterable<FoxTupleType>.mergeTupleComponents(): FoxTupleType {
     return flatMap { it.components }.toFoxTupleType()
-}
-
-@JvmName("tupleComponentListToFoxTupleType")
-fun List<Pair<FoxType, Int>>.toFoxTupleType(): FoxTupleType {
-    if (isEmpty()) return FoxTupleType(emptyList())
-    val expandedSize = fold(0) { acc, (_, count) ->
-        require(count > 0) { "Tuple component count must be positive: $count" }
-        Math.addExact(acc, count)
-    }
-    val result = ArrayList<FoxType>(expandedSize)
-    var previous: FoxType? = null
-    var hasPrevious = false
-    var shouldUseRle = false
-    forEach { (type, count) ->
-        if (count > 1 || hasPrevious && previous == type) {
-            shouldUseRle = true
-        }
-        repeat(count) {
-            result += type
-        }
-        previous = type
-        hasPrevious = true
-    }
-    return FoxTupleType(if (shouldUseRle) toRleArrayListFromRuns() else result)
-}
-
-@JvmName("typeListToFoxTupleType")
-fun List<FoxType>.toFoxTupleType(): FoxTupleType {
-    if (isEmpty()) return FoxTupleType(emptyList())
-    val copied = toList()
-    val shouldUseRle = copied.zipWithNext().any { (left, right) -> left == right }
-    return FoxTupleType(if (shouldUseRle) copied.toRleArrayList() else copied)
 }
 
 fun FoxStructType.fieldAt(index: Int): Map.Entry<String, FoxType> {
@@ -197,27 +206,27 @@ fun Iterable<FoxObjectType>.mergeObjectMembers(): FoxObjectType {
     return FoxObjectType(result)
 }
 
-fun FoxEnumType.item(name: String): FoxType = items.getValue(name)
+fun FoxEnumType.entry(name: String): FoxType = entries.getValue(name)
 
-fun FoxEnumType.selectItems(names: Iterable<String>): FoxEnumType {
+fun FoxEnumType.selectEntries(names: Iterable<String>): FoxEnumType {
     val result = LinkedHashMap<String, FoxType>()
-    names.forEach { name -> result[name] = items.getValue(name) }
+    names.forEach { name -> result[name] = entries.getValue(name) }
     return FoxEnumType(result)
 }
 
-fun FoxEnumType.dropItems(names: Iterable<String>): FoxEnumType {
+fun FoxEnumType.dropEntries(names: Iterable<String>): FoxEnumType {
     val removed = names.toSet()
     val result = LinkedHashMap<String, FoxType>()
-    items.forEach { (name, type) ->
+    entries.forEach { (name, type) ->
         if (name !in removed) result[name] = type
     }
     return FoxEnumType(result)
 }
 
-fun Iterable<FoxEnumType>.mergeEnumItems(): FoxEnumType {
+fun Iterable<FoxEnumType>.mergeEnumEntries(): FoxEnumType {
     val result = LinkedHashMap<String, FoxType>()
     forEach { enum ->
-        enum.items.forEach { (name, type) ->
+        enum.entries.forEach { (name, type) ->
             result[name] = type
         }
     }
@@ -250,7 +259,7 @@ fun FoxType.visitTypes(filter: (FoxType) -> Boolean, visitor: (FoxType) -> Unit)
             is FoxTupleType -> components.forEach { it.visitTypes(filter, visitor) }
             is FoxStructType -> fields.values.forEach { it.visitTypes(filter, visitor) }
             is FoxObjectType -> members.values.forEach { it.visitTypes(filter, visitor) }
-            is FoxEnumType -> items.values.forEach { it.visitTypes(filter, visitor) }
+            is FoxEnumType -> entries.values.forEach { it.visitTypes(filter, visitor) }
             is FoxArrayType -> element.visitTypes(filter, visitor)
             is FoxRefType -> referent.visitTypes(filter, visitor)
             is FoxMethodType -> {
@@ -289,10 +298,10 @@ fun FoxType.visitTypes(filter: (FoxType) -> Boolean, visitor: (FoxType) -> Unit)
             is FoxObjectMembersOfType -> type.visitTypes(filter, visitor)
             is FoxObjectDropMembersOfType -> type.visitTypes(filter, visitor)
             is FoxObjectMergeMembersOfType -> types.forEach { it.visitTypes(filter, visitor) }
-            is FoxEnumItemOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumItemsOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumDropItemsOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumMergeItemsOfType -> types.forEach { it.visitTypes(filter, visitor) }
+            is FoxEnumEntryOfType -> type.visitTypes(filter, visitor)
+            is FoxEnumEntriesOfType -> type.visitTypes(filter, visitor)
+            is FoxEnumDropEntriesOfType -> type.visitTypes(filter, visitor)
+            is FoxEnumMergeEntriesOfType -> types.forEach { it.visitTypes(filter, visitor) }
             is FoxArrayElementOfType -> type.visitTypes(filter, visitor)
             is FoxRefReferentOfType -> type.visitTypes(filter, visitor)
             is FoxMethodOfType -> {
@@ -334,7 +343,7 @@ fun FoxType.mapTypes(filter: (FoxType) -> Boolean, mapper: (FoxType) -> FoxType)
             is FoxTupleType -> components.map { it.mapTypes(filter, mapper) }.toFoxTupleType()
             is FoxStructType -> FoxStructType(fields.mapValues { it.value.mapTypes(filter, mapper) })
             is FoxObjectType -> FoxObjectType(members.mapValues { it.value.mapTypes(filter, mapper) })
-            is FoxEnumType -> FoxEnumType(items.mapValues { it.value.mapTypes(filter, mapper) })
+            is FoxEnumType -> FoxEnumType(entries.mapValues { it.value.mapTypes(filter, mapper) })
             is FoxArrayType -> FoxArrayType(element.mapTypes(filter, mapper))
             is FoxRefType -> FoxRefType(referent.mapTypes(filter, mapper))
             is FoxMethodType -> FoxMethodType(
@@ -373,10 +382,10 @@ fun FoxType.mapTypes(filter: (FoxType) -> Boolean, mapper: (FoxType) -> FoxType)
             is FoxObjectMembersOfType -> FoxObjectMembersOfType(type.mapTypes(filter, mapper), names)
             is FoxObjectDropMembersOfType -> FoxObjectDropMembersOfType(type.mapTypes(filter, mapper), names)
             is FoxObjectMergeMembersOfType -> FoxObjectMergeMembersOfType(types.map { it.mapTypes(filter, mapper) })
-            is FoxEnumItemOfType -> FoxEnumItemOfType(type.mapTypes(filter, mapper), name)
-            is FoxEnumItemsOfType -> FoxEnumItemsOfType(type.mapTypes(filter, mapper), names)
-            is FoxEnumDropItemsOfType -> FoxEnumDropItemsOfType(type.mapTypes(filter, mapper), names)
-            is FoxEnumMergeItemsOfType -> FoxEnumMergeItemsOfType(types.map { it.mapTypes(filter, mapper) })
+            is FoxEnumEntryOfType -> FoxEnumEntryOfType(type.mapTypes(filter, mapper), name)
+            is FoxEnumEntriesOfType -> FoxEnumEntriesOfType(type.mapTypes(filter, mapper), names)
+            is FoxEnumDropEntriesOfType -> FoxEnumDropEntriesOfType(type.mapTypes(filter, mapper), names)
+            is FoxEnumMergeEntriesOfType -> FoxEnumMergeEntriesOfType(types.map { it.mapTypes(filter, mapper) })
             is FoxArrayElementOfType -> FoxArrayElementOfType(type.mapTypes(filter, mapper))
             is FoxRefReferentOfType -> FoxRefReferentOfType(type.mapTypes(filter, mapper))
             is FoxMethodOfType -> FoxMethodOfType(`this`.mapTypes(filter, mapper), parameters.mapTypes(filter, mapper), `return`.mapTypes(filter, mapper))

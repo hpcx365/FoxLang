@@ -208,16 +208,16 @@ class TypeCompileTest {
         val base = FoxUnresolvedType("E", null)
         
         assertEquals(
-            EnumItemProjectionSpace("E", "Ok"),
-            compileType(FoxEnumItemOfType(base, "Ok")),
+            EnumEntryProjectionSpace("E", "Ok"),
+            compileType(FoxEnumEntryOfType(base, "Ok")),
         )
         assertEquals(
-            EnumItemsProjectionSpace("E", setOf("Err", "Ok")),
-            compileType(FoxEnumItemsOfType(base, setOf("Err", "Ok"))),
+            EnumEntriesProjectionSpace("E", setOf("Err", "Ok")),
+            compileType(FoxEnumEntriesOfType(base, setOf("Err", "Ok"))),
         )
         assertEquals(
             EnumDropItemsProjectionSpace("E", setOf("Err")),
-            compileType(FoxEnumDropItemsOfType(base, setOf("Err"))),
+            compileType(FoxEnumDropEntriesOfType(base, setOf("Err"))),
         )
     }
     
@@ -234,7 +234,7 @@ class TypeCompileTest {
                 "Pending" to FoxDoubleType,
             ),
         )
-        val compiled = assertIs<EnumMergeSpace>(compileType(FoxEnumMergeItemsOfType(listOf(left, right))))
+        val compiled = assertIs<EnumMergeSpace>(compileType(FoxEnumMergeEntriesOfType(listOf(left, right))))
         
         assertTrue(
             compiled.contains(
@@ -262,7 +262,7 @@ class TypeCompileTest {
     @Test
     fun enumMergeWithDuplicateNamesMatchesNoConcreteEnum() {
         val compiled = compileType(
-            FoxEnumMergeItemsOfType(
+            FoxEnumMergeEntriesOfType(
                 listOf(
                     FoxEnumType(mapOf("Ok" to FoxStringType)),
                     FoxEnumType(mapOf("Ok" to FoxIntType)),

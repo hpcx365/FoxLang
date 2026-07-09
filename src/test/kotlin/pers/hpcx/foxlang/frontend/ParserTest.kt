@@ -2,10 +2,10 @@ package pers.hpcx.foxlang.frontend
 
 import org.junit.jupiter.api.assertThrows
 import pers.hpcx.foxlang.frontend.common.*
+import pers.hpcx.foxlang.utils.Opt
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ParserTest {
     
@@ -19,7 +19,7 @@ class ParserTest {
             }
         }
         
-        val result = assertIs<Atom>(Parser(grammar, start).parseText("a"))
+        val result = Parser(grammar, start).parseText("a").value()
         assertEquals(Atom("a"), result)
     }
     
@@ -41,7 +41,7 @@ class ParserTest {
             }
         }
         
-        val result = assertIs<Expr>(Parser(grammar, expression).parseText("a+a+a"))
+        val result = Parser(grammar, expression).parseText("a+a+a").value()
         assertEquals(
             Expr.Add(
                 Expr.Add(Expr.AtomExpr(Atom("a")), Atom("a")),
@@ -75,7 +75,7 @@ class ParserTest {
             }
         }
         
-        val result = assertIs<WordValue>(Parser(grammar, start).parseText("foo.bar"))
+        val result = Parser(grammar, start).parseText("foo.bar").value()
         assertEquals(WordValue("foo.bar"), result)
     }
     
@@ -88,7 +88,7 @@ class ParserTest {
             }
         }
         
-        val result = assertIs<WordValue>(Parser(grammar, start).parseText("a+b"))
+        val result = Parser(grammar, start).parseText("a+b").value()
         assertEquals(WordValue("a+b"), result)
     }
     
@@ -105,7 +105,7 @@ class ParserTest {
             }
         }
         
-        val result = assertIs<Sentence>(Parser(grammar, start).parseText("abc"))
+        val result = Parser(grammar, start).parseText("abc").value()
         assertEquals(Sentence.Single(WordValue("abc")), result)
     }
     
@@ -119,7 +119,7 @@ class ParserTest {
             }
         }
         
-        assertNull(Parser(grammar, start).parseText("a+a"))
+        assertTrue { Parser(grammar, start).parseText("a+a").isEmpty() }
     }
 }
 
@@ -127,7 +127,7 @@ private fun testSource(text: String): Source<Text> {
     return Source(text, text.mapIndexed { index, char -> Text(index, char.toString()) })
 }
 
-private fun <N> Parser<N>.parseText(text: String): N? {
+private fun <N> Parser<N>.parseText(text: String): Opt<N> {
     return parse(testSource(text))
 }
 
@@ -149,7 +149,7 @@ private fun <N> GrammarRuleSetBuilder<N>.fixed(
             }
             
             if (builder.toString() != string) return@TerminalMatcher null
-            TerminalMatch(SourceSpan(start, cursor), factory(Text(first.offset, builder.toString())))
+            TerminalMatch(factory(Text(first.offset, builder.toString())), SourceSpan(start, cursor))
         },
     )
 }
@@ -179,7 +179,7 @@ private fun <N> GrammarRuleSetBuilder<N>.regex(
             }
             
             val end = longest ?: return@TerminalMatcher null
-            TerminalMatch(SourceSpan(start, end), factory(Text(first.offset, longestText)))
+            TerminalMatch(factory(Text(first.offset, longestText)), SourceSpan(start, end))
         },
     )
 }

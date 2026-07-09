@@ -1,8 +1,11 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.FoxFile
+import pers.hpcx.foxlang.ast.ParsedFoxFile
 import pers.hpcx.foxlang.frontend.common.*
 import pers.hpcx.foxlang.frontend.fox.*
+import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.ParenClose
+import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.SquareClose
+import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.Comma
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -46,6 +49,23 @@ def foo(a: Int b: Int) {
         assertEquals(ParenClose, terminal.symbol)
         assertEquals(closeSpan, terminal.span)
     }
+    
+    @Test
+    fun selectsMissingIndexCloseForPostfixExpression() {
+        val analysis = "tuple[0".analyzeFoxOrThrow()
+        
+        analysis.context.repair(Expectation(Statement, analysis.source.span), FoxRepairStrategy)
+        
+        val tree = assertNotNull(
+            analysis.context.best(Statement, FoxDiagnosticScoringStrategy),
+        )
+        val terminal = tree.expectedLeaves().single().match
+        val closeSpan = SourceSpan(analysis.source.span.end, analysis.source.span.end)
+        
+        assertEquals(ParseMatchType.Synthetic, tree.match.matchType)
+        assertEquals(SquareClose, terminal.symbol)
+        assertEquals(closeSpan, terminal.span)
+    }
 }
 
 private fun Source<*>.plainPosition(text: String): SourcePosition {
@@ -54,7 +74,7 @@ private fun Source<*>.plainPosition(text: String): SourcePosition {
     return SourcePosition(index)
 }
 
-private fun String.analyzeFoxOrThrow(): ParseAnalysis<FoxFile> {
+private fun String.analyzeFoxOrThrow(): ParseAnalysis<ParsedFoxFile> {
     return when (val result = sourceFox()) {
         is SourceFragmentationSuccess -> (result.value).analyzeFox()
         is SourceFragmentationFailure -> error(result.errors.joinToString { it })
