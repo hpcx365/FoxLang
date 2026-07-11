@@ -12,10 +12,12 @@ import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxLiteralSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxSyntheticTypeKeywordSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.*
-import pers.hpcx.foxlang.runtime.*
+import pers.hpcx.foxlang.runtime.FoxBool
+import pers.hpcx.foxlang.runtime.FoxChar
+import pers.hpcx.foxlang.runtime.FoxString
+import pers.hpcx.foxlang.runtime.FoxUnit
 import pers.hpcx.foxlang.utils.AutoRegex.Companion.literals
 import pers.hpcx.foxlang.utils.AutoRegex.Companion.pattern
-import pers.hpcx.foxlang.utils.rleArrayListOfRuns
 
 internal val KeywordRegex = literals(FoxKeywordsByText.keys)
 internal val IdentifierRegex = pattern("[a-z][a-zA-Z0-9_]*") - KeywordRegex
@@ -148,20 +150,20 @@ val FoxGrammar = buildGrammar {
         symbols(KwFalse) { ParsedBoolean(false, it.span) }
     }
     rules(LitInt) {
-        regex(BinIntRegex) { it, span -> ParsedInt(it.drop(2).replace("_", "").toInt(2), span) }
-        regex(DecIntRegex) { it, span -> ParsedInt(it.replace("_", "").toInt(), span) }
-        regex(HexIntRegex) { it, span -> ParsedInt(it.drop(2).replace("_", "").toInt(16), span) }
+        regex(BinIntRegex) { it, span -> ParsedInt(2, it.drop(2).replace("_", ""), span) }
+        regex(DecIntRegex) { it, span -> ParsedInt(10, it.replace("_", ""), span) }
+        regex(HexIntRegex) { it, span -> ParsedInt(16, it.drop(2).replace("_", ""), span) }
     }
     rules(LitLong) {
-        regex(BinLongRegex) { it, span -> ParsedLong(it.drop(2).dropLast(1).replace("_", "").toLong(2), span) }
-        regex(DecLongRegex) { it, span -> ParsedLong(it.dropLast(1).replace("_", "").toLong(), span) }
-        regex(HexLongRegex) { it, span -> ParsedLong(it.drop(2).dropLast(1).replace("_", "").toLong(16), span) }
+        regex(BinLongRegex) { it, span -> ParsedLong(2, it.drop(2).dropLast(1).replace("_", ""), span) }
+        regex(DecLongRegex) { it, span -> ParsedLong(10, it.dropLast(1).replace("_", ""), span) }
+        regex(HexLongRegex) { it, span -> ParsedLong(16, it.drop(2).dropLast(1).replace("_", ""), span) }
     }
     rules(LitFloat) {
-        regex(DecFloatRegex) { it, span -> ParsedFloat(it.dropLast(1).replace("_", "").toFloat(), span) }
+        regex(DecFloatRegex) { it, span -> ParsedFloat(it.dropLast(1).replace("_", ""), span) }
     }
     rules(LitDouble) {
-        regex(DecDoubleRegex) { it, span -> ParsedDouble(it.replace("_", "").toDouble(), span) }
+        regex(DecDoubleRegex) { it, span -> ParsedDouble(it.replace("_", ""), span) }
     }
     rules(LitChar) { charLiteral { it, span -> ParsedChar(it, span) } }
     rules(LitString) { stringLiteral { it, span -> ParsedString(it, span) } }
@@ -224,133 +226,188 @@ val FoxGrammar = buildGrammar {
             ParsedFoxAnyEnumType(kw.span)
         }
         
-        symbols(KwComponentAt, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleComponentAtType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetComponent, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetComponentType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastComponentAt, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleLastComponentAtType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetComponentBack, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetComponentBackType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFirstComponents, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetFirstComponentsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleExactFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFirstComponentsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetFirstComponentsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetLastComponents, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetLastComponentsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleExactLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetLastComponentsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleGetLastComponentsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleDropFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropFirstComponents, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropFirstComponentsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropFirstComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleExactDropFirstComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropFirstComponentsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropFirstComponentsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleDropLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropLastComponents, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropLastComponentsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropLastComponentsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxTupleExactDropLastComponentsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropLastComponentsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxTupleDropLastComponentsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwMergeComponentsOf, AnonymousActualGenericParameterList) { kw, types ->
-            ParsedFoxTupleMergeComponentsOfType(types, mergeSpan(kw, types))
+        symbols(KwMergeTuples, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxTupleMergeTuplesType(types, mergeSpan(kw, types))
         }
         
         symbols(
-            KwFieldOf, AngleOpen, Type, Comma, Identifier, AngleClose,
+            KwGetFieldTypeByName, AngleOpen, Type, Comma, Identifier, AngleClose,
         ) { kw, open, type, comma, name, close ->
-            ParsedFoxStructFieldOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
+            ParsedFoxStructGetFieldTypeByNameType(type, name, mergeSpan(kw, open, type, comma, name, close))
         }
-        symbols(KwFieldAt, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructFieldAtType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFieldTypeByIndex, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetFieldTypeByIndexType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastFieldAt, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructLastFieldAtType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFieldTypeByIndexBack, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetFieldTypeByIndexBackType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFirstFields, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetFirstFieldsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructExactFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetFirstFieldsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetFirstFieldsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetLastFields, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetLastFieldsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructExactLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwGetLastFieldsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructGetLastFieldsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructDropFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropFirstFields, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropFirstFieldsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropFirstFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructExactDropFirstFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropFirstFieldsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropFirstFieldsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwDropLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructDropLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropLastFields, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropLastFieldsType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
-        symbols(KwExactDropLastFieldsOf, ActualGenericIntParameterList) { kw, it ->
-            ParsedFoxStructExactDropLastFieldsOfType(it.node.first, it.node.second, mergeSpan(kw, it))
+        symbols(KwDropLastFieldsExact, ActualGenericIntParameterList) { kw, it ->
+            ParsedFoxStructDropLastFieldsExactType(it.node.first, it.node.second, mergeSpan(kw, it))
         }
         symbols(
-            KwFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
+            KwSelectFields, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
         ) { kw, open, type, comma, names, close ->
-            ParsedFoxStructFieldsOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
+            ParsedFoxStructSelectFieldsType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
         symbols(
-            KwDropFieldsOf, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
+            KwSelectFieldsExact, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
         ) { kw, open, type, comma, names, close ->
-            ParsedFoxStructDropFieldsOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
-        }
-        symbols(KwMergeFieldsOf, AnonymousActualGenericParameterList) { kw, types ->
-            ParsedFoxStructMergeFieldsOfType(types, mergeSpan(kw, types))
+            ParsedFoxStructSelectFieldsExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
         symbols(
-            KwMemberOf, AngleOpen, Type, Comma, Identifier, AngleClose,
-        ) { kw, open, type, comma, name, close ->
-            ParsedFoxObjectMemberOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
-        }
-        symbols(
-            KwMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+            KwDropFields, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
         ) { kw, open, type, comma, names, close ->
-            ParsedFoxObjectMembersOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
+            ParsedFoxStructDropFieldsType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
         symbols(
-            KwDropMembersOf, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+            KwDropFieldsExact, AngleOpen, Type, Comma, StructFieldNameList, AngleClose,
         ) { kw, open, type, comma, names, close ->
-            ParsedFoxObjectDropMembersOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
-        }
-        symbols(KwMergeMembersOf, AnonymousActualGenericParameterList) { kw, types ->
-            ParsedFoxObjectMergeMembersOfType(types, mergeSpan(kw, types))
+            ParsedFoxStructDropFieldsExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
         }
         symbols(
-            KwEntryOf, AngleOpen, Type, Comma, TypeName, AngleClose,
-        ) { kw, open, type, comma, name, close ->
-            ParsedFoxEnumEntryOfType(type, name, mergeSpan(kw, open, type, comma, name, close))
-        }
-        symbols(
-            KwEntriesOf, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
-        ) { kw, open, type, comma, names, close ->
-            ParsedFoxEnumEntriesOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
-        }
-        symbols(
-            KwDropEntriesOf, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
-        ) { kw, open, type, comma, names, close ->
-            ParsedFoxEnumDropEntriesOfType(type, names, mergeSpan(kw, open, type, comma, names, close))
-        }
-        symbols(KwMergeEntriesOf, AnonymousActualGenericParameterList) { kw, it ->
-            ParsedFoxEnumMergeEntriesOfType(it, mergeSpan(kw, it))
-        }
-        symbols(
-            KwElementOf, AngleOpen, Type, AngleClose,
+            KwExtractFieldTypes, AngleOpen, Type, AngleClose,
         ) { kw, open, type, close ->
-            ParsedFoxArrayElementOfType(type, mergeSpan(kw, open, type, close))
+            ParsedFoxStructExtractFieldTypesType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(KwMergeStructs, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxStructMergeStructsType(types, mergeSpan(kw, types))
+        }
+        
+        symbols(
+            KwGetMemberType, AngleOpen, Type, Comma, Identifier, AngleClose,
+        ) { kw, open, type, comma, name, close ->
+            ParsedFoxObjectGetMemberTypeType(type, name, mergeSpan(kw, open, type, comma, name, close))
         }
         symbols(
-            KwReferentOf, AngleOpen, Type, AngleClose,
+            KwSelectMembers, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectSelectMembersType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwSelectMembersExact, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectSelectMembersExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwDropMembers, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectDropMembersType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwDropMembersExact, AngleOpen, Type, Comma, ObjectMemberNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxObjectDropMembersExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(KwMergeObjects, AnonymousActualGenericParameterList) { kw, types ->
+            ParsedFoxObjectMergeObjectsType(types, mergeSpan(kw, types))
+        }
+        
+        symbols(
+            KwGetEntryType, AngleOpen, Type, Comma, TypeName, AngleClose,
+        ) { kw, open, type, comma, name, close ->
+            ParsedFoxEnumGetEntryTypeType(type, name, mergeSpan(kw, open, type, comma, name, close))
+        }
+        symbols(
+            KwSelectEntries, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumSelectEntriesType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwSelectEntriesExact, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumSelectEntriesExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwDropEntries, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumDropEntriesType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(
+            KwDropEntriesExact, AngleOpen, Type, Comma, EnumEntryNameList, AngleClose,
+        ) { kw, open, type, comma, names, close ->
+            ParsedFoxEnumDropEntriesExactType(type, names, mergeSpan(kw, open, type, comma, names, close))
+        }
+        symbols(KwMergeEnums, AnonymousActualGenericParameterList) { kw, it ->
+            ParsedFoxEnumMergeEnumsType(it, mergeSpan(kw, it))
+        }
+        
+        symbols(
+            KwGetElementType, AngleOpen, Type, AngleClose,
         ) { kw, open, type, close ->
-            ParsedFoxRefReferentOfType(type, mergeSpan(kw, open, type, close))
+            ParsedFoxArrayGetElementTypeType(type, mergeSpan(kw, open, type, close))
+        }
+        
+        symbols(
+            KwGetReferentType, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxRefGetReferentTypeType(type, mergeSpan(kw, open, type, close))
+        }
+        
+        symbols(
+            KwGetThisType, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodGetThisTypeType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwGetParameterStruct, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodGetParameterStructType(type, mergeSpan(kw, open, type, close))
+        }
+        symbols(
+            KwGetReturnType, AngleOpen, Type, AngleClose,
+        ) { kw, open, type, close ->
+            ParsedFoxMethodGetReturnTypeType(type, mergeSpan(kw, open, type, close))
         }
         symbols(
             KwMethodOf, AngleOpen, Type, Comma, Type, Comma, Type, AngleClose,
@@ -360,21 +417,7 @@ val FoxGrammar = buildGrammar {
                 mergeSpan(kw, open, `this`, comma0, parameters, comma1, `return`, close),
             )
         }
-        symbols(
-            KwThisOf, AngleOpen, Type, AngleClose,
-        ) { kw, open, type, close ->
-            ParsedFoxMethodThisOfType(type, mergeSpan(kw, open, type, close))
-        }
-        symbols(
-            KwParametersOf, AngleOpen, Type, AngleClose,
-        ) { kw, open, type, close ->
-            ParsedFoxMethodParametersOfType(type, mergeSpan(kw, open, type, close))
-        }
-        symbols(
-            KwReturnOf, AngleOpen, Type, AngleClose,
-        ) { kw, open, type, close ->
-            ParsedFoxMethodReturnOfType(type, mergeSpan(kw, open, type, close))
-        }
+        
         symbols(TypeName) {
             ParsedFoxUnresolvedType(it, null, it.span)
         }
@@ -624,23 +667,16 @@ val FoxGrammar = buildGrammar {
     }
     
     rules(TupleComponentParameter) {
-        symbols(Type) {
-            ParsedList(listOf(it), it.span)
-        }
-        symbols(
-            Type, Colon, LitInt,
-        ) { type, colon, count ->
-            ParsedList(rleArrayListOfRuns(type to count.node), mergeSpan(type, colon, count))
-        }
+        symbols(Type) { it }
     }
     rules(TupleComponentParameterListHead) {
         symbols(AngleOpen, TupleComponentParameter) { open, it ->
-            ParsedList(it.node, mergeSpan(open, it))
+            ParsedList(listOf(it), mergeSpan(open, it))
         }
         symbols(
             TupleComponentParameterListHead, Comma, TupleComponentParameter,
         ) { head, comma, it ->
-            ParsedList(head.node + it.node, mergeSpan(head, comma, it))
+            ParsedList(head.node + it, mergeSpan(head, comma, it))
         }
     }
     rules(TupleComponentParameterList) {
@@ -964,10 +1000,10 @@ val FoxGrammar = buildGrammar {
         
         symbols(LitUnit) { ParsedFoxEntityStatement(FoxUnit, it.span) }
         symbols(LitBool) { ParsedFoxEntityStatement(FoxBool(it.node), it.span) }
-        symbols(LitInt) { ParsedFoxEntityStatement(FoxInt(it.node), it.span) }
-        symbols(LitLong) { ParsedFoxEntityStatement(FoxLong(it.node), it.span) }
-        symbols(LitFloat) { ParsedFoxEntityStatement(FoxFloat(it.node), it.span) }
-        symbols(LitDouble) { ParsedFoxEntityStatement(FoxDouble(it.node), it.span) }
+        symbols(LitInt) { ParsedFoxIntStatement(it, it.span) }
+        symbols(LitLong) { ParsedFoxLongStatement(it, it.span) }
+        symbols(LitFloat) { ParsedFoxFloatStatement(it, it.span) }
+        symbols(LitDouble) { ParsedFoxDoubleStatement(it, it.span) }
         symbols(LitChar) { ParsedFoxEntityStatement(FoxChar(it.node), it.span) }
         symbols(LitString) { ParsedFoxEntityStatement(FoxString(it.node), it.span) }
         

@@ -5,7 +5,9 @@ import pers.hpcx.foxlang.type.toFoxEnumType
 import pers.hpcx.foxlang.type.toFoxObjectType
 import pers.hpcx.foxlang.type.toFoxStructType
 import pers.hpcx.foxlang.type.toFoxTupleType
-import pers.hpcx.foxlang.utils.*
+import pers.hpcx.foxlang.utils.OrderedMap
+import pers.hpcx.foxlang.utils.orEmpty
+import pers.hpcx.foxlang.utils.toOrderedMap
 
 sealed interface FoxType
 sealed interface ParsedFoxType<T : FoxType> : Parsed<T>
@@ -174,313 +176,399 @@ data class ParsedFoxMethodType(
 sealed interface FoxTransformType : FoxType
 sealed interface ParsedFoxTransformType<T : FoxTransformType> : ParsedFoxType<T>
 
-data class FoxTupleComponentAtType(val type: FoxType, val index: Int) : FoxTransformType
-data class ParsedFoxTupleComponentAtType(
+data class FoxTupleGetComponentType(val type: FoxType, val index: Int) : FoxTransformType
+data class ParsedFoxTupleGetComponentType(
     val type: ParsedFoxType<*>,
     val index: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleComponentAtType> {
-    override val node get() = FoxTupleComponentAtType(type.node, index.node)
+) : ParsedFoxTransformType<FoxTupleGetComponentType> {
+    override val node get() = FoxTupleGetComponentType(type.node, index.node)
 }
 
-data class FoxTupleLastComponentAtType(val type: FoxType, val index: Int) : FoxTransformType
-data class ParsedFoxTupleLastComponentAtType(
+data class FoxTupleGetComponentBackType(val type: FoxType, val index: Int) : FoxTransformType
+data class ParsedFoxTupleGetComponentBackType(
     val type: ParsedFoxType<*>,
     val index: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleLastComponentAtType> {
-    override val node get() = FoxTupleLastComponentAtType(type.node, index.node)
+) : ParsedFoxTransformType<FoxTupleGetComponentBackType> {
+    override val node get() = FoxTupleGetComponentBackType(type.node, index.node)
 }
 
-data class FoxTupleFirstComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleFirstComponentsOfType(
+data class FoxTupleGetFirstComponentsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleGetFirstComponentsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleFirstComponentsOfType> {
-    override val node get() = FoxTupleFirstComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleGetFirstComponentsType> {
+    override val node get() = FoxTupleGetFirstComponentsType(type.node, count.node)
 }
 
-data class FoxTupleExactFirstComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleExactFirstComponentsOfType(
+data class FoxTupleGetFirstComponentsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleGetFirstComponentsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleExactFirstComponentsOfType> {
-    override val node get() = FoxTupleExactFirstComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleGetFirstComponentsExactType> {
+    override val node get() = FoxTupleGetFirstComponentsExactType(type.node, count.node)
 }
 
-data class FoxTupleLastComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleLastComponentsOfType(
+data class FoxTupleGetLastComponentsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleGetLastComponentsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleLastComponentsOfType> {
-    override val node get() = FoxTupleLastComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleGetLastComponentsType> {
+    override val node get() = FoxTupleGetLastComponentsType(type.node, count.node)
 }
 
-data class FoxTupleExactLastComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleExactLastComponentsOfType(
+data class FoxTupleGetLastComponentsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleGetLastComponentsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleExactLastComponentsOfType> {
-    override val node get() = FoxTupleExactLastComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleGetLastComponentsExactType> {
+    override val node get() = FoxTupleGetLastComponentsExactType(type.node, count.node)
 }
 
-data class FoxTupleDropFirstComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleDropFirstComponentsOfType(
+data class FoxTupleDropFirstComponentsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleDropFirstComponentsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleDropFirstComponentsOfType> {
-    override val node get() = FoxTupleDropFirstComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleDropFirstComponentsType> {
+    override val node get() = FoxTupleDropFirstComponentsType(type.node, count.node)
 }
 
-data class FoxTupleExactDropFirstComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleExactDropFirstComponentsOfType(
+data class FoxTupleDropFirstComponentsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleDropFirstComponentsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleExactDropFirstComponentsOfType> {
-    override val node get() = FoxTupleExactDropFirstComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleDropFirstComponentsExactType> {
+    override val node get() = FoxTupleDropFirstComponentsExactType(type.node, count.node)
 }
 
-data class FoxTupleDropLastComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleDropLastComponentsOfType(
+data class FoxTupleDropLastComponentsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleDropLastComponentsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleDropLastComponentsOfType> {
-    override val node get() = FoxTupleDropLastComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleDropLastComponentsType> {
+    override val node get() = FoxTupleDropLastComponentsType(type.node, count.node)
 }
 
-data class FoxTupleExactDropLastComponentsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxTupleExactDropLastComponentsOfType(
+data class FoxTupleDropLastComponentsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxTupleDropLastComponentsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleExactDropLastComponentsOfType> {
-    override val node get() = FoxTupleExactDropLastComponentsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxTupleDropLastComponentsExactType> {
+    override val node get() = FoxTupleDropLastComponentsExactType(type.node, count.node)
 }
 
-data class FoxTupleMergeComponentsOfType(val types: List<FoxType>) : FoxTransformType
-data class ParsedFoxTupleMergeComponentsOfType(
+data class FoxTupleMergeTuplesType(val types: List<FoxType>) : FoxTransformType
+data class ParsedFoxTupleMergeTuplesType(
     val types: ParsedList<ParsedFoxType<*>>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxTupleMergeComponentsOfType> {
-    override val node get() = FoxTupleMergeComponentsOfType(types.node.map { it.node })
+) : ParsedFoxTransformType<FoxTupleMergeTuplesType> {
+    override val node get() = FoxTupleMergeTuplesType(types.node.map { it.node })
 }
 
-data class FoxStructFieldOfType(val type: FoxType, val name: String) : FoxTransformType
-data class ParsedFoxStructFieldOfType(
+data class FoxStructGetFieldTypeByNameType(val type: FoxType, val name: String) : FoxTransformType
+data class ParsedFoxStructGetFieldTypeByNameType(
     val type: ParsedFoxType<*>,
     val name: ParsedString,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructFieldOfType> {
-    override val node get() = FoxStructFieldOfType(type.node, name.node)
+) : ParsedFoxTransformType<FoxStructGetFieldTypeByNameType> {
+    override val node get() = FoxStructGetFieldTypeByNameType(type.node, name.node)
 }
 
-data class FoxStructFieldAtType(val type: FoxType, val index: Int) : FoxTransformType
-data class ParsedFoxStructFieldAtType(
+data class FoxStructGetFieldTypeByIndexType(val type: FoxType, val index: Int) : FoxTransformType
+data class ParsedFoxStructGetFieldTypeByIndexType(
     val type: ParsedFoxType<*>,
     val index: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructFieldAtType> {
-    override val node get() = FoxStructFieldAtType(type.node, index.node)
+) : ParsedFoxTransformType<FoxStructGetFieldTypeByIndexType> {
+    override val node get() = FoxStructGetFieldTypeByIndexType(type.node, index.node)
 }
 
-data class FoxStructLastFieldAtType(val type: FoxType, val index: Int) : FoxTransformType
-data class ParsedFoxStructLastFieldAtType(
+data class FoxStructGetFieldTypeByIndexBackType(val type: FoxType, val index: Int) : FoxTransformType
+data class ParsedFoxStructGetFieldTypeByIndexBackType(
     val type: ParsedFoxType<*>,
     val index: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructLastFieldAtType> {
-    override val node get() = FoxStructLastFieldAtType(type.node, index.node)
+) : ParsedFoxTransformType<FoxStructGetFieldTypeByIndexBackType> {
+    override val node get() = FoxStructGetFieldTypeByIndexBackType(type.node, index.node)
 }
 
-data class FoxStructFirstFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructFirstFieldsOfType(
+data class FoxStructGetFirstFieldsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructGetFirstFieldsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructFirstFieldsOfType> {
-    override val node get() = FoxStructFirstFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructGetFirstFieldsType> {
+    override val node get() = FoxStructGetFirstFieldsType(type.node, count.node)
 }
 
-data class FoxStructExactFirstFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructExactFirstFieldsOfType(
+data class FoxStructGetFirstFieldsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructGetFirstFieldsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructExactFirstFieldsOfType> {
-    override val node get() = FoxStructExactFirstFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructGetFirstFieldsExactType> {
+    override val node get() = FoxStructGetFirstFieldsExactType(type.node, count.node)
 }
 
-data class FoxStructLastFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructLastFieldsOfType(
+data class FoxStructGetLastFieldsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructGetLastFieldsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructLastFieldsOfType> {
-    override val node get() = FoxStructLastFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructGetLastFieldsType> {
+    override val node get() = FoxStructGetLastFieldsType(type.node, count.node)
 }
 
-data class FoxStructExactLastFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructExactLastFieldsOfType(
+data class FoxStructGetLastFieldsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructGetLastFieldsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructExactLastFieldsOfType> {
-    override val node get() = FoxStructExactLastFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructGetLastFieldsExactType> {
+    override val node get() = FoxStructGetLastFieldsExactType(type.node, count.node)
 }
 
-data class FoxStructDropFirstFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructDropFirstFieldsOfType(
+data class FoxStructDropFirstFieldsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructDropFirstFieldsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructDropFirstFieldsOfType> {
-    override val node get() = FoxStructDropFirstFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructDropFirstFieldsType> {
+    override val node get() = FoxStructDropFirstFieldsType(type.node, count.node)
 }
 
-data class FoxStructExactDropFirstFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructExactDropFirstFieldsOfType(
+data class FoxStructDropFirstFieldsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructDropFirstFieldsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructExactDropFirstFieldsOfType> {
-    override val node get() = FoxStructExactDropFirstFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructDropFirstFieldsExactType> {
+    override val node get() = FoxStructDropFirstFieldsExactType(type.node, count.node)
 }
 
-data class FoxStructDropLastFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructDropLastFieldsOfType(
+data class FoxStructDropLastFieldsType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructDropLastFieldsType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructDropLastFieldsOfType> {
-    override val node get() = FoxStructDropLastFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructDropLastFieldsType> {
+    override val node get() = FoxStructDropLastFieldsType(type.node, count.node)
 }
 
-data class FoxStructExactDropLastFieldsOfType(val type: FoxType, val count: Int) : FoxTransformType
-data class ParsedFoxStructExactDropLastFieldsOfType(
+data class FoxStructDropLastFieldsExactType(val type: FoxType, val count: Int) : FoxTransformType
+data class ParsedFoxStructDropLastFieldsExactType(
     val type: ParsedFoxType<*>,
     val count: ParsedInt,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructExactDropLastFieldsOfType> {
-    override val node get() = FoxStructExactDropLastFieldsOfType(type.node, count.node)
+) : ParsedFoxTransformType<FoxStructDropLastFieldsExactType> {
+    override val node get() = FoxStructDropLastFieldsExactType(type.node, count.node)
 }
 
-data class FoxStructFieldsOfType(val type: FoxType, val names: OrderedSet<String>) : FoxTransformType
-data class ParsedFoxStructFieldsOfType(
+data class FoxStructSelectFieldsType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxStructSelectFieldsType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructFieldsOfType> {
-    override val node get() = FoxStructFieldsOfType(type.node, names.node.map { it.node }.toOrderedSet())
+) : ParsedFoxTransformType<FoxStructSelectFieldsType> {
+    override val node get() = FoxStructSelectFieldsType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxStructDropFieldsOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
-data class ParsedFoxStructDropFieldsOfType(
+data class FoxStructSelectFieldsExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxStructSelectFieldsExactType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructDropFieldsOfType> {
-    override val node get() = FoxStructDropFieldsOfType(type.node, names.node.map { it.node }.toSet())
+) : ParsedFoxTransformType<FoxStructSelectFieldsExactType> {
+    override val node get() = FoxStructSelectFieldsExactType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxStructMergeFieldsOfType(val types: List<FoxType>) : FoxTransformType
-data class ParsedFoxStructMergeFieldsOfType(
+data class FoxStructDropFieldsType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxStructDropFieldsType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxStructDropFieldsType> {
+    override val node get() = FoxStructDropFieldsType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxStructDropFieldsExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxStructDropFieldsExactType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxStructDropFieldsExactType> {
+    override val node get() = FoxStructDropFieldsExactType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxStructExtractFieldTypesType(val type: FoxType) : FoxTransformType
+data class ParsedFoxStructExtractFieldTypesType(
+    val type: ParsedFoxType<*>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxStructExtractFieldTypesType> {
+    override val node get() = FoxStructExtractFieldTypesType(type.node)
+}
+
+data class FoxStructMergeStructsType(val types: List<FoxType>) : FoxTransformType
+data class ParsedFoxStructMergeStructsType(
     val types: ParsedList<ParsedFoxType<*>>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxStructMergeFieldsOfType> {
-    override val node get() = FoxStructMergeFieldsOfType(types.node.map { it.node })
+) : ParsedFoxTransformType<FoxStructMergeStructsType> {
+    override val node get() = FoxStructMergeStructsType(types.node.map { it.node })
 }
 
-data class FoxObjectMemberOfType(val type: FoxType, val name: String) : FoxTransformType
-data class ParsedFoxObjectMemberOfType(
+data class FoxObjectGetMemberTypeType(val type: FoxType, val name: String) : FoxTransformType
+data class ParsedFoxObjectGetMemberTypeType(
     val type: ParsedFoxType<*>,
     val name: ParsedString,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxObjectMemberOfType> {
-    override val node get() = FoxObjectMemberOfType(type.node, name.node)
+) : ParsedFoxTransformType<FoxObjectGetMemberTypeType> {
+    override val node get() = FoxObjectGetMemberTypeType(type.node, name.node)
 }
 
-data class FoxObjectMembersOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
-data class ParsedFoxObjectMembersOfType(
+data class FoxObjectSelectMembersType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxObjectSelectMembersType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxObjectMembersOfType> {
-    override val node get() = FoxObjectMembersOfType(type.node, names.node.map { it.node }.toSet())
+) : ParsedFoxTransformType<FoxObjectSelectMembersType> {
+    override val node get() = FoxObjectSelectMembersType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxObjectDropMembersOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
-data class ParsedFoxObjectDropMembersOfType(
+data class FoxObjectSelectMembersExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxObjectSelectMembersExactType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxObjectDropMembersOfType> {
-    override val node get() = FoxObjectDropMembersOfType(type.node, names.node.map { it.node }.toSet())
+) : ParsedFoxTransformType<FoxObjectSelectMembersExactType> {
+    override val node get() = FoxObjectSelectMembersExactType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxObjectMergeMembersOfType(val types: List<FoxType>) : FoxTransformType
-data class ParsedFoxObjectMergeMembersOfType(
+data class FoxObjectDropMembersType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxObjectDropMembersType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxObjectDropMembersType> {
+    override val node get() = FoxObjectDropMembersType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxObjectDropMembersExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxObjectDropMembersExactType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxObjectDropMembersExactType> {
+    override val node get() = FoxObjectDropMembersExactType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxObjectMergeObjectsType(val types: List<FoxType>) : FoxTransformType
+data class ParsedFoxObjectMergeObjectsType(
     val types: ParsedList<ParsedFoxType<*>>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxObjectMergeMembersOfType> {
-    override val node get() = FoxObjectMergeMembersOfType(types.node.map { it.node })
+) : ParsedFoxTransformType<FoxObjectMergeObjectsType> {
+    override val node get() = FoxObjectMergeObjectsType(types.node.map { it.node })
 }
 
-data class FoxEnumEntryOfType(val type: FoxType, val name: String) : FoxTransformType
-data class ParsedFoxEnumEntryOfType(
+data class FoxEnumGetEntryTypeType(val type: FoxType, val name: String) : FoxTransformType
+data class ParsedFoxEnumGetEntryTypeType(
     val type: ParsedFoxType<*>,
     val name: ParsedString,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxEnumEntryOfType> {
-    override val node get() = FoxEnumEntryOfType(type.node, name.node)
+) : ParsedFoxTransformType<FoxEnumGetEntryTypeType> {
+    override val node get() = FoxEnumGetEntryTypeType(type.node, name.node)
 }
 
-data class FoxEnumEntriesOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
-data class ParsedFoxEnumEntriesOfType(
+data class FoxEnumSelectEntriesType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxEnumSelectEntriesType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxEnumEntriesOfType> {
-    override val node get() = FoxEnumEntriesOfType(type.node, names.node.map { it.node }.toSet())
+) : ParsedFoxTransformType<FoxEnumSelectEntriesType> {
+    override val node get() = FoxEnumSelectEntriesType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxEnumDropEntriesOfType(val type: FoxType, val names: Set<String>) : FoxTransformType
-data class ParsedFoxEnumDropEntriesOfType(
+data class FoxEnumSelectEntriesExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxEnumSelectEntriesExactType(
     val type: ParsedFoxType<*>,
     val names: ParsedList<ParsedString>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxEnumDropEntriesOfType> {
-    override val node get() = FoxEnumDropEntriesOfType(type.node, names.node.map { it.node }.toSet())
+) : ParsedFoxTransformType<FoxEnumSelectEntriesExactType> {
+    override val node get() = FoxEnumSelectEntriesExactType(type.node, names.node.map { it.node }.toSet())
 }
 
-data class FoxEnumMergeEntriesOfType(val types: List<FoxType>) : FoxTransformType
-data class ParsedFoxEnumMergeEntriesOfType(
+data class FoxEnumDropEntriesType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxEnumDropEntriesType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxEnumDropEntriesType> {
+    override val node get() = FoxEnumDropEntriesType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxEnumDropEntriesExactType(val type: FoxType, val names: Set<String>) : FoxTransformType
+data class ParsedFoxEnumDropEntriesExactType(
+    val type: ParsedFoxType<*>,
+    val names: ParsedList<ParsedString>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxEnumDropEntriesExactType> {
+    override val node get() = FoxEnumDropEntriesExactType(type.node, names.node.map { it.node }.toSet())
+}
+
+data class FoxEnumMergeEnumsType(val types: List<FoxType>) : FoxTransformType
+data class ParsedFoxEnumMergeEnumsType(
     val types: ParsedList<ParsedFoxType<*>>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxEnumMergeEntriesOfType> {
-    override val node get() = FoxEnumMergeEntriesOfType(types.node.map { it.node })
+) : ParsedFoxTransformType<FoxEnumMergeEnumsType> {
+    override val node get() = FoxEnumMergeEnumsType(types.node.map { it.node })
 }
 
-data class FoxArrayElementOfType(val type: FoxType) : FoxTransformType
-data class ParsedFoxArrayElementOfType(
+data class FoxArrayGetElementTypeType(val type: FoxType) : FoxTransformType
+data class ParsedFoxArrayGetElementTypeType(
     val type: ParsedFoxType<*>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxArrayElementOfType> {
-    override val node get() = FoxArrayElementOfType(type.node)
+) : ParsedFoxTransformType<FoxArrayGetElementTypeType> {
+    override val node get() = FoxArrayGetElementTypeType(type.node)
 }
 
-data class FoxRefReferentOfType(val type: FoxType) : FoxTransformType
-data class ParsedFoxRefReferentOfType(
+data class FoxRefGetReferentTypeType(val type: FoxType) : FoxTransformType
+data class ParsedFoxRefGetReferentTypeType(
     val type: ParsedFoxType<*>,
     override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxRefReferentOfType> {
-    override val node get() = FoxRefReferentOfType(type.node)
+) : ParsedFoxTransformType<FoxRefGetReferentTypeType> {
+    override val node get() = FoxRefGetReferentTypeType(type.node)
+}
+
+data class FoxMethodGetThisTypeType(val type: FoxType) : FoxTransformType
+data class ParsedFoxMethodGetThisTypeType(
+    val type: ParsedFoxType<*>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxMethodGetThisTypeType> {
+    override val node get() = FoxMethodGetThisTypeType(type.node)
+}
+
+data class FoxMethodGetParameterStructType(val type: FoxType) : FoxTransformType
+data class ParsedFoxMethodGetParameterStructType(
+    val type: ParsedFoxType<*>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxMethodGetParameterStructType> {
+    override val node get() = FoxMethodGetParameterStructType(type.node)
+}
+
+data class FoxMethodGetReturnTypeType(val type: FoxType) : FoxTransformType
+data class ParsedFoxMethodGetReturnTypeType(
+    val type: ParsedFoxType<*>,
+    override val span: SourceSpan,
+) : ParsedFoxTransformType<FoxMethodGetReturnTypeType> {
+    override val node get() = FoxMethodGetReturnTypeType(type.node)
 }
 
 data class FoxMethodOfType(val `this`: FoxType, val parameters: FoxType, val `return`: FoxType) : FoxTransformType
@@ -491,30 +579,6 @@ data class ParsedFoxMethodOfType(
     override val span: SourceSpan,
 ) : ParsedFoxTransformType<FoxMethodOfType> {
     override val node get() = FoxMethodOfType(`this`.node, parameters.node, `return`.node)
-}
-
-data class FoxMethodThisOfType(val type: FoxType) : FoxTransformType
-data class ParsedFoxMethodThisOfType(
-    val type: ParsedFoxType<*>,
-    override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxMethodThisOfType> {
-    override val node get() = FoxMethodThisOfType(type.node)
-}
-
-data class FoxMethodParametersOfType(val type: FoxType) : FoxTransformType
-data class ParsedFoxMethodParametersOfType(
-    val type: ParsedFoxType<*>,
-    override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxMethodParametersOfType> {
-    override val node get() = FoxMethodParametersOfType(type.node)
-}
-
-data class FoxMethodReturnOfType(val type: FoxType) : FoxTransformType
-data class ParsedFoxMethodReturnOfType(
-    val type: ParsedFoxType<*>,
-    override val span: SourceSpan,
-) : ParsedFoxTransformType<FoxMethodReturnOfType> {
-    override val node get() = FoxMethodReturnOfType(type.node)
 }
 
 data class FoxUnresolvedType(val name: String, val parameters: List<FoxType>?) : FoxType

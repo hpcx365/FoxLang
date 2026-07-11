@@ -126,73 +126,60 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     
     private fun PrintWriter.printTransformType(type: FoxTransformType) {
         when (type) {
-            is FoxTupleComponentAtType -> printTypeAndIntArgument("ComponentAt", type.type, type.index)
-            is FoxTupleLastComponentAtType -> printTypeAndIntArgument("LastComponentAt", type.type, type.index)
-            is FoxTupleFirstComponentsOfType -> printTypeAndIntArgument("FirstComponentsOf", type.type, type.count)
-            is FoxTupleExactFirstComponentsOfType -> printTypeAndIntArgument("ExactFirstComponentsOf", type.type, type.count)
-            is FoxTupleLastComponentsOfType -> printTypeAndIntArgument("LastComponentsOf", type.type, type.count)
-            is FoxTupleExactLastComponentsOfType -> printTypeAndIntArgument("ExactLastComponentsOf", type.type, type.count)
-            is FoxTupleDropFirstComponentsOfType -> printTypeAndIntArgument("DropFirstComponentsOf", type.type, type.count)
-            is FoxTupleExactDropFirstComponentsOfType -> printTypeAndIntArgument("ExactDropFirstComponentsOf", type.type, type.count)
-            is FoxTupleDropLastComponentsOfType -> printTypeAndIntArgument("DropLastComponentsOf", type.type, type.count)
-            is FoxTupleExactDropLastComponentsOfType -> printTypeAndIntArgument("ExactDropLastComponentsOf", type.type, type.count)
-            is FoxTupleMergeComponentsOfType -> printTypeListArgument("MergeComponentsOf", type.types)
-            is FoxStructFieldOfType -> printTypeAndNameArgument("FieldOf", type.type, type.name)
-            is FoxStructFieldAtType -> printTypeAndIntArgument("FieldAt", type.type, type.index)
-            is FoxStructLastFieldAtType -> printTypeAndIntArgument("LastFieldAt", type.type, type.index)
-            is FoxStructFirstFieldsOfType -> printTypeAndIntArgument("FirstFieldsOf", type.type, type.count)
-            is FoxStructExactFirstFieldsOfType -> printTypeAndIntArgument("ExactFirstFieldsOf", type.type, type.count)
-            is FoxStructLastFieldsOfType -> printTypeAndIntArgument("LastFieldsOf", type.type, type.count)
-            is FoxStructExactLastFieldsOfType -> printTypeAndIntArgument("ExactLastFieldsOf", type.type, type.count)
-            is FoxStructDropFirstFieldsOfType -> printTypeAndIntArgument("DropFirstFieldsOf", type.type, type.count)
-            is FoxStructExactDropFirstFieldsOfType -> printTypeAndIntArgument("ExactDropFirstFieldsOf", type.type, type.count)
-            is FoxStructDropLastFieldsOfType -> printTypeAndIntArgument("DropLastFieldsOf", type.type, type.count)
-            is FoxStructExactDropLastFieldsOfType -> printTypeAndIntArgument("ExactDropLastFieldsOf", type.type, type.count)
-            is FoxStructFieldsOfType -> printTypeAndNamesArgument("FieldsOf", type.type, type.names)
-            is FoxStructDropFieldsOfType -> printTypeAndNamesArgument("DropFieldsOf", type.type, type.names)
-            is FoxStructMergeFieldsOfType -> printTypeListArgument("MergeFieldsOf", type.types)
-            is FoxObjectMemberOfType -> printTypeAndNameArgument("MemberOf", type.type, type.name)
-            is FoxObjectMembersOfType -> printTypeAndNamesArgument("MembersOf", type.type, type.names)
-            is FoxObjectDropMembersOfType -> printTypeAndNamesArgument("DropMembersOf", type.type, type.names)
-            is FoxObjectMergeMembersOfType -> printTypeListArgument("MergeMembersOf", type.types)
-            is FoxEnumEntryOfType -> printTypeAndNameArgument("EntryOf", type.type, type.name)
-            is FoxEnumEntriesOfType -> printTypeAndNamesArgument("EntriesOf", type.type, type.names)
-            is FoxEnumDropEntriesOfType -> printTypeAndNamesArgument("DropEntriesOf", type.type, type.names)
-            is FoxEnumMergeEntriesOfType -> printTypeListArgument("MergeEntriesOf", type.types)
-            is FoxArrayElementOfType -> printSingleTypeArgument("ElementOf", type.type)
-            is FoxRefReferentOfType -> printSingleTypeArgument("ReferentOf", type.type)
+            is FoxTupleGetComponentType -> printTypeAndIntArgument("GetComponent", type.type, type.index)
+            is FoxTupleGetComponentBackType -> printTypeAndIntArgument("GetComponentBack", type.type, type.index)
+            is FoxTupleGetFirstComponentsType -> printTypeAndIntArgument("GetFirstComponents", type.type, type.count)
+            is FoxTupleGetFirstComponentsExactType -> printTypeAndIntArgument("GetFirstComponentsExact", type.type, type.count)
+            is FoxTupleGetLastComponentsType -> printTypeAndIntArgument("GetLastComponents", type.type, type.count)
+            is FoxTupleGetLastComponentsExactType -> printTypeAndIntArgument("GetLastComponentsExact", type.type, type.count)
+            is FoxTupleDropFirstComponentsType -> printTypeAndIntArgument("DropFirstComponents", type.type, type.count)
+            is FoxTupleDropFirstComponentsExactType -> printTypeAndIntArgument("DropFirstComponentsExact", type.type, type.count)
+            is FoxTupleDropLastComponentsType -> printTypeAndIntArgument("DropLastComponents", type.type, type.count)
+            is FoxTupleDropLastComponentsExactType -> printTypeAndIntArgument("DropLastComponentsExact", type.type, type.count)
+            is FoxTupleMergeTuplesType -> printTypeListArgument("MergeTuples", type.types)
+            is FoxStructGetFieldTypeByNameType -> printTypeAndNameArgument("GetFieldTypeByName", type.type, type.name)
+            is FoxStructGetFieldTypeByIndexType -> printTypeAndIntArgument("GetFieldTypeByIndex", type.type, type.index)
+            is FoxStructGetFieldTypeByIndexBackType -> printTypeAndIntArgument("GetFieldTypeByIndexBack", type.type, type.index)
+            is FoxStructGetFirstFieldsType -> printTypeAndIntArgument("GetFirstFields", type.type, type.count)
+            is FoxStructGetFirstFieldsExactType -> printTypeAndIntArgument("GetFirstFieldsExact", type.type, type.count)
+            is FoxStructGetLastFieldsType -> printTypeAndIntArgument("GetLastFields", type.type, type.count)
+            is FoxStructGetLastFieldsExactType -> printTypeAndIntArgument("GetLastFieldsExact", type.type, type.count)
+            is FoxStructDropFirstFieldsType -> printTypeAndIntArgument("DropFirstFields", type.type, type.count)
+            is FoxStructDropFirstFieldsExactType -> printTypeAndIntArgument("DropFirstFieldsExact", type.type, type.count)
+            is FoxStructDropLastFieldsType -> printTypeAndIntArgument("DropLastFields", type.type, type.count)
+            is FoxStructDropLastFieldsExactType -> printTypeAndIntArgument("DropLastFieldsExact", type.type, type.count)
+            is FoxStructSelectFieldsType -> printTypeAndNamesArgument("SelectFields", type.type, type.names)
+            is FoxStructSelectFieldsExactType -> printTypeAndNamesArgument("SelectFieldsExact", type.type, type.names)
+            is FoxStructDropFieldsType -> printTypeAndNamesArgument("DropFields", type.type, type.names)
+            is FoxStructDropFieldsExactType -> printTypeAndNamesArgument("DropFieldsExact", type.type, type.names)
+            is FoxStructExtractFieldTypesType -> printSingleTypeArgument("ExtractFieldTypes", type.type)
+            is FoxStructMergeStructsType -> printTypeListArgument("MergeStructs", type.types)
+            is FoxObjectGetMemberTypeType -> printTypeAndNameArgument("GetMemberType", type.type, type.name)
+            is FoxObjectSelectMembersType -> printTypeAndNamesArgument("SelectMembers", type.type, type.names)
+            is FoxObjectSelectMembersExactType -> printTypeAndNamesArgument("SelectMembersExact", type.type, type.names)
+            is FoxObjectDropMembersType -> printTypeAndNamesArgument("DropMembers", type.type, type.names)
+            is FoxObjectDropMembersExactType -> printTypeAndNamesArgument("DropMembersExact", type.type, type.names)
+            is FoxObjectMergeObjectsType -> printTypeListArgument("MergeObjects", type.types)
+            is FoxEnumGetEntryTypeType -> printTypeAndNameArgument("GetEntryType", type.type, type.name)
+            is FoxEnumSelectEntriesType -> printTypeAndNamesArgument("SelectEntries", type.type, type.names)
+            is FoxEnumSelectEntriesExactType -> printTypeAndNamesArgument("SelectEntriesExact", type.type, type.names)
+            is FoxEnumDropEntriesType -> printTypeAndNamesArgument("DropEntries", type.type, type.names)
+            is FoxEnumDropEntriesExactType -> printTypeAndNamesArgument("DropEntriesExact", type.type, type.names)
+            is FoxEnumMergeEnumsType -> printTypeListArgument("MergeEnums", type.types)
+            is FoxArrayGetElementTypeType -> printSingleTypeArgument("GetElementType", type.type)
+            is FoxRefGetReferentTypeType -> printSingleTypeArgument("GetReferentType", type.type)
+            is FoxMethodGetThisTypeType -> printSingleTypeArgument("GetThisType", type.type)
+            is FoxMethodGetParameterStructType -> printSingleTypeArgument("GetParameterStruct", type.type)
+            is FoxMethodGetReturnTypeType -> printSingleTypeArgument("GetReturnType", type.type)
             is FoxMethodOfType -> printTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`))
-            is FoxMethodThisOfType -> printSingleTypeArgument("ThisOf", type.type)
-            is FoxMethodParametersOfType -> printSingleTypeArgument("ParametersOf", type.type)
-            is FoxMethodReturnOfType -> printSingleTypeArgument("ReturnOf", type.type)
         }
     }
     
     private fun PrintWriter.printTupleType(type: FoxTupleType) {
         print("Tuple<")
-        var first = true
-        var current: FoxType? = null
-        var count = 0
-        fun flushCurrent() {
-            val value = current ?: return
-            if (!first) print(", ")
-            first = false
-            printType(value)
-            if (count > 1) {
-                print(':')
-                print(count)
-            }
+        printCommaSeparated(type.components) { component ->
+            printType(component)
         }
-        type.components.forEach { component ->
-            if (current == component) {
-                count++
-            } else {
-                flushCurrent()
-                current = component
-                count = 1
-            }
-        }
-        flushCurrent()
         print('>')
     }
     
@@ -218,10 +205,10 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     
     private fun PrintWriter.printEnumType(type: FoxEnumType) {
         print("Enum<")
-        printCommaSeparated(type.entries.entries) { item ->
-            print(item.key)
+        printCommaSeparated(type.entries.entries) { entry ->
+            print(entry.key)
             print(" = ")
-            printType(item.value)
+            printType(entry.value)
         }
         print('>')
     }

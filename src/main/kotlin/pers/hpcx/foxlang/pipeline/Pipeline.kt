@@ -1,16 +1,38 @@
 package pers.hpcx.foxlang.pipeline
 
 import pers.hpcx.foxlang.ast.FoxFile
+import pers.hpcx.foxlang.ast.ParsedFoxFile
+import pers.hpcx.foxlang.pipeline.pass.*
 
 sealed interface PipelineResult
 data class PipelineSuccess(val newFile: FoxFile) : PipelineResult
+data class PipelineNumericLiteralCheckFailure(val errors: List<NumericLiteralCheckError>) : PipelineResult
+data class PipelineDuplicateItemCheckFailure(val errors: List<DuplicateItemCheckError>) : PipelineResult
+data class PipelineStatementStructureCheckFailure(val errors: List<StatementStructureCheckError>) : PipelineResult
 data class PipelineAliasFlattenFailure(val errors: List<TypeAliasFlattenError>) : PipelineResult
 data class PipelineAliasEliminationFailure(val errors: List<TypeAliasEliminationError>) : PipelineResult
 data class PipelineNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : PipelineResult
-data class PipelineCompileConstraintFailure(val errors: List<TypeCompileConstraintError>) : PipelineResult
+data class PipelineCompileConstraintFailure(val errors: List<ConstraintCompilePrecheckError>) : PipelineResult
 
-fun runPipeline(file: FoxFile): PipelineResult {
-    val flattened = when (val result = runTypeAliasFlatten(file)) {
+fun runPipeline(file: ParsedFoxFile): PipelineResult {
+    when (val result = runNumericLiteralCheck(file)) {
+        NumericLiteralCheckSuccess -> {}
+        is NumericLiteralCheckFailure -> return PipelineNumericLiteralCheckFailure(result.errors)
+    }
+    
+    when (val result = runDuplicateItemCheck(file)) {
+        DuplicateItemCheckSuccess -> {}
+        is DuplicateItemCheckFailure -> return PipelineDuplicateItemCheckFailure(result.errors)
+    }
+    
+    when (val result = runStatementStructureCheck(file)) {
+        StatementStructureCheckSuccess -> {}
+        is StatementStructureCheckFailure -> return PipelineStatementStructureCheckFailure(result.errors)
+    }
+    
+    val lowered = file.node
+    
+    val flattened = when (val result = runTypeAliasFlatten(lowered)) {
         is TypeAliasFlattenSuccess -> result.newFile
         is TypeAliasFlattenFailure -> return PipelineAliasFlattenFailure(result.errors)
     }
@@ -25,9 +47,9 @@ fun runPipeline(file: FoxFile): PipelineResult {
         is MethodTypeNormalizationFailure -> return PipelineNormalizationFailure(result.errors)
     }
     
-    when (val result = runTypeCompileConstraintCheck(normalized)) {
-        TypeCompileConstraintSuccess -> {}
-        is TypeCompileConstraintFailure -> return PipelineCompileConstraintFailure(result.errors)
+    when (val result = runConstraintCompilePrecheck(normalized)) {
+        ConstraintCompilePrecheckSuccess -> {}
+        is ConstraintCompilePrecheckFailure -> return PipelineCompileConstraintFailure(result.errors)
     }
     
     TODO()

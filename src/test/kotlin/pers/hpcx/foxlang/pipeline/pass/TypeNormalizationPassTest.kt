@@ -1,8 +1,7 @@
-package pers.hpcx.foxlang.pipeline
+package pers.hpcx.foxlang.pipeline.pass
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.utils.orderedMapOf
-import pers.hpcx.foxlang.utils.orderedSetOf
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -11,12 +10,12 @@ class TypeNormalizationPassTest {
     
     @Test
     fun normalizesNestedTupleTransformsAndCompressesComponents() {
-        val type = FoxTupleMergeComponentsOfType(
+        val type = FoxTupleMergeTuplesType(
             listOf(
                 FoxTupleType(listOf(FoxIntType, FoxIntType)),
                 FoxTupleType(
                     listOf(
-                        FoxTupleComponentAtType(
+                        FoxTupleGetComponentType(
                             FoxTupleType(listOf(FoxFloatType, FoxIntType, FoxDoubleType)),
                             1,
                         ),
@@ -32,11 +31,11 @@ class TypeNormalizationPassTest {
     
     @Test
     fun keepsTransformWhenBaseCannotBeSafelyExpanded() {
-        val type = FoxTupleComponentAtType(
+        val type = FoxTupleGetComponentType(
             FoxUnresolvedType(
                 "Box",
                 listOf(
-                    FoxTupleMergeComponentsOfType(
+                    FoxTupleMergeTuplesType(
                         listOf(
                             FoxTupleType(listOf(FoxIntType)),
                             FoxTupleType(listOf(FoxIntType)),
@@ -50,7 +49,7 @@ class TypeNormalizationPassTest {
         val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
         
         assertEquals(
-            FoxTupleComponentAtType(
+            FoxTupleGetComponentType(
                 FoxUnresolvedType(
                     "Box",
                     listOf(FoxTupleType(listOf(FoxIntType, FoxIntType))),
@@ -63,19 +62,19 @@ class TypeNormalizationPassTest {
     
     @Test
     fun normalizesMethodDerivedTransforms() {
-        val type = FoxMethodParametersOfType(
+        val type = FoxMethodGetParameterStructType(
             FoxMethodType(
                 FoxRefType(FoxIntType),
                 orderedMapOf(
-                    "left" to FoxTupleMergeComponentsOfType(
+                    "left" to FoxTupleMergeTuplesType(
                         listOf(
                             FoxTupleType(listOf(FoxStringType)),
                             FoxTupleType(listOf(FoxStringType)),
                         ),
                     ),
-                    "right" to FoxArrayElementOfType(FoxArrayType(FoxDoubleType)),
+                    "right" to FoxArrayGetElementTypeType(FoxArrayType(FoxDoubleType)),
                 ),
-                FoxMethodReturnOfType(
+                FoxMethodGetReturnTypeType(
                     FoxMethodType(
                         FoxUnitType,
                         orderedMapOf(),
@@ -100,7 +99,7 @@ class TypeNormalizationPassTest {
     
     @Test
     fun detectsFamilyMismatch() {
-        val type = FoxStructMergeFieldsOfType(
+        val type = FoxStructMergeStructsType(
             listOf(
                 FoxStructType(orderedMapOf("name" to FoxStringType)),
                 FoxObjectType(mapOf("age" to FoxIntType)),
@@ -116,7 +115,7 @@ class TypeNormalizationPassTest {
     
     @Test
     fun detectsIndexOutOfBounds() {
-        val type = FoxTupleLastComponentAtType(
+        val type = FoxTupleGetComponentBackType(
             FoxTupleType(listOf(FoxIntType, FoxFloatType)),
             2,
         )
@@ -129,21 +128,71 @@ class TypeNormalizationPassTest {
     }
     
     @Test
-    fun detectsMissingFieldNameInDropOperation() {
-        val type = FoxStructDropFieldsOfType(
+    fun clampsNonExactTupleCount() {
+        val type = FoxTupleDropFirstComponentsType(
+            FoxTupleType(listOf(FoxIntType)),
+            2,
+        )
+        
+        val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
+        
+        assertEquals(FoxTupleType(emptyList()), result.type)
+    }
+    
+    @Test
+    fun detectsExactTupleCountOutOfBounds() {
+        val type = FoxTupleDropFirstComponentsExactType(
+            FoxTupleType(listOf(FoxIntType)),
+            2,
+        )
+        
+        val result = assertIs<TypeNormalizationFailure>(runTypeNormalization(type))
+        val error = assertIs<TypeNormalizationIndexOutOfBounds>(result.errors.single())
+        
+        assertEquals(2, error.index)
+        assertEquals(1, error.size)
+    }
+    
+    @Test
+    fun ignoresMissingFieldNameInNonExactDropOperation() {
+        val type = FoxStructDropFieldsType(
             FoxStructType(orderedMapOf("name" to FoxStringType)),
             setOf("age"),
+        )
+        
+        val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
+        
+        assertEquals(FoxStructType(orderedMapOf("name" to FoxStringType)), result.type)
+    }
+    
+    @Test
+    fun ignoresMissingFieldNameInNonExactSelection() {
+        val type = FoxStructSelectFieldsType(
+            FoxStructType(orderedMapOf("age" to FoxIntType)),
+            setOf("name", "age"),
+        )
+        
+        val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
+        
+        assertEquals(FoxStructType(orderedMapOf("age" to FoxIntType)), result.type)
+    }
+    
+    @Test
+    fun detectsMissingFieldNameInExactSelection() {
+        val type = FoxStructSelectFieldsExactType(
+            FoxStructType(orderedMapOf("age" to FoxIntType)),
+            setOf("name", "age"),
         )
         
         val result = assertIs<TypeNormalizationFailure>(runTypeNormalization(type))
         val error = assertIs<TypeNormalizationNameNotFound>(result.errors.single())
         
-        assertEquals("age", error.name)
+        assertEquals("name", error.name)
     }
     
     @Test
     fun detectsDuplicateFieldDuringStructMerge() {
-        val type = FoxStructMergeFieldsOfType(
+        val type = FoxStructMergeStructsType(
             listOf(
                 FoxStructType(orderedMapOf("name" to FoxStringType)),
                 FoxStructType(orderedMapOf("name" to FoxIntType)),
@@ -158,7 +207,7 @@ class TypeNormalizationPassTest {
     
     @Test
     fun detectsDuplicateMemberDuringObjectMerge() {
-        val type = FoxObjectMergeMembersOfType(
+        val type = FoxObjectMergeObjectsType(
             listOf(
                 FoxObjectType(mapOf("name" to FoxStringType)),
                 FoxObjectType(mapOf("name" to FoxIntType)),
@@ -173,7 +222,7 @@ class TypeNormalizationPassTest {
     
     @Test
     fun detectsDuplicateItemDuringEnumMerge() {
-        val type = FoxEnumMergeEntriesOfType(
+        val type = FoxEnumMergeEnumsType(
             listOf(
                 FoxEnumType(mapOf("Ok" to FoxStringType)),
                 FoxEnumType(mapOf("Ok" to FoxIntType)),
@@ -188,13 +237,13 @@ class TypeNormalizationPassTest {
     
     @Test
     fun keepsMergeWhenArgumentRemainsUnresolved() {
-        val type = FoxStructMergeFieldsOfType(
+        val type = FoxStructMergeStructsType(
             listOf(
                 FoxStructType(orderedMapOf("name" to FoxStringType)),
                 FoxUnresolvedType(
                     "Other",
                     listOf(
-                        FoxTupleMergeComponentsOfType(
+                        FoxTupleMergeTuplesType(
                             listOf(
                                 FoxTupleType(listOf(FoxIntType)),
                                 FoxTupleType(listOf(FoxIntType)),
@@ -208,7 +257,7 @@ class TypeNormalizationPassTest {
         val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
         
         assertEquals(
-            FoxStructMergeFieldsOfType(
+            FoxStructMergeStructsType(
                 listOf(
                     FoxStructType(orderedMapOf("name" to FoxStringType)),
                     FoxUnresolvedType("Other", listOf(FoxTupleType(listOf(FoxIntType, FoxIntType)))),
@@ -219,8 +268,8 @@ class TypeNormalizationPassTest {
     }
     
     @Test
-    fun preservesRequestedFieldOrder() {
-        val type = FoxStructFieldsOfType(
+    fun preservesOriginalFieldOrder() {
+        val type = FoxStructSelectFieldsType(
             FoxStructType(
                 orderedMapOf(
                     "a" to FoxIntType,
@@ -228,7 +277,7 @@ class TypeNormalizationPassTest {
                     "c" to FoxDoubleType,
                 ),
             ),
-            orderedSetOf("c", "a"),
+            setOf("c", "a"),
         )
         
         val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
@@ -236,8 +285,8 @@ class TypeNormalizationPassTest {
         assertEquals(
             FoxStructType(
                 orderedMapOf(
-                    "c" to FoxDoubleType,
                     "a" to FoxIntType,
+                    "c" to FoxDoubleType,
                 ),
             ),
             result.type,

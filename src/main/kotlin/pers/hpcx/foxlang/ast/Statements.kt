@@ -1,8 +1,7 @@
 package pers.hpcx.foxlang.ast
 
 import pers.hpcx.foxlang.frontend.common.SourceSpan
-import pers.hpcx.foxlang.runtime.FoxEntity
-import pers.hpcx.foxlang.runtime.FoxUnit
+import pers.hpcx.foxlang.runtime.*
 
 sealed interface FoxStatement
 sealed interface ParsedFoxStatement<N : FoxStatement> : Parsed<N>
@@ -26,6 +25,34 @@ data class ParsedFoxEntityStatement(
     override val span: SourceSpan,
 ) : ParsedFoxStatement<FoxEntityStatement> {
     override val node get() = FoxEntityStatement(value)
+}
+
+data class ParsedFoxIntStatement(
+    val value: ParsedInt,
+    override val span: SourceSpan,
+) : ParsedFoxStatement<FoxEntityStatement> {
+    override val node get() = FoxEntityStatement(FoxInt(value.node))
+}
+
+data class ParsedFoxLongStatement(
+    val value: ParsedLong,
+    override val span: SourceSpan,
+) : ParsedFoxStatement<FoxEntityStatement> {
+    override val node get() = FoxEntityStatement(FoxLong(value.node))
+}
+
+data class ParsedFoxFloatStatement(
+    val value: ParsedFloat,
+    override val span: SourceSpan,
+) : ParsedFoxStatement<FoxEntityStatement> {
+    override val node get() = FoxEntityStatement(FoxFloat(value.node))
+}
+
+data class ParsedFoxDoubleStatement(
+    val value: ParsedDouble,
+    override val span: SourceSpan,
+) : ParsedFoxStatement<FoxEntityStatement> {
+    override val node get() = FoxEntityStatement(FoxDouble(value.node))
 }
 
 data class FoxBreak(val label: String?) : FoxStatement

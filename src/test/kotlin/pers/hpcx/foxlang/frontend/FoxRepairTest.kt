@@ -164,7 +164,7 @@ class FoxRepairTest {
 //
 //    @Test
 //    fun repairFixedArityTypeMissingComma() {
-//        val analysis = "ComponentAt<Int 0>".analyzeFoxOrThrow()
+//        val analysis = "GetComponent<Int 0>".analyzeFoxOrThrow()
 //
 //        analysis.repairType()
 //

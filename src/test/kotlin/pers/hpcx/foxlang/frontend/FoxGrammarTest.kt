@@ -37,11 +37,11 @@ type EmptyTuple = Tuple<>
 type EmptyStruct = Struct<>
 type EmptyObject = Object<>
 type EmptyEnum = Enum<>
-type VectorTuple = Tuple<Float:3>
+type VectorTuple = Tuple<Float, Float, Float>
 type MultilineTuple = Tuple<
-    Int:3,
-    Long,
-    String:1,
+    Int,
+    Long, Double,
+    String,
 >
 type PersonStruct = Struct<name: String, age: Int, active: Bool>
 type ConfigObject = Object<path: String, retries: Int, enabled: Bool>
@@ -82,49 +82,49 @@ type MethodMultiline = Method<
 >
 
 // Types: tuple transforms.
-type TupleComponent = ComponentAt<PackedTuple, 1>
-type TupleLastComponent = LastComponentAt<PackedTuple, 0>
-type TupleFirst = FirstComponentsOf<PackedTuple, 2>
-type TupleExactFirst = ExactFirstComponentsOf<PackedTuple, 2>
-type TupleLast = LastComponentsOf<PackedTuple, 2>
-type TupleExactLast = ExactLastComponentsOf<PackedTuple, 2>
-type TupleDropFirst = DropFirstComponentsOf<PackedTuple, 1>
-type TupleExactDropFirst = ExactDropFirstComponentsOf<PackedTuple, 1>
-type TupleDropLast = DropLastComponentsOf<PackedTuple, 1>
-type TupleExactDropLast = ExactDropLastComponentsOf<PackedTuple, 1>
-type TupleMerge = MergeComponentsOf<PackedTuple, Tuple<String, Int>>
+type TupleComponent = GetComponent<PackedTuple, 1>
+type TupleLastComponent = GetComponentBack<PackedTuple, 0>
+type TupleFirst = GetFirstComponents<PackedTuple, 2>
+type TupleExactFirst = GetFirstComponentsExact<PackedTuple, 2>
+type TupleLast = GetLastComponents<PackedTuple, 2>
+type TupleExactLast = GetLastComponentsExact<PackedTuple, 2>
+type TupleDropFirst = DropFirstComponents<PackedTuple, 1>
+type TupleExactDropFirst = DropFirstComponentsExact<PackedTuple, 1>
+type TupleDropLast = DropLastComponents<PackedTuple, 1>
+type TupleExactDropLast = DropLastComponentsExact<PackedTuple, 1>
+type TupleMerge = MergeTuples<PackedTuple, Tuple<String, Int>>
 
 // Types: struct transforms.
-type StructField = FieldOf<PersonStruct, name>
-type StructFieldAt = FieldAt<PersonStruct, 1>
-type StructLastFieldAt = LastFieldAt<PersonStruct, 0>
-type StructFirstFields = FirstFieldsOf<PersonStruct, 2>
-type StructExactFirstFields = ExactFirstFieldsOf<PersonStruct, 2>
-type StructLastFields = LastFieldsOf<PersonStruct, 2>
-type StructExactLastFields = ExactLastFieldsOf<PersonStruct, 2>
-type StructDropFirstFields = DropFirstFieldsOf<PersonStruct, 1>
-type StructExactDropFirstFields = ExactDropFirstFieldsOf<PersonStruct, 1>
-type StructDropLastFields = DropLastFieldsOf<PersonStruct, 1>
-type StructExactDropLastFields = ExactDropLastFieldsOf<PersonStruct, 1>
-type StructFields = FieldsOf<PersonStruct, name, age>
-type StructDropFields = DropFieldsOf<PersonStruct, active>
-type StructMerge = MergeFieldsOf<PersonStruct, Struct<nick: String>>
+type StructField = GetFieldTypeByName<PersonStruct, name>
+type StructGetFieldTypeByIndex = GetFieldTypeByIndex<PersonStruct, 1>
+type StructGetFieldTypeByIndexBack = GetFieldTypeByIndexBack<PersonStruct, 0>
+type StructFirstFields = GetFirstFields<PersonStruct, 2>
+type StructExactFirstFields = GetFirstFieldsExact<PersonStruct, 2>
+type StructLastFields = GetLastFields<PersonStruct, 2>
+type StructExactLastFields = GetLastFieldsExact<PersonStruct, 2>
+type StructDropFirstFields = DropFirstFields<PersonStruct, 1>
+type StructDropFirstFieldsExact = DropFirstFieldsExact<PersonStruct, 1>
+type StructDropLastFields = DropLastFields<PersonStruct, 1>
+type StructDropLastFieldsExact = DropLastFieldsExact<PersonStruct, 1>
+type StructFields = SelectFields<PersonStruct, name, age>
+type StructDropFields = DropFields<PersonStruct, active>
+type StructMerge = MergeStructs<PersonStruct, Struct<nick: String>>
 
 // Types: object, enum, array, ref, and method transforms.
-type ObjectMember = MemberOf<ConfigObject, path>
-type ObjectMembers = MembersOf<ConfigObject, path, enabled>
-type ObjectDropMembers = DropMembersOf<ConfigObject, retries>
-type ObjectMerge = MergeMembersOf<ConfigObject, Object<owner: String>>
-type EnumEntry = EntryOf<ResultEnum, Ok>
-type EnumEntries = EntriesOf<ResultEnum, Ok, Err>
-type EnumDropEntries = DropEntriesOf<ResultEnum, Pending>
-type EnumMerge = MergeEntriesOf<ResultEnum, Enum<Unknown = Unit>>
-type ArrayElement = ElementOf<Array<PersonStruct>>
-type RefReferent = ReferentOf<Ref<ConfigObject>>
+type ObjectMember = GetMemberType<ConfigObject, path>
+type ObjectMembers = SelectMembers<ConfigObject, path, enabled>
+type ObjectDropMembers = DropMembers<ConfigObject, retries>
+type ObjectMerge = MergeObjects<ConfigObject, Object<owner: String>>
+type EnumEntry = GetEntryType<ResultEnum, Ok>
+type EnumEntries = SelectEntries<ResultEnum, Ok, Err>
+type EnumDropEntries = DropEntries<ResultEnum, Pending>
+type EnumMerge = MergeEnums<ResultEnum, Enum<Unknown = Unit>>
+type ArrayElement = GetElementType<Array<PersonStruct>>
+type RefReferent = GetReferentType<Ref<ConfigObject>>
 type MethodOfType = MethodOf<PersonStruct, Struct<value: Int>, Bool>
-type MethodThis = ThisOf<MethodFull>
-type MethodParameters = ParametersOf<MethodFull>
-type MethodReturn = ReturnOf<MethodFull>
+type MethodThis = GetThisType<MethodFull>
+type MethodParameters = GetParameterStruct<MethodFull>
+type MethodReturn = GetReturnType<MethodFull>
 
 // Method heads: optional generics, receiver type, return type, and trailing commas.
 def emptyBody() {}
@@ -137,7 +137,7 @@ def <T = Any, Row = AnyStructOf<String, Int>> PersonStruct.describe(
     sample: T,
     row: Row,
     callback: Method<this: PersonStruct, value: Int, return: String>,
-): FieldOf<PersonStruct, name> {
+): GetFieldTypeByName<PersonStruct, name> {
     return "header"
 }
 

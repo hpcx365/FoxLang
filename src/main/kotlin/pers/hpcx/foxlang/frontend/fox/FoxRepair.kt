@@ -36,7 +36,7 @@ val FoxRepairStrategy = RepairStrategy(
     FormalGenericParameterNoConstraints to { expect(TypeName) },
     ActualGenericParameter to { repairActualGenericParameter() },
     AnonymousActualGenericParameter to { expect(Type) },
-    TupleComponentParameter to { repairTupleComponentParameter() },
+    TupleComponentParameter to { expect(Type) },
     StructFieldParameter to { repairColonTypedItem(Identifier) },
     StructFieldName to { expect(Identifier) },
     ObjectMemberParameter to { repairColonTypedItem(Identifier) },
@@ -508,26 +508,6 @@ private fun ExpectationReceiver.repairActualGenericParameter() {
     if (name.isNotEmpty()) expect(TypeName, name) else expectAt(TypeName, equals.span.start)
     expect(PlainAssign, equals.span)
     if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, equals.span.end)
-}
-
-private fun ExpectationReceiver.repairTupleComponentParameter() {
-    val span = trimOuterLineBreaks(currentSpan())
-    val receiver = withSpan(span)
-    val colon = receiver.matchesInside(Colon)
-        .filter { receiver.isTopLevelSourcePosition(it.span.start) }
-        .maxByOrNull { it.span.start.fragIndex }
-        ?.span
-        ?: receiver.firstTopLevelPlainTextSpan(":")
-    if (colon == null) {
-        expect(Type)
-        return
-    }
-    
-    val type = trimOuterLineBreaks(SourceSpan(span.start, colon.start))
-    val count = trimOuterLineBreaks(SourceSpan(colon.end, span.end))
-    if (type.isNotEmpty()) expect(Type, type) else expectAt(Type, colon.start)
-    expect(Colon, colon)
-    if (count.isNotEmpty()) expect(LitInt, count) else expectAt(LitInt, colon.end)
 }
 
 private fun ExpectationReceiver.repairActualParameter() {

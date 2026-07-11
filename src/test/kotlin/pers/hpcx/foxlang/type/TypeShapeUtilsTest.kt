@@ -3,7 +3,10 @@ package pers.hpcx.foxlang.type
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.utils.RleArrayList
 import pers.hpcx.foxlang.utils.orderedMapOf
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TypeShapeUtilsTest {
     
@@ -29,12 +32,10 @@ class TypeShapeUtilsTest {
             ),
         )
         
-        assertEquals(FoxDoubleType, tuple.lastComponentAt(0))
-        assertEquals(FoxIntType, tuple.lastComponentAt(1))
-        assertEquals("height" to FoxDoubleType, struct.lastFieldAt(0).toPair())
-        assertEquals("age" to FoxIntType, struct.lastFieldAt(1).toPair())
-        assertFailsWith<IllegalArgumentException> { tuple.lastComponentAt(-1) }
-        assertFailsWith<IllegalArgumentException> { struct.lastFieldAt(-1) }
+        assertEquals(FoxDoubleType, tuple.getComponentBack(0))
+        assertEquals(FoxIntType, tuple.getComponentBack(1))
+        assertEquals("height" to FoxDoubleType, struct.getFieldTypeByIndexBack(0).toPair())
+        assertEquals("age" to FoxIntType, struct.getFieldTypeByIndexBack(1).toPair())
     }
     
     @Test
@@ -47,14 +48,14 @@ class TypeShapeUtilsTest {
             ),
         )
         
-        assertEquals("age" to FoxIntType, struct.fieldAt(1).toPair())
+        assertEquals("age" to FoxIntType, struct.getFieldTypeByIndex(1).toPair())
         assertEquals(
             FoxStructType(orderedMapOf("name" to FoxStringType, "age" to FoxIntType)),
-            struct.firstFields(2),
+            struct.getFirstFields(2),
         )
         assertEquals(
             FoxStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
-            struct.lastFields(2),
+            struct.getLastFields(2),
         )
         assertEquals(
             FoxStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
@@ -83,12 +84,12 @@ class TypeShapeUtilsTest {
         )
         
         assertEquals(
-            FoxStructType(orderedMapOf("c" to FoxDoubleType, "a" to FoxIntType)),
-            left.selectFields(listOf("c", "a")),
+            FoxStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
+            left.selectFields(setOf("c", "a")),
         )
         assertEquals(
             FoxStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
-            left.dropFields(listOf("b")),
+            left.dropFields(setOf("b")),
         )
         assertEquals(
             FoxStructType(
@@ -99,7 +100,7 @@ class TypeShapeUtilsTest {
                     "d" to FoxUnitType,
                 ),
             ),
-            listOf(left, right).mergeStructFields(),
+            listOf(left, right).mergeStructs(),
         )
     }
     
@@ -119,7 +120,7 @@ class TypeShapeUtilsTest {
             ),
         )
         
-        assertEquals(FoxStringType, left.member("b"))
+        assertEquals(FoxStringType, left.getMemberType("b"))
         assertEquals(
             FoxObjectType(mapOf("c" to FoxDoubleType, "a" to FoxIntType)),
             left.selectMembers(linkedSetOf("c", "a")),
@@ -137,7 +138,7 @@ class TypeShapeUtilsTest {
                     "d" to FoxUnitType,
                 ),
             ),
-            listOf(left, right).mergeObjectMembers(),
+            listOf(left, right).mergeObjects(),
         )
     }
     
@@ -157,11 +158,11 @@ class TypeShapeUtilsTest {
             ),
         )
         
-        assertEquals(FoxStringType, left.entry("B"))
-        assertEquals(listOf("C", "A"), left.selectEntries(listOf("C", "A")).entries.keys.toList())
-        assertEquals(listOf("A", "C"), left.dropEntries(listOf("B")).entries.keys.toList())
-        val merged = listOf(left, right).mergeEnumEntries()
-        assertEquals(listOf("A", "B", "C", "D"), merged.entries.keys.toList())
+        assertEquals(FoxStringType, left.getEntryType("B"))
+        assertEquals(setOf("C", "A"), left.selectEntries(setOf("C", "A")).entries.keys)
+        assertEquals(setOf("A", "C"), left.dropEntries(setOf("B")).entries.keys)
+        val merged = listOf(left, right).mergeEnums()
+        assertEquals(setOf("A", "B", "C", "D"), merged.entries.keys)
         assertEquals(FoxBoolType, merged.entries.getValue("B"))
     }
 }

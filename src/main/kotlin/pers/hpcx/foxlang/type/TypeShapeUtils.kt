@@ -1,22 +1,31 @@
 package pers.hpcx.foxlang.type
 
 import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.utils.*
+import pers.hpcx.foxlang.utils.mapValues
+import pers.hpcx.foxlang.utils.toOrderedMap
+import pers.hpcx.foxlang.utils.toRleArrayList
+import pers.hpcx.foxlang.utils.toRleArrayListFromRuns
 
-val FoxTupleType.arity: Int
-    get() = components.size
+enum class ConcreteTypeFamily {
+    PRIMITIVE, TUPLE, STRUCT, OBJECT, ENUM, ARRAY, REF, METHOD,
+}
 
-val FoxStructType.arity: Int
-    get() = fields.size
-
-val FoxObjectType.arity: Int
-    get() = members.size
-
-val FoxEnumType.arity: Int
-    get() = entries.size
-
-@JvmName("tupleComponentListOptionalCountToFoxTupleType")
-fun List<Pair<FoxType, Int?>>.toFoxTupleType() = map { it.first to (it.second ?: 1) }.toFoxTupleType()
+fun FoxType.isConcrete(): Boolean = when (this) {
+    is FoxPrimitiveType -> true
+    is FoxBuiltInType -> when (this) {
+        is FoxTupleType -> components.all { it.isConcrete() }
+        is FoxStructType -> fields.all { it.value.isConcrete() }
+        is FoxObjectType -> members.all { it.value.isConcrete() }
+        is FoxEnumType -> entries.all { it.value.isConcrete() }
+        is FoxArrayType -> element.isConcrete()
+        is FoxRefType -> referent.isConcrete()
+        is FoxMethodType -> `this`.isConcrete() && parameters.all { it.value.isConcrete() } && `return`.isConcrete()
+    }
+    is FoxWildcardType -> false
+    is FoxTransformType -> false
+    is FoxUnresolvedType -> false
+    is FoxPlaceholderType -> error("unreachable")
+}
 
 @JvmName("tupleComponentListToFoxTupleType")
 fun List<Pair<FoxType, Int>>.toFoxTupleType(): FoxTupleType {
@@ -56,182 +65,72 @@ fun List<Pair<String, FoxType>>.toFoxObjectType() = FoxObjectType(toMap())
 
 fun List<Pair<String, FoxType>>.toFoxEnumType() = FoxEnumType(toMap())
 
-fun FoxTupleType.componentAt(index: Int): FoxType {
-    require(index in 0 until arity) { "Tuple component index out of bounds: $index, size=$arity" }
-    return components[index]
-}
+fun FoxTupleType.getComponent(index: Int) = components[index]
 
-fun FoxTupleType.lastComponentAt(index: Int): FoxType {
-    require(index >= 0) { "Tuple component index must be non-negative: $index" }
-    return componentAt(arity - 1 - index)
-}
+fun FoxTupleType.getComponentBack(index: Int) = getComponent(arity - 1 - index)
 
-fun FoxTupleType.sliceComponents(startIndex: Int, endIndex: Int): FoxTupleType {
-    require(startIndex >= 0) { "Tuple slice start index must be non-negative: $startIndex" }
-    require(endIndex >= startIndex) { "Tuple slice end index must be >= start index: $endIndex < $startIndex" }
-    require(endIndex <= arity) { "Tuple slice end index out of bounds: $endIndex, size=$arity" }
-    if (startIndex == endIndex) return FoxTupleType(emptyList())
-    return components.subList(startIndex, endIndex).toFoxTupleType()
-}
+fun FoxTupleType.getFirstComponents(count: Int) = sliceComponents(0, count)
 
-fun FoxTupleType.firstComponents(count: Int): FoxTupleType {
-    require(count >= 0) { "Tuple component count must be non-negative: $count" }
-    require(count <= arity) { "Tuple component count out of bounds: $count, size=$arity" }
-    return sliceComponents(0, count)
-}
+fun FoxTupleType.getLastComponents(count: Int) = sliceComponents(arity - count, arity)
 
-fun FoxTupleType.lastComponents(count: Int): FoxTupleType {
-    require(count >= 0) { "Tuple component count must be non-negative: $count" }
-    require(count <= arity) { "Tuple component count out of bounds: $count, size=$arity" }
-    return sliceComponents(arity - count, arity)
-}
+fun FoxTupleType.dropFirstComponents(count: Int) = sliceComponents(count, arity)
 
-fun FoxTupleType.dropFirstComponents(count: Int): FoxTupleType {
-    require(count >= 0) { "Tuple component count must be non-negative: $count" }
-    require(count <= arity) { "Tuple component count out of bounds: $count, size=$arity" }
-    return sliceComponents(count, arity)
-}
+fun FoxTupleType.dropLastComponents(count: Int) = sliceComponents(0, arity - count)
 
-fun FoxTupleType.dropLastComponents(count: Int): FoxTupleType {
-    require(count >= 0) { "Tuple component count must be non-negative: $count" }
-    require(count <= arity) { "Tuple component count out of bounds: $count, size=$arity" }
-    return sliceComponents(0, arity - count)
-}
+fun FoxTupleType.sliceComponents(startIndex: Int, endIndex: Int) =
+    components.subList(startIndex, endIndex).toFoxTupleType()
 
-fun Iterable<FoxTupleType>.mergeTupleComponents(): FoxTupleType {
-    return flatMap { it.components }.toFoxTupleType()
-}
+fun Iterable<FoxTupleType>.mergeTuples() = flatMap { it.components }.toFoxTupleType()
 
-fun FoxStructType.fieldAt(index: Int): Map.Entry<String, FoxType> {
-    require(index in 0 until arity) { "Struct field index out of bounds: $index, size=$arity" }
-    return fields.entryAt(index)
-}
+fun FoxStructType.getFieldTypeByName(name: String) = fields.getValue(name)
 
-fun FoxStructType.lastFieldAt(index: Int): Map.Entry<String, FoxType> {
-    require(index >= 0) { "Struct field index must be non-negative: $index" }
-    return fieldAt(arity - 1 - index)
-}
+fun FoxStructType.getFieldTypeByIndex(index: Int) = fields.entryAt(index)
 
-fun FoxStructType.sliceFields(startIndex: Int, endIndex: Int): FoxStructType {
-    require(startIndex >= 0) { "Struct slice start index must be non-negative: $startIndex" }
-    require(endIndex >= startIndex) { "Struct slice end index must be >= start index: $endIndex < $startIndex" }
-    require(endIndex <= arity) { "Struct slice end index out of bounds: $endIndex, size=$arity" }
-    if (startIndex == endIndex) return FoxStructType(emptyOrderedMap())
-    
-    val result = mutableOrderedMapOf<String, FoxType>()
-    for (index in startIndex until endIndex) {
-        val entry = fields.entryAt(index)
-        result[entry.key] = entry.value
-    }
-    return FoxStructType(result)
-}
+fun FoxStructType.getFieldTypeByIndexBack(index: Int) = getFieldTypeByIndex(arity - 1 - index)
 
-fun FoxStructType.firstFields(count: Int): FoxStructType {
-    require(count >= 0) { "Struct field count must be non-negative: $count" }
-    require(count <= arity) { "Struct field count out of bounds: $count, size=$arity" }
-    return sliceFields(0, count)
-}
+fun FoxStructType.getFirstFields(count: Int) = sliceFields(0, count)
 
-fun FoxStructType.lastFields(count: Int): FoxStructType {
-    require(count >= 0) { "Struct field count must be non-negative: $count" }
-    require(count <= arity) { "Struct field count out of bounds: $count, size=$arity" }
-    return sliceFields(arity - count, arity)
-}
+fun FoxStructType.getLastFields(count: Int) = sliceFields(arity - count, arity)
 
-fun FoxStructType.dropFirstFields(count: Int): FoxStructType {
-    require(count >= 0) { "Struct field count must be non-negative: $count" }
-    require(count <= arity) { "Struct field count out of bounds: $count, size=$arity" }
-    return sliceFields(count, arity)
-}
+fun FoxStructType.dropFirstFields(count: Int) = sliceFields(count, arity)
 
-fun FoxStructType.dropLastFields(count: Int): FoxStructType {
-    require(count >= 0) { "Struct field count must be non-negative: $count" }
-    require(count <= arity) { "Struct field count out of bounds: $count, size=$arity" }
-    return sliceFields(0, arity - count)
-}
+fun FoxStructType.dropLastFields(count: Int) = sliceFields(0, arity - count)
 
-fun FoxStructType.selectFields(names: Iterable<String>): FoxStructType {
-    val result = mutableOrderedMapOf<String, FoxType>()
-    names.forEach { name ->
-        result[name] = fields.getValue(name)
-    }
-    return FoxStructType(result)
-}
+fun FoxStructType.sliceFields(startIndex: Int, endIndex: Int) =
+    fields.entries.subList(startIndex, endIndex).map { it.key to it.value }.toFoxStructType()
 
-fun FoxStructType.dropFields(names: Iterable<String>): FoxStructType {
-    val removed = names.toSet()
-    val result = mutableOrderedMapOf<String, FoxType>()
-    fields.entries.forEach { (name, type) ->
-        if (name !in removed) result[name] = type
-    }
-    return FoxStructType(result)
-}
+fun FoxStructType.selectFields(names: Set<String>) =
+    fields.entries.filter { it.key in names }.map { it.key to it.value }.toFoxStructType()
 
-fun Iterable<FoxStructType>.mergeStructFields(): FoxStructType {
-    val result = mutableOrderedMapOf<String, FoxType>()
-    forEach { struct ->
-        struct.fields.entries.forEach { (name, type) ->
-            result[name] = type
-        }
-    }
-    return FoxStructType(result)
-}
+fun FoxStructType.dropFields(names: Set<String>) =
+    fields.entries.filter { it.key !in names }.map { it.key to it.value }.toFoxStructType()
 
-fun FoxObjectType.member(name: String): FoxType = members.getValue(name)
+fun FoxStructType.extractFieldTypes() = fields.values.toFoxTupleType()
 
-fun FoxObjectType.selectMembers(names: Iterable<String>): FoxObjectType {
-    val result = LinkedHashMap<String, FoxType>()
-    names.forEach { name ->
-        result[name] = members.getValue(name)
-    }
-    return FoxObjectType(result)
-}
+fun Iterable<FoxStructType>.mergeStructs() =
+    flatMap { it.fields.entries }.map { it.key to it.value }.toFoxStructType()
 
-fun FoxObjectType.dropMembers(names: Iterable<String>): FoxObjectType {
-    val removed = names.toSet()
-    val result = LinkedHashMap<String, FoxType>()
-    members.forEach { (name, type) ->
-        if (name !in removed) result[name] = type
-    }
-    return FoxObjectType(result)
-}
+fun FoxObjectType.getMemberType(name: String) = members.getValue(name)
 
-fun Iterable<FoxObjectType>.mergeObjectMembers(): FoxObjectType {
-    val result = LinkedHashMap<String, FoxType>()
-    forEach { obj ->
-        obj.members.forEach { (name, type) ->
-            result[name] = type
-        }
-    }
-    return FoxObjectType(result)
-}
+fun FoxObjectType.selectMembers(names: Set<String>) =
+    members.entries.filter { it.key in names }.map { it.key to it.value }.toFoxObjectType()
 
-fun FoxEnumType.entry(name: String): FoxType = entries.getValue(name)
+fun FoxObjectType.dropMembers(names: Set<String>) =
+    members.entries.filter { it.key !in names }.map { it.key to it.value }.toFoxObjectType()
 
-fun FoxEnumType.selectEntries(names: Iterable<String>): FoxEnumType {
-    val result = LinkedHashMap<String, FoxType>()
-    names.forEach { name -> result[name] = entries.getValue(name) }
-    return FoxEnumType(result)
-}
+fun Iterable<FoxObjectType>.mergeObjects() =
+    flatMap { it.members.entries }.map { it.key to it.value }.toFoxObjectType()
 
-fun FoxEnumType.dropEntries(names: Iterable<String>): FoxEnumType {
-    val removed = names.toSet()
-    val result = LinkedHashMap<String, FoxType>()
-    entries.forEach { (name, type) ->
-        if (name !in removed) result[name] = type
-    }
-    return FoxEnumType(result)
-}
+fun FoxEnumType.getEntryType(name: String) = entries.getValue(name)
 
-fun Iterable<FoxEnumType>.mergeEnumEntries(): FoxEnumType {
-    val result = LinkedHashMap<String, FoxType>()
-    forEach { enum ->
-        enum.entries.forEach { (name, type) ->
-            result[name] = type
-        }
-    }
-    return FoxEnumType(result)
-}
+fun FoxEnumType.selectEntries(names: Set<String>) =
+    entries.entries.filter { it.key in names }.map { it.key to it.value }.toFoxEnumType()
+
+fun FoxEnumType.dropEntries(names: Set<String>) =
+    entries.entries.filter { it.key !in names }.map { it.key to it.value }.toFoxEnumType()
+
+fun Iterable<FoxEnumType>.mergeEnums() =
+    flatMap { it.entries.entries }.map { it.key to it.value }.toFoxEnumType()
 
 inline fun <reified T : FoxType> FoxType.visitTypes(crossinline visitor: (T) -> Unit) {
     visitTypes({ type -> type is T }) { type -> visitor(type as T) }
@@ -269,49 +168,56 @@ fun FoxType.visitTypes(filter: (FoxType) -> Boolean, visitor: (FoxType) -> Unit)
             }
         }
         is FoxTransformType -> when (this) {
-            is FoxTupleComponentAtType -> type.visitTypes(filter, visitor)
-            is FoxTupleLastComponentAtType -> type.visitTypes(filter, visitor)
-            is FoxTupleFirstComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleExactFirstComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleLastComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleExactLastComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleDropFirstComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleExactDropFirstComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleDropLastComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleExactDropLastComponentsOfType -> type.visitTypes(filter, visitor)
-            is FoxTupleMergeComponentsOfType -> types.forEach { it.visitTypes(filter, visitor) }
-            is FoxStructFieldOfType -> type.visitTypes(filter, visitor)
-            is FoxStructFieldAtType -> type.visitTypes(filter, visitor)
-            is FoxStructLastFieldAtType -> type.visitTypes(filter, visitor)
-            is FoxStructFirstFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructExactFirstFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructLastFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructExactLastFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructDropFirstFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructExactDropFirstFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructDropLastFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructExactDropLastFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructDropFieldsOfType -> type.visitTypes(filter, visitor)
-            is FoxStructMergeFieldsOfType -> types.forEach { it.visitTypes(filter, visitor) }
-            is FoxObjectMemberOfType -> type.visitTypes(filter, visitor)
-            is FoxObjectMembersOfType -> type.visitTypes(filter, visitor)
-            is FoxObjectDropMembersOfType -> type.visitTypes(filter, visitor)
-            is FoxObjectMergeMembersOfType -> types.forEach { it.visitTypes(filter, visitor) }
-            is FoxEnumEntryOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumEntriesOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumDropEntriesOfType -> type.visitTypes(filter, visitor)
-            is FoxEnumMergeEntriesOfType -> types.forEach { it.visitTypes(filter, visitor) }
-            is FoxArrayElementOfType -> type.visitTypes(filter, visitor)
-            is FoxRefReferentOfType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetComponentType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetComponentBackType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetFirstComponentsType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetFirstComponentsExactType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetLastComponentsType -> type.visitTypes(filter, visitor)
+            is FoxTupleGetLastComponentsExactType -> type.visitTypes(filter, visitor)
+            is FoxTupleDropFirstComponentsType -> type.visitTypes(filter, visitor)
+            is FoxTupleDropFirstComponentsExactType -> type.visitTypes(filter, visitor)
+            is FoxTupleDropLastComponentsType -> type.visitTypes(filter, visitor)
+            is FoxTupleDropLastComponentsExactType -> type.visitTypes(filter, visitor)
+            is FoxTupleMergeTuplesType -> types.forEach { it.visitTypes(filter, visitor) }
+            is FoxStructGetFieldTypeByNameType -> type.visitTypes(filter, visitor)
+            is FoxStructGetFieldTypeByIndexType -> type.visitTypes(filter, visitor)
+            is FoxStructGetFieldTypeByIndexBackType -> type.visitTypes(filter, visitor)
+            is FoxStructGetFirstFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructGetFirstFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructGetLastFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructGetLastFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructDropFirstFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructDropFirstFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructDropLastFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructDropLastFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructSelectFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructSelectFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructDropFieldsType -> type.visitTypes(filter, visitor)
+            is FoxStructDropFieldsExactType -> type.visitTypes(filter, visitor)
+            is FoxStructExtractFieldTypesType -> type.visitTypes(filter, visitor)
+            is FoxStructMergeStructsType -> types.forEach { it.visitTypes(filter, visitor) }
+            is FoxObjectGetMemberTypeType -> type.visitTypes(filter, visitor)
+            is FoxObjectSelectMembersType -> type.visitTypes(filter, visitor)
+            is FoxObjectSelectMembersExactType -> type.visitTypes(filter, visitor)
+            is FoxObjectDropMembersType -> type.visitTypes(filter, visitor)
+            is FoxObjectDropMembersExactType -> type.visitTypes(filter, visitor)
+            is FoxObjectMergeObjectsType -> types.forEach { it.visitTypes(filter, visitor) }
+            is FoxEnumGetEntryTypeType -> type.visitTypes(filter, visitor)
+            is FoxEnumSelectEntriesType -> type.visitTypes(filter, visitor)
+            is FoxEnumSelectEntriesExactType -> type.visitTypes(filter, visitor)
+            is FoxEnumDropEntriesType -> type.visitTypes(filter, visitor)
+            is FoxEnumDropEntriesExactType -> type.visitTypes(filter, visitor)
+            is FoxEnumMergeEnumsType -> types.forEach { it.visitTypes(filter, visitor) }
+            is FoxArrayGetElementTypeType -> type.visitTypes(filter, visitor)
+            is FoxRefGetReferentTypeType -> type.visitTypes(filter, visitor)
+            is FoxMethodGetThisTypeType -> type.visitTypes(filter, visitor)
+            is FoxMethodGetParameterStructType -> type.visitTypes(filter, visitor)
+            is FoxMethodGetReturnTypeType -> type.visitTypes(filter, visitor)
             is FoxMethodOfType -> {
                 `this`.visitTypes(filter, visitor)
                 parameters.visitTypes(filter, visitor)
                 `return`.visitTypes(filter, visitor)
             }
-            is FoxMethodThisOfType -> type.visitTypes(filter, visitor)
-            is FoxMethodParametersOfType -> type.visitTypes(filter, visitor)
-            is FoxMethodReturnOfType -> type.visitTypes(filter, visitor)
         }
         is FoxUnresolvedType -> parameters?.forEach { it.visitTypes(filter, visitor) }
         is FoxPlaceholderType -> error("Placeholder type cannot be visited")
@@ -353,45 +259,52 @@ fun FoxType.mapTypes(filter: (FoxType) -> Boolean, mapper: (FoxType) -> FoxType)
             )
         }
         is FoxTransformType -> when (this) {
-            is FoxTupleComponentAtType -> FoxTupleComponentAtType(type.mapTypes(filter, mapper), index)
-            is FoxTupleLastComponentAtType -> FoxTupleLastComponentAtType(type.mapTypes(filter, mapper), index)
-            is FoxTupleFirstComponentsOfType -> FoxTupleFirstComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleExactFirstComponentsOfType -> FoxTupleExactFirstComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleLastComponentsOfType -> FoxTupleLastComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleExactLastComponentsOfType -> FoxTupleExactLastComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleDropFirstComponentsOfType -> FoxTupleDropFirstComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleExactDropFirstComponentsOfType -> FoxTupleExactDropFirstComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleDropLastComponentsOfType -> FoxTupleDropLastComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleExactDropLastComponentsOfType -> FoxTupleExactDropLastComponentsOfType(type.mapTypes(filter, mapper), count)
-            is FoxTupleMergeComponentsOfType -> FoxTupleMergeComponentsOfType(types.map { it.mapTypes(filter, mapper) })
-            is FoxStructFieldOfType -> FoxStructFieldOfType(type.mapTypes(filter, mapper), name)
-            is FoxStructFieldAtType -> FoxStructFieldAtType(type.mapTypes(filter, mapper), index)
-            is FoxStructLastFieldAtType -> FoxStructLastFieldAtType(type.mapTypes(filter, mapper), index)
-            is FoxStructFirstFieldsOfType -> FoxStructFirstFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructExactFirstFieldsOfType -> FoxStructExactFirstFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructLastFieldsOfType -> FoxStructLastFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructExactLastFieldsOfType -> FoxStructExactLastFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructDropFirstFieldsOfType -> FoxStructDropFirstFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructExactDropFirstFieldsOfType -> FoxStructExactDropFirstFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructDropLastFieldsOfType -> FoxStructDropLastFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructExactDropLastFieldsOfType -> FoxStructExactDropLastFieldsOfType(type.mapTypes(filter, mapper), count)
-            is FoxStructFieldsOfType -> FoxStructFieldsOfType(type.mapTypes(filter, mapper), names)
-            is FoxStructDropFieldsOfType -> FoxStructDropFieldsOfType(type.mapTypes(filter, mapper), names)
-            is FoxStructMergeFieldsOfType -> FoxStructMergeFieldsOfType(types.map { it.mapTypes(filter, mapper) })
-            is FoxObjectMemberOfType -> FoxObjectMemberOfType(type.mapTypes(filter, mapper), name)
-            is FoxObjectMembersOfType -> FoxObjectMembersOfType(type.mapTypes(filter, mapper), names)
-            is FoxObjectDropMembersOfType -> FoxObjectDropMembersOfType(type.mapTypes(filter, mapper), names)
-            is FoxObjectMergeMembersOfType -> FoxObjectMergeMembersOfType(types.map { it.mapTypes(filter, mapper) })
-            is FoxEnumEntryOfType -> FoxEnumEntryOfType(type.mapTypes(filter, mapper), name)
-            is FoxEnumEntriesOfType -> FoxEnumEntriesOfType(type.mapTypes(filter, mapper), names)
-            is FoxEnumDropEntriesOfType -> FoxEnumDropEntriesOfType(type.mapTypes(filter, mapper), names)
-            is FoxEnumMergeEntriesOfType -> FoxEnumMergeEntriesOfType(types.map { it.mapTypes(filter, mapper) })
-            is FoxArrayElementOfType -> FoxArrayElementOfType(type.mapTypes(filter, mapper))
-            is FoxRefReferentOfType -> FoxRefReferentOfType(type.mapTypes(filter, mapper))
+            is FoxTupleGetComponentType -> FoxTupleGetComponentType(type.mapTypes(filter, mapper), index)
+            is FoxTupleGetComponentBackType -> FoxTupleGetComponentBackType(type.mapTypes(filter, mapper), index)
+            is FoxTupleGetFirstComponentsType -> FoxTupleGetFirstComponentsType(type.mapTypes(filter, mapper), count)
+            is FoxTupleGetFirstComponentsExactType -> FoxTupleGetFirstComponentsExactType(type.mapTypes(filter, mapper), count)
+            is FoxTupleGetLastComponentsType -> FoxTupleGetLastComponentsType(type.mapTypes(filter, mapper), count)
+            is FoxTupleGetLastComponentsExactType -> FoxTupleGetLastComponentsExactType(type.mapTypes(filter, mapper), count)
+            is FoxTupleDropFirstComponentsType -> FoxTupleDropFirstComponentsType(type.mapTypes(filter, mapper), count)
+            is FoxTupleDropFirstComponentsExactType -> FoxTupleDropFirstComponentsExactType(type.mapTypes(filter, mapper), count)
+            is FoxTupleDropLastComponentsType -> FoxTupleDropLastComponentsType(type.mapTypes(filter, mapper), count)
+            is FoxTupleDropLastComponentsExactType -> FoxTupleDropLastComponentsExactType(type.mapTypes(filter, mapper), count)
+            is FoxTupleMergeTuplesType -> FoxTupleMergeTuplesType(types.map { it.mapTypes(filter, mapper) })
+            is FoxStructGetFieldTypeByNameType -> FoxStructGetFieldTypeByNameType(type.mapTypes(filter, mapper), name)
+            is FoxStructGetFieldTypeByIndexType -> FoxStructGetFieldTypeByIndexType(type.mapTypes(filter, mapper), index)
+            is FoxStructGetFieldTypeByIndexBackType -> FoxStructGetFieldTypeByIndexBackType(type.mapTypes(filter, mapper), index)
+            is FoxStructGetFirstFieldsType -> FoxStructGetFirstFieldsType(type.mapTypes(filter, mapper), count)
+            is FoxStructGetFirstFieldsExactType -> FoxStructGetFirstFieldsExactType(type.mapTypes(filter, mapper), count)
+            is FoxStructGetLastFieldsType -> FoxStructGetLastFieldsType(type.mapTypes(filter, mapper), count)
+            is FoxStructGetLastFieldsExactType -> FoxStructGetLastFieldsExactType(type.mapTypes(filter, mapper), count)
+            is FoxStructDropFirstFieldsType -> FoxStructDropFirstFieldsType(type.mapTypes(filter, mapper), count)
+            is FoxStructDropFirstFieldsExactType -> FoxStructDropFirstFieldsExactType(type.mapTypes(filter, mapper), count)
+            is FoxStructDropLastFieldsType -> FoxStructDropLastFieldsType(type.mapTypes(filter, mapper), count)
+            is FoxStructDropLastFieldsExactType -> FoxStructDropLastFieldsExactType(type.mapTypes(filter, mapper), count)
+            is FoxStructSelectFieldsType -> FoxStructSelectFieldsType(type.mapTypes(filter, mapper), names)
+            is FoxStructSelectFieldsExactType -> FoxStructSelectFieldsExactType(type.mapTypes(filter, mapper), names)
+            is FoxStructDropFieldsType -> FoxStructDropFieldsType(type.mapTypes(filter, mapper), names)
+            is FoxStructDropFieldsExactType -> FoxStructDropFieldsExactType(type.mapTypes(filter, mapper), names)
+            is FoxStructExtractFieldTypesType -> FoxStructExtractFieldTypesType(type.mapTypes(filter, mapper))
+            is FoxStructMergeStructsType -> FoxStructMergeStructsType(types.map { it.mapTypes(filter, mapper) })
+            is FoxObjectGetMemberTypeType -> FoxObjectGetMemberTypeType(type.mapTypes(filter, mapper), name)
+            is FoxObjectSelectMembersType -> FoxObjectSelectMembersType(type.mapTypes(filter, mapper), names)
+            is FoxObjectSelectMembersExactType -> FoxObjectSelectMembersExactType(type.mapTypes(filter, mapper), names)
+            is FoxObjectDropMembersType -> FoxObjectDropMembersType(type.mapTypes(filter, mapper), names)
+            is FoxObjectDropMembersExactType -> FoxObjectDropMembersExactType(type.mapTypes(filter, mapper), names)
+            is FoxObjectMergeObjectsType -> FoxObjectMergeObjectsType(types.map { it.mapTypes(filter, mapper) })
+            is FoxEnumGetEntryTypeType -> FoxEnumGetEntryTypeType(type.mapTypes(filter, mapper), name)
+            is FoxEnumSelectEntriesType -> FoxEnumSelectEntriesType(type.mapTypes(filter, mapper), names)
+            is FoxEnumSelectEntriesExactType -> FoxEnumSelectEntriesExactType(type.mapTypes(filter, mapper), names)
+            is FoxEnumDropEntriesType -> FoxEnumDropEntriesType(type.mapTypes(filter, mapper), names)
+            is FoxEnumDropEntriesExactType -> FoxEnumDropEntriesExactType(type.mapTypes(filter, mapper), names)
+            is FoxEnumMergeEnumsType -> FoxEnumMergeEnumsType(types.map { it.mapTypes(filter, mapper) })
+            is FoxArrayGetElementTypeType -> FoxArrayGetElementTypeType(type.mapTypes(filter, mapper))
+            is FoxRefGetReferentTypeType -> FoxRefGetReferentTypeType(type.mapTypes(filter, mapper))
+            is FoxMethodGetThisTypeType -> FoxMethodGetThisTypeType(type.mapTypes(filter, mapper))
+            is FoxMethodGetParameterStructType -> FoxMethodGetParameterStructType(type.mapTypes(filter, mapper))
+            is FoxMethodGetReturnTypeType -> FoxMethodGetReturnTypeType(type.mapTypes(filter, mapper))
             is FoxMethodOfType -> FoxMethodOfType(`this`.mapTypes(filter, mapper), parameters.mapTypes(filter, mapper), `return`.mapTypes(filter, mapper))
-            is FoxMethodThisOfType -> FoxMethodThisOfType(type.mapTypes(filter, mapper))
-            is FoxMethodParametersOfType -> FoxMethodParametersOfType(type.mapTypes(filter, mapper))
-            is FoxMethodReturnOfType -> FoxMethodReturnOfType(type.mapTypes(filter, mapper))
         }
         is FoxUnresolvedType -> FoxUnresolvedType(name, parameters?.map { it.mapTypes(filter, mapper) })
         is FoxPlaceholderType -> error("Placeholder type cannot be mapped")

@@ -19,24 +19,34 @@ data class ParsedBoolean(
 ) : Parsed<Boolean>
 
 data class ParsedInt(
-    override val node: Int,
+    val radix: Int,
+    val text: String,
     override val span: SourceSpan,
-) : Parsed<Int>
+) : Parsed<Int> {
+    override val node get() = text.toInt(radix)
+}
 
 data class ParsedLong(
-    override val node: Long,
+    val radix: Int,
+    val text: String,
     override val span: SourceSpan,
-) : Parsed<Long>
+) : Parsed<Long> {
+    override val node get() = text.toLong(radix)
+}
 
 data class ParsedFloat(
-    override val node: Float,
+    val text: String,
     override val span: SourceSpan,
-) : Parsed<Float>
+) : Parsed<Float> {
+    override val node get() = text.toFloat()
+}
 
 data class ParsedDouble(
-    override val node: Double,
+    val text: String,
     override val span: SourceSpan,
-) : Parsed<Double>
+) : Parsed<Double> {
+    override val node get() = text.toDouble()
+}
 
 data class ParsedChar(
     override val node: Char,
