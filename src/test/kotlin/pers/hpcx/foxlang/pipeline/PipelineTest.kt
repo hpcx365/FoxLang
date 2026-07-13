@@ -17,7 +17,7 @@ class PipelineTest {
             def <T = GetComponent<AnyTuple, 0>> unsafe() {}
         """.trimIndent().parseFoxFileOrThrow()
         
-        val result = assertIs<PipelineCompileConstraintFailure>(runPipeline(file))
+        val result = assertIs<PipelineConstraintCompilePrecheckFailure>(runPipeline(file))
         assertIs<ConstraintCompileProjectionBaseMustBeConcrete>(result.errors.single())
     }
     
@@ -27,9 +27,10 @@ class PipelineTest {
             def badNormalization(): GetFieldTypeByIndex<Struct<value: Int>, 1> {}
         """.trimIndent().parseFoxFileOrThrow()
         
-        val result = assertIs<PipelineNormalizationFailure>(runPipeline(file))
+        val result = assertIs<PipelineMethodTypeNormalizationFailure>(runPipeline(file))
         val error = result.errors.single()
         
+        assertIs<MethodTypeNormalizationFailedError>(error)
         assertEquals("badNormalization", error.method.name)
         assertIs<TypeNormalizationIndexOutOfBounds>(error.error)
     }
@@ -40,7 +41,7 @@ class PipelineTest {
             type A = Missing
         """.trimIndent().parseFoxFileOrThrow()
         
-        val result = assertIs<PipelineAliasFlattenFailure>(runPipeline(file))
+        val result = assertIs<PipelineTypeAliasFlattenFailure>(runPipeline(file))
         assertEquals(1, result.errors.size)
     }
     

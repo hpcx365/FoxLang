@@ -65,20 +65,31 @@ private data class StatementContext(
     }
 }
 
-fun runStatementStructureCheck(file: ParsedFoxFile): StatementStructureCheckResult {
-    val errors = mutableListOf<StatementStructureCheckError>()
+fun runStatementStructureCheck(file: ParsedFoxFile) = StatementStructureCheckContext().run(file)
+
+private class StatementStructureCheckContext {
     
-    fun isAssignableTarget(statement: ParsedFoxStatement<*>): Boolean = when (statement) {
-        is ParsedFoxSymbol -> true
+    private val errors = mutableListOf<StatementStructureCheckError>()
+    
+    fun run(file: ParsedFoxFile): StatementStructureCheckResult {
+        file.elements.forEach { element ->
+            if (element is ParsedFoxMethodDefinition) visit(element.body, StatementContext())
+        }
+        if (errors.isNotEmpty()) return StatementStructureCheckFailure(errors)
+        return StatementStructureCheckSuccess
+    }
+    
+    private fun isAssignableTarget(statement: ParsedFoxStatement<*>): Boolean = when (statement) {
+        is ParsedFoxUnresolvedSymbol -> true
         is ParsedFoxFieldAccess -> true
         is ParsedFoxIndexAccess -> true
         else -> false
     }
     
-    fun visit(statement: ParsedFoxStatement<*>, context: StatementContext) {
+    private fun visit(statement: ParsedFoxStatement<*>, context: StatementContext) {
         when (statement) {
             is ParsedFoxThis -> {}
-            is ParsedFoxSymbol -> {}
+            is ParsedFoxUnresolvedSymbol -> {}
             is ParsedFoxEntityStatement -> {}
             is ParsedFoxIntStatement -> {}
             is ParsedFoxLongStatement -> {}
@@ -119,7 +130,7 @@ fun runStatementStructureCheck(file: ParsedFoxFile): StatementStructureCheckResu
             is ParsedFoxTypeBinding -> {}
             is ParsedFoxAssign -> {
                 if (statement.operator.node == FoxDefAssignOperator) {
-                    if (statement.left !is ParsedFoxSymbol) {
+                    if (statement.left !is ParsedFoxUnresolvedSymbol) {
                         errors += StatementDefinitionTargetMustBeSymbol(statement, statement.left)
                     }
                 } else if (!isAssignableTarget(statement.left)) {
@@ -189,10 +200,4 @@ fun runStatementStructureCheck(file: ParsedFoxFile): StatementStructureCheckResu
             is ParsedFoxLambda -> visit(statement.body, StatementContext())
         }
     }
-    
-    file.elements.forEach { element ->
-        if (element is ParsedFoxMethodDefinition) visit(element.body, StatementContext())
-    }
-    
-    return if (errors.isEmpty()) StatementStructureCheckSuccess else StatementStructureCheckFailure(errors)
 }

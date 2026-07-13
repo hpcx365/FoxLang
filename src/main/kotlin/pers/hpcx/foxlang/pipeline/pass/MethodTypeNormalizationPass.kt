@@ -2,33 +2,101 @@ package pers.hpcx.foxlang.pipeline.pass
 
 import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.type.mapTypes
+import pers.hpcx.foxlang.type.visitTypes
 import pers.hpcx.foxlang.utils.mapValues
 
 sealed interface MethodTypeNormalizationResult
 data class MethodTypeNormalizationSuccess(val newFile: FoxFile) : MethodTypeNormalizationResult
 data class MethodTypeNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : MethodTypeNormalizationResult
 
-data class MethodTypeNormalizationError(
+sealed interface MethodTypeNormalizationError
+
+data class MethodTypeNormalizationWildcardNotAllowed(
+    val method: FoxMethodDefinition,
+    val type: FoxWildcardType,
+) : MethodTypeNormalizationError
+
+data class MethodTypeNormalizationTransformNotAllowed(
+    val method: FoxMethodDefinition,
+    val type: FoxTransformType,
+) : MethodTypeNormalizationError
+
+data class MethodTypeNormalizationFailedError(
     val method: FoxMethodDefinition,
     val error: TypeNormalizationError,
-)
+) : MethodTypeNormalizationError
 
-fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
-    val errors = mutableListOf<MethodTypeNormalizationError>()
+data class MethodTypeNormalizationUnknownGenericReference(
+    val method: FoxMethodDefinition,
+    val type: FoxUnresolvedType,
+) : MethodTypeNormalizationError
+
+fun runMethodTypeNormalization(file: FoxFile) = MethodTypeNormalizationContext().run(file)
+
+private class MethodTypeNormalizationContext {
     
-    fun normalizeType(method: FoxMethodDefinition, type: FoxType): FoxType = type.mapTypes<FoxType> { currentType ->
-        when (val result = runTypeNormalization(currentType)) {
-            is TypeNormalizationSuccess -> result.type
-            is TypeNormalizationFailure -> {
-                errors += result.errors.map { MethodTypeNormalizationError(method, it) }
-                currentType
+    private val errors = mutableListOf<MethodTypeNormalizationError>()
+    
+    fun run(file: FoxFile): MethodTypeNormalizationResult {
+        val newElements = file.elements.map { element ->
+            when (element) {
+                is FoxTypeAlias -> error("unreachable")
+                is FoxMethodDefinition -> {
+                    element.generics.values.forEach { checkGenericReferences(element, it) }
+                    FoxMethodDefinition(
+                        element.generics,
+                        normalizeType(element, element.thisType),
+                        element.name,
+                        element.parameters.mapValues { normalizeType(element, it.value) },
+                        normalizeType(element, element.returnType),
+                        normalizeStatement(element, element.body),
+                    )
+                }
+            }
+        }
+        
+        if (errors.isNotEmpty()) return MethodTypeNormalizationFailure(errors)
+        return MethodTypeNormalizationSuccess(FoxFile(newElements))
+    }
+    
+    private fun normalizeType(method: FoxMethodDefinition, type: FoxType): FoxType {
+        checkGenericReferences(method, type)
+        
+        type.visitTypes<FoxWildcardType> { wildcard ->
+            errors += MethodTypeNormalizationWildcardNotAllowed(method, wildcard)
+        }
+        
+        var normalizationFailed = false
+        val normalizedType = type.mapTypes<FoxType> { currentType ->
+            when (val result = runTypeNormalization(currentType)) {
+                is TypeNormalizationSuccess -> result.type
+                is TypeNormalizationFailure -> {
+                    normalizationFailed = true
+                    errors += result.errors.map { MethodTypeNormalizationFailedError(method, it) }
+                    currentType
+                }
+            }
+        }
+        if (!normalizationFailed) {
+            normalizedType.visitTypes<FoxTransformType> { transform ->
+                errors += MethodTypeNormalizationTransformNotAllowed(method, transform)
+            }
+        }
+        return normalizedType
+    }
+    
+    private fun checkGenericReferences(method: FoxMethodDefinition, type: FoxType) {
+        type.visitTypes<FoxUnresolvedType> { unresolved ->
+            check(unresolved.parameters == null)
+            if (unresolved.name !in method.generics) {
+                errors += MethodTypeNormalizationUnknownGenericReference(method, unresolved)
             }
         }
     }
     
-    fun normalizeStatement(method: FoxMethodDefinition, statement: FoxStatement): FoxStatement = when (statement) {
+    private fun normalizeStatement(method: FoxMethodDefinition, statement: FoxStatement): FoxStatement = when (statement) {
         FoxThis -> statement
-        is FoxSymbol -> statement
+        is FoxUnresolvedSymbol -> statement
         is FoxEntityStatement -> statement
         is FoxBreak -> statement
         is FoxContinue -> statement
@@ -102,21 +170,4 @@ fun runMethodTypeNormalization(file: FoxFile): MethodTypeNormalizationResult {
             normalizeStatement(method, statement.condition),
         )
     }
-    
-    val newElements = file.elements.map { element ->
-        when (element) {
-            is FoxTypeAlias -> error("unreachable")
-            is FoxMethodDefinition -> FoxMethodDefinition(
-                element.generics,
-                normalizeType(element, element.thisType),
-                element.name,
-                element.parameters.mapValues { normalizeType(element, it.value) },
-                normalizeType(element, element.returnType),
-                normalizeStatement(element, element.body),
-            )
-        }
-    }
-    
-    if (errors.isNotEmpty()) return MethodTypeNormalizationFailure(errors)
-    return MethodTypeNormalizationSuccess(FoxFile(newElements))
 }

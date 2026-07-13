@@ -11,12 +11,12 @@ data class ParsedFoxThis(override val span: SourceSpan) : ParsedFoxStatement<Fox
     override val node get() = FoxThis
 }
 
-data class FoxSymbol(val name: String) : FoxStatement
-data class ParsedFoxSymbol(
+data class FoxUnresolvedSymbol(val name: String) : FoxStatement
+data class ParsedFoxUnresolvedSymbol(
     val name: ParsedString,
     override val span: SourceSpan,
-) : ParsedFoxStatement<FoxSymbol> {
-    override val node get() = FoxSymbol(name.node)
+) : ParsedFoxStatement<FoxUnresolvedSymbol> {
+    override val node get() = FoxUnresolvedSymbol(name.node)
 }
 
 data class FoxEntityStatement(val value: FoxEntity) : FoxStatement

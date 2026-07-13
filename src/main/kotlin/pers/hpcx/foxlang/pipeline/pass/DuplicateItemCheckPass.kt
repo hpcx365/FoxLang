@@ -32,24 +32,54 @@ data class DuplicateCallGenericArgument(val call: ParsedFoxCall, val argument: P
 data class DuplicateCallParameter(val call: ParsedFoxCall, val parameter: ParsedString) : DuplicateItemCheckError
 data class DuplicateIndirectCallParameter(val call: ParsedFoxIndirectCall, val parameter: ParsedString) : DuplicateItemCheckError
 
-fun runDuplicateItemCheck(file: ParsedFoxFile): DuplicateItemCheckResult {
-    val errors = mutableListOf<DuplicateItemCheckError>()
+fun runDuplicateItemCheck(file: ParsedFoxFile) = DuplicateItemCheckContext().run(file)
+
+private class DuplicateItemCheckContext {
     
-    fun checkDuplicates(items: Iterable<ParsedString>, error: (ParsedString) -> DuplicateItemCheckError) {
+    private val errors = mutableListOf<DuplicateItemCheckError>()
+    
+    fun run(file: ParsedFoxFile): DuplicateItemCheckResult {
+        file.elements.forEach { element ->
+            when (element) {
+                is ParsedFoxTypeAlias -> {
+                    checkDuplicates(element.generics?.node.orEmpty()) { DuplicateTypeAliasGeneric(element, it) }
+                    visitType(element.alias)
+                }
+                is ParsedFoxMethodDefinition -> {
+                    checkDuplicates(element.generics?.node?.map { it.node.first }.orEmpty()) {
+                        DuplicateMethodGeneric(element, it)
+                    }
+                    checkDuplicates(element.parameters.node.map { it.node.first }) {
+                        DuplicateMethodParameter(element, it)
+                    }
+                    element.generics?.node?.forEach { it.node.second?.let(::visitType) }
+                    element.thisType?.let(::visitType)
+                    element.parameters.node.forEach { visitType(it.node.second) }
+                    element.returnType?.let(::visitType)
+                    visitStatement(element.body)
+                }
+            }
+        }
+        
+        if (errors.isNotEmpty()) return DuplicateItemCheckFailure(errors)
+        return DuplicateItemCheckSuccess
+    }
+    
+    private fun checkDuplicates(items: Iterable<ParsedString>, error: (ParsedString) -> DuplicateItemCheckError) {
         val seen = mutableSetOf<String>()
         items.forEach { item ->
             if (!seen.add(item.node)) errors += error(item)
         }
     }
     
-    fun checkNamedDuplicates(
+    private fun checkNamedDuplicates(
         items: Iterable<ParsedPair<ParsedString?, *>>,
         error: (ParsedString) -> DuplicateItemCheckError,
     ) {
         checkDuplicates(items.mapNotNull { it.node.first }, error)
     }
     
-    fun visitType(type: ParsedFoxType<*>) {
+    private fun visitType(type: ParsedFoxType<*>) {
         when (type) {
             is ParsedFoxPrimitiveType -> {}
             is ParsedFoxAnyType -> {}
@@ -175,10 +205,10 @@ fun runDuplicateItemCheck(file: ParsedFoxFile): DuplicateItemCheckResult {
         }
     }
     
-    fun visitStatement(statement: ParsedFoxStatement<*>) {
+    private fun visitStatement(statement: ParsedFoxStatement<*>) {
         when (statement) {
             is ParsedFoxThis -> {}
-            is ParsedFoxSymbol -> {}
+            is ParsedFoxUnresolvedSymbol -> {}
             is ParsedFoxEntityStatement -> {}
             is ParsedFoxIntStatement -> {}
             is ParsedFoxLongStatement -> {}
@@ -257,28 +287,4 @@ fun runDuplicateItemCheck(file: ParsedFoxFile): DuplicateItemCheckResult {
             }
         }
     }
-    
-    file.elements.forEach { element ->
-        when (element) {
-            is ParsedFoxTypeAlias -> {
-                checkDuplicates(element.generics?.node.orEmpty()) { DuplicateTypeAliasGeneric(element, it) }
-                visitType(element.alias)
-            }
-            is ParsedFoxMethodDefinition -> {
-                checkDuplicates(element.generics?.node?.map { it.node.first }.orEmpty()) {
-                    DuplicateMethodGeneric(element, it)
-                }
-                checkDuplicates(element.parameters.node.map { it.node.first }) {
-                    DuplicateMethodParameter(element, it)
-                }
-                element.generics?.node?.forEach { it.node.second?.let(::visitType) }
-                element.thisType?.let(::visitType)
-                element.parameters.node.forEach { visitType(it.node.second) }
-                element.returnType?.let(::visitType)
-                visitStatement(element.body)
-            }
-        }
-    }
-    
-    return if (errors.isEmpty()) DuplicateItemCheckSuccess else DuplicateItemCheckFailure(errors)
 }

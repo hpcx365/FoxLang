@@ -12,9 +12,9 @@ class Interpreter {
     
     fun run(arguments: Array<String>) {
         stack += StackFrame(
-            method = methods.getValue(mainMethodIdentifier) as FoxCustomizedMethodImplementation,
-            thisEntity = FoxUnit,
-            parameters = mapOf("args" to FoxArray(arguments.map { FoxString(it) })),
+            methods.getValue(mainMethodIdentifier) as FoxCustomizedMethodImplementation,
+            FoxUnit,
+            mapOf("args" to FoxArray(arguments.map { FoxString(it) })),
         )
         runLoop()
     }
@@ -22,23 +22,23 @@ class Interpreter {
     fun invoke(
         identifier: FoxMethodIdentifier,
         thisEntity: FoxEntity = FoxUnit,
-        parameters: Map<String, FoxEntity>,
+        parameterEntities: Map<String, FoxEntity>,
     ): FoxEntity {
         completedReturn = FoxUnit
         when (val method = methods.getValue(identifier)) {
             is FoxBuiltInMethodImplementation -> {
                 val frame = StackFrame(
-                    method = FoxCustomizedMethodImplementation(
+                    FoxCustomizedMethodImplementation(
                         startBlock = "entry",
                         blocks = mapOf("entry" to FoxInstBlock(emptyList(), JumpReturn(SlotConst(FoxUnit)))),
                     ),
-                    thisEntity = thisEntity,
-                    parameters = mapOf(),
+                    thisEntity,
+                    parameterEntities,
                 )
-                return method.invoke(frame, thisEntity, parameters)
+                return method.invoke(frame, thisEntity, parameterEntities)
             }
             is FoxCustomizedMethodImplementation -> {
-                stack += StackFrame(method, thisEntity, parameters)
+                stack += StackFrame(method, thisEntity, parameterEntities)
                 runLoop()
                 return completedReturn
             }
@@ -61,9 +61,10 @@ class Interpreter {
     inner class StackFrame(
         val method: FoxCustomizedMethodImplementation,
         val thisEntity: FoxEntity,
-        parameters: Map<String, FoxEntity>,
+        val parameterEntities: Map<String, FoxEntity>,
     ) {
-        val locals: MutableMap<String, FoxEntity> = parameters.toMutableMap()
+        
+        val localEntities = mutableMapOf<String, FoxEntity>()
         var currentBlock: FoxInstBlock = method.blocks.getValue(method.startBlock)
         var nextInst: Int = 0
         lateinit var returnEntity: FoxEntity
@@ -74,17 +75,18 @@ class Interpreter {
         }
         
         fun FoxFetchSlot.fetch() = when (this) {
-            is SlotConst -> value
             SlotThis -> thisEntity
-            SlotReturnValue -> returnEntity
+            SlotReturn -> returnEntity
+            is SlotConst -> value
+            is SlotLocal -> localEntities.getValue(name)
+            is SlotParam -> parameterEntities.getValue(name)
             is SlotGlobal -> globals.getValue(name)
-            is SlotLocal -> locals.getValue(name)
         }
         
         fun FoxStoreSlot.store(value: FoxEntity) = when (this) {
-            SlotVoid -> {}
+            SlotIgnore -> {}
+            is SlotLocal -> localEntities[name] = value
             is SlotGlobal -> globals[name] = value
-            is SlotLocal -> locals[name] = value
         }
         
         fun panic(message: String) {
@@ -119,11 +121,7 @@ class Interpreter {
             when (callee) {
                 is FoxBuiltInMethodImplementation -> callee.invoke(this, target, parameters)
                 is FoxCustomizedMethodImplementation -> {
-                    stack += StackFrame(
-                        method = callee,
-                        thisEntity = target,
-                        parameters = parameters,
-                    )
+                    stack += StackFrame(callee, target, parameters)
                 }
             }
         }
@@ -168,7 +166,7 @@ class Interpreter {
         fun gc(stackFrames: List<StackFrame>) {
             val reachable = mutableSetOf<Int>()
             for (frame in stackFrames) {
-                for (value in frame.locals.values) {
+                for (value in frame.localEntities.values) {
                     reachable.collectReferences(value)
                 }
             }

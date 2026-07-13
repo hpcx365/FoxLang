@@ -6,13 +6,15 @@ import pers.hpcx.foxlang.pipeline.pass.*
 
 sealed interface PipelineResult
 data class PipelineSuccess(val newFile: FoxFile) : PipelineResult
-data class PipelineNumericLiteralCheckFailure(val errors: List<NumericLiteralCheckError>) : PipelineResult
-data class PipelineDuplicateItemCheckFailure(val errors: List<DuplicateItemCheckError>) : PipelineResult
-data class PipelineStatementStructureCheckFailure(val errors: List<StatementStructureCheckError>) : PipelineResult
-data class PipelineAliasFlattenFailure(val errors: List<TypeAliasFlattenError>) : PipelineResult
-data class PipelineAliasEliminationFailure(val errors: List<TypeAliasEliminationError>) : PipelineResult
-data class PipelineNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : PipelineResult
-data class PipelineCompileConstraintFailure(val errors: List<ConstraintCompilePrecheckError>) : PipelineResult
+
+sealed interface PipelineFailure : PipelineResult
+data class PipelineNumericLiteralCheckFailure(val errors: List<NumericLiteralCheckError>) : PipelineFailure
+data class PipelineDuplicateItemCheckFailure(val errors: List<DuplicateItemCheckError>) : PipelineFailure
+data class PipelineStatementStructureCheckFailure(val errors: List<StatementStructureCheckError>) : PipelineFailure
+data class PipelineTypeAliasFlattenFailure(val errors: List<TypeAliasFlattenError>) : PipelineFailure
+data class PipelineTypeAliasEliminationFailure(val errors: List<TypeAliasEliminationError>) : PipelineFailure
+data class PipelineMethodTypeNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : PipelineFailure
+data class PipelineConstraintCompilePrecheckFailure(val errors: List<ConstraintCompilePrecheckError>) : PipelineFailure
 
 fun runPipeline(file: ParsedFoxFile): PipelineResult {
     when (val result = runNumericLiteralCheck(file)) {
@@ -34,22 +36,22 @@ fun runPipeline(file: ParsedFoxFile): PipelineResult {
     
     val flattened = when (val result = runTypeAliasFlatten(lowered)) {
         is TypeAliasFlattenSuccess -> result.newFile
-        is TypeAliasFlattenFailure -> return PipelineAliasFlattenFailure(result.errors)
+        is TypeAliasFlattenFailure -> return PipelineTypeAliasFlattenFailure(result.errors)
     }
     
     val eliminated = when (val result = runTypeAliasElimination(flattened)) {
         is TypeAliasEliminationSuccess -> result.newFile
-        is TypeAliasEliminationFailure -> return PipelineAliasEliminationFailure(result.errors)
+        is TypeAliasEliminationFailure -> return PipelineTypeAliasEliminationFailure(result.errors)
     }
     
     val normalized = when (val result = runMethodTypeNormalization(eliminated)) {
         is MethodTypeNormalizationSuccess -> result.newFile
-        is MethodTypeNormalizationFailure -> return PipelineNormalizationFailure(result.errors)
+        is MethodTypeNormalizationFailure -> return PipelineMethodTypeNormalizationFailure(result.errors)
     }
     
     when (val result = runConstraintCompilePrecheck(normalized)) {
         ConstraintCompilePrecheckSuccess -> {}
-        is ConstraintCompilePrecheckFailure -> return PipelineCompileConstraintFailure(result.errors)
+        is ConstraintCompilePrecheckFailure -> return PipelineConstraintCompilePrecheckFailure(result.errors)
     }
     
     TODO()

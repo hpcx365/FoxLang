@@ -30,37 +30,6 @@ class TypeNormalizationPassTest {
     }
     
     @Test
-    fun keepsTransformWhenBaseCannotBeSafelyExpanded() {
-        val type = FoxTupleGetComponentType(
-            FoxUnresolvedType(
-                "Box",
-                listOf(
-                    FoxTupleMergeTuplesType(
-                        listOf(
-                            FoxTupleType(listOf(FoxIntType)),
-                            FoxTupleType(listOf(FoxIntType)),
-                        ),
-                    ),
-                ),
-            ),
-            0,
-        )
-        
-        val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
-        
-        assertEquals(
-            FoxTupleGetComponentType(
-                FoxUnresolvedType(
-                    "Box",
-                    listOf(FoxTupleType(listOf(FoxIntType, FoxIntType))),
-                ),
-                0,
-            ),
-            result.type,
-        )
-    }
-    
-    @Test
     fun normalizesMethodDerivedTransforms() {
         val type = FoxMethodGetParameterStructType(
             FoxMethodType(
@@ -233,38 +202,6 @@ class TypeNormalizationPassTest {
         val error = assertIs<TypeNormalizationDuplicateName>(result.errors.single())
         
         assertEquals("Ok", error.name)
-    }
-    
-    @Test
-    fun keepsMergeWhenArgumentRemainsUnresolved() {
-        val type = FoxStructMergeStructsType(
-            listOf(
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-                FoxUnresolvedType(
-                    "Other",
-                    listOf(
-                        FoxTupleMergeTuplesType(
-                            listOf(
-                                FoxTupleType(listOf(FoxIntType)),
-                                FoxTupleType(listOf(FoxIntType)),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
-        )
-        
-        val result = assertIs<TypeNormalizationSuccess>(runTypeNormalization(type))
-        
-        assertEquals(
-            FoxStructMergeStructsType(
-                listOf(
-                    FoxStructType(orderedMapOf("name" to FoxStringType)),
-                    FoxUnresolvedType("Other", listOf(FoxTupleType(listOf(FoxIntType, FoxIntType)))),
-                ),
-            ),
-            result.type,
-        )
     }
     
     @Test

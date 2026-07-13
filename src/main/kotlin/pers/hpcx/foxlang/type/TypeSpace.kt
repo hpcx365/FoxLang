@@ -56,7 +56,7 @@ fun tupleRepeatSpace(component: TypeSpace) = TupleRepeatTypeSpace(component)
 fun tuplePatternSpace(components: List<TypeSpace>) = TuplePatternTypeSpace(components)
 fun tupleConcatSpace(parts: List<TypeSpace>) = TupleConcatTypeSpace(parts)
 
-object TupleTypeSpace : TupleSubTypeSpace {
+data object TupleTypeSpace : TupleSubTypeSpace {
     
     override fun contains(that: FoxType) = that is FoxTupleType
 }
@@ -133,7 +133,7 @@ fun structPatternSpace(fieldTypes: List<TypeSpace>) = StructPatternTypeSpace(fie
 fun structFieldPatternSpace(fields: OrderedMap<String, TypeSpace>) = StructFieldPatternTypeSpace(fields)
 fun structConcatSpace(parts: List<TypeSpace>) = StructConcatTypeSpace(parts)
 
-object StructTypeSpace : StructSubTypeSpace {
+data object StructTypeSpace : StructSubTypeSpace {
     
     override fun contains(that: FoxType) = that is FoxStructType
 }
@@ -210,7 +210,7 @@ fun objectSpace() = ObjectTypeSpace
 fun objectPatternSpace(members: Map<String, TypeSpace>) = ObjectPatternTypeSpace(members)
 fun objectMergeSpace(parts: List<TypeSpace>) = ObjectMergeTypeSpace(parts)
 
-object ObjectTypeSpace : ObjectSubTypeSpace {
+data object ObjectTypeSpace : ObjectSubTypeSpace {
     
     override fun contains(that: FoxType) = that is FoxObjectType
 }
@@ -219,7 +219,7 @@ data class ObjectPatternTypeSpace(val members: Map<String, TypeSpace>) : ObjectS
     
     override fun contains(that: FoxType) = that is FoxObjectType
         && that.members.keys == members.keys
-        && that.members.entries.map { it.value to members.getValue(it.key) }.all { it.first in it.second }
+        && that.members.entries.all { it.value in members.getValue(it.key) }
 }
 
 data class ObjectMergeTypeSpace(val parts: List<TypeSpace>) : ObjectSubTypeSpace {
@@ -265,7 +265,7 @@ fun enumSpace() = EnumTypeSpace
 fun enumPatternSpace(entries: Map<String, TypeSpace>) = EnumPatternTypeSpace(entries)
 fun enumMergeSpace(parts: List<TypeSpace>) = EnumMergeTypeSpace(parts)
 
-object EnumTypeSpace : EnumSubTypeSpace {
+data object EnumTypeSpace : EnumSubTypeSpace {
     
     override fun contains(that: FoxType) = that is FoxEnumType
 }
@@ -274,7 +274,7 @@ data class EnumPatternTypeSpace(val entries: Map<String, TypeSpace>) : EnumSubTy
     
     override fun contains(that: FoxType) = that is FoxEnumType
         && that.entries.keys == entries.keys
-        && that.entries.entries.map { it.value to entries.getValue(it.key) }.all { it.first in it.second }
+        && that.entries.entries.all { it.value in entries.getValue(it.key) }
 }
 
 data class EnumMergeTypeSpace(val parts: List<TypeSpace>) : EnumSubTypeSpace {

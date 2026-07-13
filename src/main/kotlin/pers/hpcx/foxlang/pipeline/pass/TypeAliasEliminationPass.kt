@@ -12,40 +12,47 @@ sealed interface TypeAliasEliminationError
 data class TypeAliasEliminationNotFound(val referredBy: FoxMethodDefinition, val typeName: String) : TypeAliasEliminationError
 data class TypeAliasEliminationGenericCountMismatch(val type: FoxType) : TypeAliasEliminationError
 
-fun runTypeAliasElimination(file: FoxFile): TypeAliasEliminationResult {
-    val errors = mutableListOf<TypeAliasEliminationError>()
+fun runTypeAliasElimination(file: FoxFile) = TypeAliasEliminationContext(file).run()
+
+private class TypeAliasEliminationContext(
+    private val file: FoxFile,
+) {
     
-    val aliases = file.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
+    private val errors = mutableListOf<TypeAliasEliminationError>()
+    private val aliases = file.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
     
-    fun runTypeAliasElimination(method: FoxMethodDefinition): FoxMethodDefinition {
-        val genericNames = method.generics.map { it.key }
-        
-        fun expandTypeAlias(type: FoxType): FoxType = type.mapTypes<FoxUnresolvedType> { unresolved ->
-            if (unresolved.name in genericNames && unresolved.parameters == null) {
-                return@mapTypes unresolved
-            }
-            val typeAlias = aliases[unresolved.name]
-            if (typeAlias == null) {
-                errors += TypeAliasEliminationNotFound(method, unresolved.name)
-                return@mapTypes unresolved
-            }
-            val parameters = unresolved.parameters.orEmpty()
-            if (parameters.size != typeAlias.generics.size) {
-                errors += TypeAliasEliminationGenericCountMismatch(unresolved)
-                return@mapTypes unresolved
-            }
-            val replacement = typeAlias.generics.zip(parameters.map { expandTypeAlias(it) }).toMap()
-            typeAlias.alias.mapTypes<FoxUnresolvedType> { replacement.getValue(it.name) }
-        }
-        
-        return method.mapTypes { type -> expandTypeAlias(type) }
+    fun run(): TypeAliasEliminationResult {
+        val newMethods = file.elements.filterIsInstance<FoxMethodDefinition>().map { eliminateMethod(it) }
+        if (errors.isNotEmpty()) return TypeAliasEliminationFailure(errors)
+        return TypeAliasEliminationSuccess(FoxFile(newMethods))
     }
     
-    val newMethods = file.elements.filterIsInstance<FoxMethodDefinition>().map { runTypeAliasElimination(it) }
+    private fun eliminateMethod(method: FoxMethodDefinition): FoxMethodDefinition {
+        val genericNames = method.generics.map { it.key }
+        return method.mapTypes { type -> expandTypeAlias(method, genericNames, type) }
+    }
     
-    if (errors.isNotEmpty()) return TypeAliasEliminationFailure(errors)
-    
-    return TypeAliasEliminationSuccess(FoxFile(newMethods))
+    private fun expandTypeAlias(
+        method: FoxMethodDefinition,
+        genericNames: List<String>,
+        type: FoxType,
+    ): FoxType = type.mapTypes<FoxUnresolvedType> { unresolved ->
+        if (unresolved.name in genericNames && unresolved.parameters == null) {
+            return@mapTypes unresolved
+        }
+        val typeAlias = aliases[unresolved.name]
+        if (typeAlias == null) {
+            errors += TypeAliasEliminationNotFound(method, unresolved.name)
+            return@mapTypes unresolved
+        }
+        val parameters = unresolved.parameters.orEmpty()
+        if (parameters.size != typeAlias.generics.size) {
+            errors += TypeAliasEliminationGenericCountMismatch(unresolved)
+            return@mapTypes unresolved
+        }
+        val replacement = typeAlias.generics.zip(parameters.map { expandTypeAlias(method, genericNames, it) }).toMap()
+        typeAlias.alias.mapTypes<FoxUnresolvedType> { replacement.getValue(it.name) }
+    }
 }
 
 fun FoxMethodDefinition.mapTypes(transform: (FoxType) -> FoxType) = FoxMethodDefinition(
@@ -59,7 +66,7 @@ fun FoxMethodDefinition.mapTypes(transform: (FoxType) -> FoxType) = FoxMethodDef
 
 fun FoxStatement.mapTypes(transform: (FoxType) -> FoxType): FoxStatement = when (this) {
     FoxThis -> this
-    is FoxSymbol -> this
+    is FoxUnresolvedSymbol -> this
     is FoxEntityStatement -> this
     is FoxBreak -> this
     is FoxContinue -> this

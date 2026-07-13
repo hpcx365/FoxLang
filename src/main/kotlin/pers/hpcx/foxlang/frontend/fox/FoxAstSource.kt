@@ -297,7 +297,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     private fun PrintWriter.printRawStatement(statement: FoxStatement, indentLevel: Int) {
         when (statement) {
             FoxThis -> print("this")
-            is FoxSymbol -> print(statement.name)
+            is FoxUnresolvedSymbol -> print(statement.name)
             is FoxEntityStatement -> printEntity(statement.value)
             is FoxFormattedString -> printFormattedString(statement)
             is FoxLambda -> printLambda(statement, indentLevel)
@@ -761,7 +761,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
             -> 130
         
         FoxThis,
-        is FoxSymbol,
+        is FoxUnresolvedSymbol,
         is FoxFormattedString,
         is FoxEntityStatement,
             -> 140

@@ -6,27 +6,6 @@ import pers.hpcx.foxlang.utils.toOrderedMap
 import pers.hpcx.foxlang.utils.toRleArrayList
 import pers.hpcx.foxlang.utils.toRleArrayListFromRuns
 
-enum class ConcreteTypeFamily {
-    PRIMITIVE, TUPLE, STRUCT, OBJECT, ENUM, ARRAY, REF, METHOD,
-}
-
-fun FoxType.isConcrete(): Boolean = when (this) {
-    is FoxPrimitiveType -> true
-    is FoxBuiltInType -> when (this) {
-        is FoxTupleType -> components.all { it.isConcrete() }
-        is FoxStructType -> fields.all { it.value.isConcrete() }
-        is FoxObjectType -> members.all { it.value.isConcrete() }
-        is FoxEnumType -> entries.all { it.value.isConcrete() }
-        is FoxArrayType -> element.isConcrete()
-        is FoxRefType -> referent.isConcrete()
-        is FoxMethodType -> `this`.isConcrete() && parameters.all { it.value.isConcrete() } && `return`.isConcrete()
-    }
-    is FoxWildcardType -> false
-    is FoxTransformType -> false
-    is FoxUnresolvedType -> false
-    is FoxPlaceholderType -> error("unreachable")
-}
-
 @JvmName("tupleComponentListToFoxTupleType")
 fun List<Pair<FoxType, Int>>.toFoxTupleType(): FoxTupleType {
     if (isEmpty()) return FoxTupleType(emptyList())

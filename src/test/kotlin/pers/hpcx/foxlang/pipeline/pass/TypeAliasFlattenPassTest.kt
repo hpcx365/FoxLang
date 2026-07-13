@@ -109,7 +109,7 @@ class TypeAliasFlattenPassTest {
             name = "id",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Wrapped", null)),
             returnType = FoxUnresolvedType("Wrapped", null),
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(
             listOf(
@@ -131,7 +131,7 @@ class TypeAliasFlattenPassTest {
             name = "use",
             parameters = orderedMapOf("value" to FoxIntType),
             returnType = FoxIntType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(
             listOf(

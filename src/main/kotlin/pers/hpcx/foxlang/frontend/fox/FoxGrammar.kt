@@ -1009,7 +1009,7 @@ val FoxGrammar = buildGrammar {
         
         symbols(KwThis) { ParsedFoxThis(it.span) }
         
-        symbols(Identifier) { ParsedFoxSymbol(it, it.span) }
+        symbols(Identifier) { ParsedFoxUnresolvedSymbol(it, it.span) }
         
         symbols(FormattedStringStart, FormattedStringEnd) { st, ed ->
             ParsedFoxFormattedString(null, mergeSpan(st, ed))

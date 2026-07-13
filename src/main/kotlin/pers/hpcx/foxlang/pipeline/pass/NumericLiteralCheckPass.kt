@@ -12,30 +12,51 @@ data class NumericLongLiteralOutOfRange(val literal: ParsedLong) : NumericLitera
 data class NumericFloatLiteralOutOfRange(val literal: ParsedFloat) : NumericLiteralCheckError
 data class NumericDoubleLiteralOutOfRange(val literal: ParsedDouble) : NumericLiteralCheckError
 
-fun runNumericLiteralCheck(file: ParsedFoxFile): NumericLiteralCheckResult {
-    val errors = mutableListOf<NumericLiteralCheckError>()
+fun runNumericLiteralCheck(file: ParsedFoxFile) = NumericLiteralCheckContext().run(file)
+
+private class NumericLiteralCheckContext {
     
-    fun check(literal: ParsedInt) {
+    private val errors = mutableListOf<NumericLiteralCheckError>()
+    
+    fun run(file: ParsedFoxFile): NumericLiteralCheckResult {
+        file.elements.forEach { element ->
+            when (element) {
+                is ParsedFoxTypeAlias -> visitType(element.alias)
+                is ParsedFoxMethodDefinition -> {
+                    element.generics?.node?.forEach { it.node.second?.let(::visitType) }
+                    element.thisType?.let(::visitType)
+                    element.parameters.node.forEach { visitType(it.node.second) }
+                    element.returnType?.let(::visitType)
+                    visitStatement(element.body)
+                }
+            }
+        }
+        
+        if (errors.isNotEmpty()) return NumericLiteralCheckFailure(errors)
+        return NumericLiteralCheckSuccess
+    }
+    
+    private fun run(literal: ParsedInt) {
         val value = literal.text.toIntOrNull(literal.radix)
         if (value == null) errors += NumericIntLiteralOutOfRange(literal)
     }
     
-    fun check(literal: ParsedLong) {
+    private fun run(literal: ParsedLong) {
         val value = literal.text.toLongOrNull(literal.radix)
         if (value == null) errors += NumericLongLiteralOutOfRange(literal)
     }
     
-    fun check(literal: ParsedFloat) {
+    private fun run(literal: ParsedFloat) {
         val value = literal.text.toFloatOrNull()
         if (value == null) errors += NumericFloatLiteralOutOfRange(literal)
     }
     
-    fun check(literal: ParsedDouble) {
+    private fun run(literal: ParsedDouble) {
         val value = literal.text.toDoubleOrNull()
         if (value == null) errors += NumericDoubleLiteralOutOfRange(literal)
     }
     
-    fun visitType(type: ParsedFoxType<*>) {
+    private fun visitType(type: ParsedFoxType<*>) {
         when (type) {
             is ParsedFoxPrimitiveType -> {}
             is ParsedFoxTupleType -> type.components.node.forEach(::visitType)
@@ -61,85 +82,85 @@ fun runNumericLiteralCheck(file: ParsedFoxFile): NumericLiteralCheckResult {
             is ParsedFoxAnyEnumType -> {}
             is ParsedFoxTupleGetComponentType -> {
                 visitType(type.type)
-                check(type.index)
+                run(type.index)
             }
             is ParsedFoxTupleGetComponentBackType -> {
                 visitType(type.type)
-                check(type.index)
+                run(type.index)
             }
             is ParsedFoxTupleGetFirstComponentsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleGetFirstComponentsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleGetLastComponentsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleGetLastComponentsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleDropFirstComponentsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleDropFirstComponentsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleDropLastComponentsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleDropLastComponentsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxTupleMergeTuplesType -> type.types.node.forEach(::visitType)
             is ParsedFoxStructGetFieldTypeByNameType -> visitType(type.type)
             is ParsedFoxStructGetFieldTypeByIndexType -> {
                 visitType(type.type)
-                check(type.index)
+                run(type.index)
             }
             is ParsedFoxStructGetFieldTypeByIndexBackType -> {
                 visitType(type.type)
-                check(type.index)
+                run(type.index)
             }
             is ParsedFoxStructGetFirstFieldsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructGetFirstFieldsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructGetLastFieldsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructGetLastFieldsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructDropFirstFieldsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructDropFirstFieldsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructDropLastFieldsType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructDropLastFieldsExactType -> {
                 visitType(type.type)
-                check(type.count)
+                run(type.count)
             }
             is ParsedFoxStructSelectFieldsType -> visitType(type.type)
             is ParsedFoxStructSelectFieldsExactType -> visitType(type.type)
@@ -173,15 +194,15 @@ fun runNumericLiteralCheck(file: ParsedFoxFile): NumericLiteralCheckResult {
         }
     }
     
-    fun visitStatement(statement: ParsedFoxStatement<*>) {
+    private fun visitStatement(statement: ParsedFoxStatement<*>) {
         when (statement) {
             is ParsedFoxThis -> {}
-            is ParsedFoxSymbol -> {}
+            is ParsedFoxUnresolvedSymbol -> {}
             is ParsedFoxEntityStatement -> {}
-            is ParsedFoxIntStatement -> check(statement.value)
-            is ParsedFoxLongStatement -> check(statement.value)
-            is ParsedFoxFloatStatement -> check(statement.value)
-            is ParsedFoxDoubleStatement -> check(statement.value)
+            is ParsedFoxIntStatement -> run(statement.value)
+            is ParsedFoxLongStatement -> run(statement.value)
+            is ParsedFoxFloatStatement -> run(statement.value)
+            is ParsedFoxDoubleStatement -> run(statement.value)
             is ParsedFoxBreak -> {}
             is ParsedFoxContinue -> {}
             is ParsedFoxYield -> visitStatement(statement.value)
@@ -248,19 +269,4 @@ fun runNumericLiteralCheck(file: ParsedFoxFile): NumericLiteralCheckResult {
             }
         }
     }
-    
-    file.elements.forEach { element ->
-        when (element) {
-            is ParsedFoxTypeAlias -> visitType(element.alias)
-            is ParsedFoxMethodDefinition -> {
-                element.generics?.node?.forEach { it.node.second?.let(::visitType) }
-                element.thisType?.let(::visitType)
-                element.parameters.node.forEach { visitType(it.node.second) }
-                element.returnType?.let(::visitType)
-                visitStatement(element.body)
-            }
-        }
-    }
-    
-    return if (errors.isEmpty()) NumericLiteralCheckSuccess else NumericLiteralCheckFailure(errors)
 }

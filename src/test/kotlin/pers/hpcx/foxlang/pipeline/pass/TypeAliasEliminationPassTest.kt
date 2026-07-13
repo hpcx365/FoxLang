@@ -100,7 +100,7 @@ class TypeAliasEliminationPassTest {
             name = "first",
             parameters = orderedMapOf("value" to FoxIntType),
             returnType = FoxIntType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val second = FoxMethodDefinition(
             generics = emptyOrderedMap(),
@@ -108,7 +108,7 @@ class TypeAliasEliminationPassTest {
             name = "second",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Box", listOf(FoxIntType))),
             returnType = FoxUnresolvedType("Box", listOf(FoxIntType)),
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(
             listOf(
@@ -165,7 +165,7 @@ class TypeAliasEliminationPassTest {
             name = "missing",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Missing", null)),
             returnType = FoxUnitType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         
         val result = assertIs<TypeAliasEliminationFailure>(runTypeAliasElimination(FoxFile(listOf(method))))
@@ -183,7 +183,7 @@ class TypeAliasEliminationPassTest {
             name = "unexpectedGenerics",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Base", listOf(FoxIntType))),
             returnType = FoxUnitType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(listOf(FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType), method))
         
@@ -201,7 +201,7 @@ class TypeAliasEliminationPassTest {
             name = "missingGenerics",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Box", null)),
             returnType = FoxUnitType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(listOf(FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))), method))
         
@@ -219,7 +219,7 @@ class TypeAliasEliminationPassTest {
             name = "genericCountMismatch",
             parameters = orderedMapOf("value" to FoxUnresolvedType("Pair", listOf(FoxIntType))),
             returnType = FoxUnitType,
-            body = FoxReturn(FoxSymbol("value")),
+            body = FoxReturn(FoxUnresolvedSymbol("value")),
         )
         val file = FoxFile(
             listOf(

@@ -1,7 +1,6 @@
 package pers.hpcx.foxlang.pipeline.pass
 
 import pers.hpcx.foxlang.ast.*
-import pers.hpcx.foxlang.type.ConcreteTypeFamily
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.emptyOrderedMap
 import pers.hpcx.foxlang.utils.orderedMapOf
@@ -12,25 +11,22 @@ import kotlin.test.assertIs
 class ConstraintCompilePrecheckPassTest {
     
     @Test
-    fun detectsUnknownGenericReference() {
-        val method = method(
-            orderedMapOf(
-                "R" to FoxTupleType(listOf(FoxUnresolvedType("T", null))),
-            ),
-        )
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileUnknownGenericReference>(result.errors.single())
-        
-        assertEquals(method, error.method)
-        assertEquals(FoxUnresolvedType("T", null), error.type)
-    }
-    
-    @Test
     fun allowsCyclicGenericConstraints() {
         val method = method(
             orderedMapOf(
                 "T" to FoxAnyTupleOfType(FoxUnresolvedType("R", null)),
+                "R" to FoxTupleGetComponentType(FoxUnresolvedType("T", null), 2),
+            ),
+        )
+        
+        assertIs<ConstraintCompilePrecheckSuccess>(runConstraintCompilePrecheck(method))
+    }
+    
+    @Test
+    fun allowsProjectionFromGenericReferenceBase() {
+        val method = method(
+            orderedMapOf(
+                "T" to FoxAnyTupleType,
                 "R" to FoxTupleGetComponentType(FoxUnresolvedType("T", null), 2),
             ),
         )
@@ -50,120 +46,6 @@ class ConstraintCompilePrecheckPassTest {
     }
     
     @Test
-    fun detectsTargetFamilyMismatch() {
-        val transform = FoxStructMergeStructsType(
-            listOf(
-                FoxAnyTupleType,
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-            ),
-        )
-        val method = method(orderedMapOf("R" to transform))
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileTargetFamilyMismatch>(result.errors.single())
-        
-        assertEquals(transform, error.transform)
-        assertEquals(FoxAnyTupleType, error.target)
-        assertEquals(ConcreteTypeFamily.STRUCT, error.expectedFamily)
-        assertEquals(ConcreteTypeFamily.TUPLE, error.actualFamily)
-    }
-    
-    @Test
-    fun detectsAnyAsTargetFamilyMismatch() {
-        val transform = FoxStructMergeStructsType(
-            listOf(
-                FoxAnyType,
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-            ),
-        )
-        val method = method(orderedMapOf("R" to transform))
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileTargetFamilyMismatch>(result.errors.single())
-        
-        assertEquals(transform, error.transform)
-        assertEquals(FoxAnyType, error.target)
-        assertEquals(ConcreteTypeFamily.STRUCT, error.expectedFamily)
-        assertEquals(null, error.actualFamily)
-    }
-    
-    @Test
-    fun detectsUnknownGenericFamilyInTargetPosition() {
-        val target = FoxUnresolvedType("T", null)
-        val transform = FoxStructMergeStructsType(
-            listOf(
-                target,
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-            ),
-        )
-        val method = method(
-            orderedMapOf(
-                "T" to FoxAnyType,
-                "R" to transform,
-            ),
-        )
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileTargetFamilyMismatch>(result.errors.single())
-        
-        assertEquals(transform, error.transform)
-        assertEquals(target, error.target)
-        assertEquals(ConcreteTypeFamily.STRUCT, error.expectedFamily)
-        assertEquals(null, error.actualFamily)
-    }
-    
-    @Test
-    fun detectsConcreteTargetFamilyMismatch() {
-        val target = FoxTupleType(listOf(FoxIntType))
-        val transform = FoxStructMergeStructsType(
-            listOf(
-                target,
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-            ),
-        )
-        val method = method(orderedMapOf("R" to transform))
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileTargetFamilyMismatch>(result.errors.single())
-        
-        assertEquals(transform, error.transform)
-        assertEquals(target, error.target)
-        assertEquals(ConcreteTypeFamily.STRUCT, error.expectedFamily)
-        assertEquals(ConcreteTypeFamily.TUPLE, error.actualFamily)
-    }
-    
-    @Test
-    fun allowsUnionAcrossFamiliesAsUnknownFamily() {
-        val method = method(
-            orderedMapOf(
-                "T" to FoxAnyOfType(
-                    listOf(
-                        FoxTupleType(listOf(FoxIntType)),
-                        FoxStructType(orderedMapOf("name" to FoxStringType)),
-                    ),
-                ),
-            ),
-        )
-        
-        assertIs<ConstraintCompilePrecheckSuccess>(runConstraintCompilePrecheck(method))
-    }
-    
-    @Test
-    fun detectsGenericFamilyConflict() {
-        val method = method(
-            orderedMapOf(
-                "T" to FoxAllOfType(listOf(FoxAnyTupleType, FoxAnyStructType)),
-            ),
-        )
-        
-        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileGenericFamilyConflict>(result.errors.single())
-        
-        assertEquals("T", error.generic)
-        assertEquals(setOf(ConcreteTypeFamily.TUPLE, ConcreteTypeFamily.STRUCT), error.families)
-    }
-    
-    @Test
     fun detectsProjectionBaseTypeSpace() {
         val transform = FoxTupleGetComponentType(FoxAnyTupleType, 2)
         val method = method(orderedMapOf("R" to transform))
@@ -173,6 +55,19 @@ class ConstraintCompilePrecheckPassTest {
         
         assertEquals(transform, error.transform)
         assertEquals(FoxAnyTupleType, error.base)
+    }
+    
+    @Test
+    fun detectsProjectionBasePatternSpace() {
+        val base = FoxTupleType(listOf(FoxAnyType))
+        val transform = FoxTupleGetComponentType(base, 0)
+        val method = method(orderedMapOf("R" to transform))
+        
+        val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
+        val error = assertIs<ConstraintCompileProjectionBaseMustBeConcrete>(result.errors.single())
+        
+        assertEquals(transform, error.transform)
+        assertEquals(base, error.base)
     }
     
     @Test
@@ -193,27 +88,15 @@ class ConstraintCompilePrecheckPassTest {
     }
     
     @Test
-    fun detectsTargetFamilyMismatchThroughGenericFamily() {
-        val transform = FoxStructMergeStructsType(
-            listOf(
-                FoxUnresolvedType("T", null),
-                FoxStructType(orderedMapOf("name" to FoxStringType)),
-            ),
-        )
-        val method = method(
-            orderedMapOf(
-                "T" to FoxAnyTupleType,
-                "R" to transform,
-            ),
-        )
+    fun detectsStructProjectionBaseTypeSpace() {
+        val transform = FoxStructGetFieldTypeByNameType(FoxAnyStructType, "value")
+        val method = method(orderedMapOf("R" to transform))
         
         val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
-        val error = assertIs<ConstraintCompileTargetFamilyMismatch>(result.errors.single())
+        val error = assertIs<ConstraintCompileProjectionBaseMustBeConcrete>(result.errors.single())
         
         assertEquals(transform, error.transform)
-        assertEquals(FoxUnresolvedType("T", null), error.target)
-        assertEquals(ConcreteTypeFamily.STRUCT, error.expectedFamily)
-        assertEquals(ConcreteTypeFamily.TUPLE, error.actualFamily)
+        assertEquals(FoxAnyStructType, error.base)
     }
     
     private fun method(generics: OrderedMap<String, FoxType>) = FoxMethodDefinition(

@@ -43,21 +43,13 @@ sealed interface FoxSlot
 sealed interface FoxFetchSlot : FoxSlot
 sealed interface FoxStoreSlot : FoxSlot
 
-data class SlotConst(
-    val value: FoxEntity,
-) : FoxFetchSlot
-
-data class SlotLocal(
-    val name: String,
-) : FoxFetchSlot, FoxStoreSlot
-
-data class SlotGlobal(
-    val name: String,
-) : FoxFetchSlot, FoxStoreSlot
-
 object SlotThis : FoxFetchSlot
-object SlotVoid : FoxStoreSlot
-object SlotReturnValue : FoxFetchSlot
+object SlotIgnore : FoxStoreSlot
+object SlotReturn : FoxFetchSlot
+data class SlotConst(val value: FoxEntity) : FoxFetchSlot
+data class SlotLocal(val name: String) : FoxFetchSlot, FoxStoreSlot
+data class SlotParam(val name: String) : FoxFetchSlot
+data class SlotGlobal(val name: String) : FoxFetchSlot, FoxStoreSlot
 
 data class InstLoad(
     val target: FoxStoreSlot,
