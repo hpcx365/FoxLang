@@ -1,636 +1,636 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.type.*
 import pers.hpcx.foxlang.utils.MutableOrderedMap
 import pers.hpcx.foxlang.utils.mapValues
 import pers.hpcx.foxlang.utils.mutableOrderedMapOf
 
 sealed interface TypeNormalizationResult
-data class TypeNormalizationSuccess(val type: FoxType) : TypeNormalizationResult
+data class TypeNormalizationSuccess(val type: SurfaceType) : TypeNormalizationResult
 data class TypeNormalizationFailure(val errors: List<TypeNormalizationError>) : TypeNormalizationResult
 
 sealed interface TypeNormalizationError
 data class TypeNormalizationFamilyMismatch(
-    val transform: FoxType,
+    val transform: SurfaceType,
     val expectedFamily: String,
-    val actualType: FoxType,
+    val actualType: SurfaceType,
 ) : TypeNormalizationError
 
 data class TypeNormalizationIndexOutOfBounds(
-    val transform: FoxType,
+    val transform: SurfaceType,
     val index: Int,
     val size: Int,
 ) : TypeNormalizationError
 
 data class TypeNormalizationNameNotFound(
-    val transform: FoxType,
+    val transform: SurfaceType,
     val name: String,
 ) : TypeNormalizationError
 
 data class TypeNormalizationDuplicateName(
-    val transform: FoxType,
+    val transform: SurfaceType,
     val name: String,
 ) : TypeNormalizationError
 
-fun runTypeNormalization(type: FoxType) = TypeNormalizationContext().normalize(type)
+fun runTypeNormalization(type: SurfaceType) = TypeNormalizationContext().normalize(type)
 
 private class TypeNormalizationContext {
     
     private val errors = mutableListOf<TypeNormalizationError>()
     
-    fun normalize(type: FoxType): TypeNormalizationResult {
+    fun normalize(type: SurfaceType): TypeNormalizationResult {
         val normalizedType = normalizeType(type)
         if (errors.isNotEmpty()) return TypeNormalizationFailure(errors)
         return TypeNormalizationSuccess(normalizedType)
     }
     
-    private fun familyMismatch(transform: FoxType, expectedFamily: String, actualType: FoxType): FoxType {
+    private fun familyMismatch(transform: SurfaceType, expectedFamily: String, actualType: SurfaceType): SurfaceType {
         errors += TypeNormalizationFamilyMismatch(transform, expectedFamily, actualType)
         return transform
     }
     
-    private fun indexOutOfBounds(transform: FoxType, index: Int, size: Int): FoxType {
+    private fun indexOutOfBounds(transform: SurfaceType, index: Int, size: Int): SurfaceType {
         errors += TypeNormalizationIndexOutOfBounds(transform, index, size)
         return transform
     }
     
-    private fun nameNotFound(transform: FoxType, name: String): FoxType {
+    private fun nameNotFound(transform: SurfaceType, name: String): SurfaceType {
         errors += TypeNormalizationNameNotFound(transform, name)
         return transform
     }
     
-    private fun duplicateName(transform: FoxType, name: String): FoxType {
+    private fun duplicateName(transform: SurfaceType, name: String): SurfaceType {
         errors += TypeNormalizationDuplicateName(transform, name)
         return transform
     }
     
     private fun normalizeTupleTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxTupleType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxTupleType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceTupleType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceTupleType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Tuple", normalizedType)
     }
     
     private fun normalizeStructTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxStructType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxStructType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceStructType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceStructType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Struct", normalizedType)
     }
     
     private fun normalizeObjectTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxObjectType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxObjectType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceObjectType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceObjectType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Object", normalizedType)
     }
     
     private fun normalizeEnumTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxEnumType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxEnumType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceEnumType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceEnumType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Enum", normalizedType)
     }
     
     private fun normalizeArrayTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxArrayType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxArrayType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceArrayType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceArrayType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Array", normalizedType)
     }
     
     private fun normalizeRefTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxRefType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxRefType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceRefType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceRefType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Ref", normalizedType)
     }
     
     private fun normalizeMethodOf(
-        transform: FoxType,
-        normalizedThis: FoxType,
-        normalizedParameters: FoxType,
-        normalizedReturn: FoxType,
-        action: (FoxType, FoxStructType, FoxType) -> FoxType,
-    ): FoxType = when (normalizedParameters) {
-        is FoxStructType -> action(normalizedThis, normalizedParameters, normalizedReturn)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedThis: SurfaceType,
+        normalizedParameters: SurfaceType,
+        normalizedReturn: SurfaceType,
+        action: (SurfaceType, SurfaceStructType, SurfaceType) -> SurfaceType,
+    ): SurfaceType = when (normalizedParameters) {
+        is SurfaceStructType -> action(normalizedThis, normalizedParameters, normalizedReturn)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Struct", normalizedParameters)
     }
     
     private fun normalizeMethodTransform(
-        transform: FoxType,
-        normalizedType: FoxType,
-        action: (FoxMethodType) -> FoxType,
-    ): FoxType = when (normalizedType) {
-        is FoxMethodType -> action(normalizedType)
-        is FoxUnresolvedType, is FoxTransformType -> transform
+        transform: SurfaceType,
+        normalizedType: SurfaceType,
+        action: (SurfaceMethodType) -> SurfaceType,
+    ): SurfaceType = when (normalizedType) {
+        is SurfaceMethodType -> action(normalizedType)
+        is SurfaceUnresolvedType, is SurfaceTransformType -> transform
         else -> familyMismatch(transform, "Method", normalizedType)
     }
     
-    private fun normalizeCountLoose(transform: FoxType, count: Int, size: Int, action: (Int) -> FoxType): FoxType {
+    private fun normalizeCountLoose(transform: SurfaceType, count: Int, size: Int, action: (Int) -> SurfaceType): SurfaceType {
         return if (count < 0) indexOutOfBounds(transform, count, size) else action(minOf(count, size))
     }
     
-    private fun normalizeStructNameSelectionExact(transform: FoxType, struct: FoxStructType, names: Set<String>): FoxType {
+    private fun normalizeStructNameSelectionExact(transform: SurfaceType, struct: SurfaceStructType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in struct.fields) return nameNotFound(transform, name) }
         return struct.selectFields(names)
     }
     
-    private fun normalizeObjectNameSelectionExact(transform: FoxType, obj: FoxObjectType, names: Set<String>): FoxType {
+    private fun normalizeObjectNameSelectionExact(transform: SurfaceType, obj: SurfaceObjectType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in obj.members) return nameNotFound(transform, name) }
         return obj.selectMembers(names)
     }
     
-    private fun normalizeEnumNameSelectionExact(transform: FoxType, enumType: FoxEnumType, names: Set<String>): FoxType {
+    private fun normalizeEnumNameSelectionExact(transform: SurfaceType, enumType: SurfaceEnumType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in enumType.entries) return nameNotFound(transform, name) }
         return enumType.selectEntries(names)
     }
     
-    private fun normalizeStructNameDropExact(transform: FoxType, struct: FoxStructType, names: Set<String>): FoxType {
+    private fun normalizeStructNameDropExact(transform: SurfaceType, struct: SurfaceStructType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in struct.fields) return nameNotFound(transform, name) }
         return struct.dropFields(names)
     }
     
-    private fun normalizeObjectNameDropExact(transform: FoxType, obj: FoxObjectType, names: Set<String>): FoxType {
+    private fun normalizeObjectNameDropExact(transform: SurfaceType, obj: SurfaceObjectType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in obj.members) return nameNotFound(transform, name) }
         return obj.dropMembers(names)
     }
     
-    private fun normalizeEnumNameDropExact(transform: FoxType, enumType: FoxEnumType, names: Set<String>): FoxType {
+    private fun normalizeEnumNameDropExact(transform: SurfaceType, enumType: SurfaceEnumType, names: Set<String>): SurfaceType {
         names.forEach { name -> if (name !in enumType.entries) return nameNotFound(transform, name) }
         return enumType.dropEntries(names)
     }
     
-    private fun normalizeCountExact(transform: FoxType, count: Int, size: Int, action: () -> FoxType): FoxType {
+    private fun normalizeCountExact(transform: SurfaceType, count: Int, size: Int, action: () -> SurfaceType): SurfaceType {
         return if (count !in 0..size) indexOutOfBounds(transform, count, size) else action()
     }
     
-    private fun normalizeTupleIndex(transform: FoxType, index: Int, size: Int, action: () -> FoxType): FoxType {
+    private fun normalizeTupleIndex(transform: SurfaceType, index: Int, size: Int, action: () -> SurfaceType): SurfaceType {
         return if (index !in 0..<size) indexOutOfBounds(transform, index, size) else action()
     }
     
-    private fun normalizeStructIndex(transform: FoxType, index: Int, size: Int, action: () -> FoxType): FoxType {
+    private fun normalizeStructIndex(transform: SurfaceType, index: Int, size: Int, action: () -> SurfaceType): SurfaceType {
         return if (index !in 0..<size) indexOutOfBounds(transform, index, size) else action()
     }
     
-    private fun mergeStructFieldsStrict(transform: FoxType, structs: List<FoxStructType>): FoxType {
-        val result: MutableOrderedMap<String, FoxType> = mutableOrderedMapOf()
+    private fun mergeStructFieldsStrict(transform: SurfaceType, structs: List<SurfaceStructType>): SurfaceType {
+        val result: MutableOrderedMap<String, SurfaceType> = mutableOrderedMapOf()
         structs.forEach { struct ->
             struct.fields.entries.forEach { (name, fieldType) ->
                 if (name in result) return duplicateName(transform, name)
                 result[name] = fieldType
             }
         }
-        return FoxStructType(result)
+        return SurfaceStructType(result)
     }
     
-    private fun mergeObjectMembersStrict(transform: FoxType, objects: List<FoxObjectType>): FoxType {
-        val result = LinkedHashMap<String, FoxType>()
+    private fun mergeObjectMembersStrict(transform: SurfaceType, objects: List<SurfaceObjectType>): SurfaceType {
+        val result = LinkedHashMap<String, SurfaceType>()
         objects.forEach { obj ->
             obj.members.forEach { (name, memberType) ->
                 if (name in result) return duplicateName(transform, name)
                 result[name] = memberType
             }
         }
-        return FoxObjectType(result)
+        return SurfaceObjectType(result)
     }
     
-    private fun mergeEnumEntriesStrict(transform: FoxType, enums: List<FoxEnumType>): FoxType {
-        val result = LinkedHashMap<String, FoxType>()
+    private fun mergeEnumEntriesStrict(transform: SurfaceType, enums: List<SurfaceEnumType>): SurfaceType {
+        val result = LinkedHashMap<String, SurfaceType>()
         enums.forEach { enumType ->
             enumType.entries.forEach { (name, itemType) ->
                 if (name in result) return duplicateName(transform, name)
                 result[name] = itemType
             }
         }
-        return FoxEnumType(result)
+        return SurfaceEnumType(result)
     }
     
-    private fun normalizeMergeTuple(types: List<FoxType>): FoxType {
+    private fun normalizeMergeTuple(types: List<SurfaceType>): SurfaceType {
         val normalizedTypes = types.map { normalizeType(it) }
-        if (errors.isNotEmpty()) return FoxTupleMergeTuplesType(normalizedTypes)
-        if (normalizedTypes.any { it is FoxUnresolvedType || it is FoxTransformType }) {
-            return FoxTupleMergeTuplesType(normalizedTypes)
+        if (errors.isNotEmpty()) return SurfaceTupleMergeTuplesType(normalizedTypes)
+        if (normalizedTypes.any { it is SurfaceUnresolvedType || it is SurfaceTransformType }) {
+            return SurfaceTupleMergeTuplesType(normalizedTypes)
         }
         val tuples = normalizedTypes.map { normalizedType ->
-            normalizedType as? FoxTupleType ?: return familyMismatch(FoxTupleMergeTuplesType(normalizedTypes), "Tuple", normalizedType)
+            normalizedType as? SurfaceTupleType ?: return familyMismatch(SurfaceTupleMergeTuplesType(normalizedTypes), "Tuple", normalizedType)
         }
         return tuples.mergeTuples()
     }
     
-    private fun normalizeMergeStruct(types: List<FoxType>): FoxType {
+    private fun normalizeMergeStruct(types: List<SurfaceType>): SurfaceType {
         val normalizedTypes = types.map { normalizeType(it) }
-        if (errors.isNotEmpty()) return FoxStructMergeStructsType(normalizedTypes)
-        if (normalizedTypes.any { it is FoxUnresolvedType || it is FoxTransformType }) {
-            return FoxStructMergeStructsType(normalizedTypes)
+        if (errors.isNotEmpty()) return SurfaceStructMergeStructsType(normalizedTypes)
+        if (normalizedTypes.any { it is SurfaceUnresolvedType || it is SurfaceTransformType }) {
+            return SurfaceStructMergeStructsType(normalizedTypes)
         }
         val structs = normalizedTypes.map { normalizedType ->
-            normalizedType as? FoxStructType ?: return familyMismatch(FoxStructMergeStructsType(normalizedTypes), "Struct", normalizedType)
+            normalizedType as? SurfaceStructType ?: return familyMismatch(SurfaceStructMergeStructsType(normalizedTypes), "Struct", normalizedType)
         }
-        return mergeStructFieldsStrict(FoxStructMergeStructsType(normalizedTypes), structs)
+        return mergeStructFieldsStrict(SurfaceStructMergeStructsType(normalizedTypes), structs)
     }
     
-    private fun normalizeMergeObject(types: List<FoxType>): FoxType {
+    private fun normalizeMergeObject(types: List<SurfaceType>): SurfaceType {
         val normalizedTypes = types.map { normalizeType(it) }
-        if (errors.isNotEmpty()) return FoxObjectMergeObjectsType(normalizedTypes)
-        if (normalizedTypes.any { it is FoxUnresolvedType || it is FoxTransformType }) {
-            return FoxObjectMergeObjectsType(normalizedTypes)
+        if (errors.isNotEmpty()) return SurfaceObjectMergeObjectsType(normalizedTypes)
+        if (normalizedTypes.any { it is SurfaceUnresolvedType || it is SurfaceTransformType }) {
+            return SurfaceObjectMergeObjectsType(normalizedTypes)
         }
         val objects = normalizedTypes.map { normalizedType ->
-            normalizedType as? FoxObjectType ?: return familyMismatch(FoxObjectMergeObjectsType(normalizedTypes), "Object", normalizedType)
+            normalizedType as? SurfaceObjectType ?: return familyMismatch(SurfaceObjectMergeObjectsType(normalizedTypes), "Object", normalizedType)
         }
-        return mergeObjectMembersStrict(FoxObjectMergeObjectsType(normalizedTypes), objects)
+        return mergeObjectMembersStrict(SurfaceObjectMergeObjectsType(normalizedTypes), objects)
     }
     
-    private fun normalizeMergeEnum(types: List<FoxType>): FoxType {
+    private fun normalizeMergeEnum(types: List<SurfaceType>): SurfaceType {
         val normalizedTypes = types.map { normalizeType(it) }
-        if (errors.isNotEmpty()) return FoxEnumMergeEnumsType(normalizedTypes)
-        if (normalizedTypes.any { it is FoxUnresolvedType || it is FoxTransformType }) {
-            return FoxEnumMergeEnumsType(normalizedTypes)
+        if (errors.isNotEmpty()) return SurfaceEnumMergeEnumsType(normalizedTypes)
+        if (normalizedTypes.any { it is SurfaceUnresolvedType || it is SurfaceTransformType }) {
+            return SurfaceEnumMergeEnumsType(normalizedTypes)
         }
         val enums = normalizedTypes.map { normalizedType ->
-            normalizedType as? FoxEnumType ?: return familyMismatch(FoxEnumMergeEnumsType(normalizedTypes), "Enum", normalizedType)
+            normalizedType as? SurfaceEnumType ?: return familyMismatch(SurfaceEnumMergeEnumsType(normalizedTypes), "Enum", normalizedType)
         }
-        return mergeEnumEntriesStrict(FoxEnumMergeEnumsType(normalizedTypes), enums)
+        return mergeEnumEntriesStrict(SurfaceEnumMergeEnumsType(normalizedTypes), enums)
     }
     
-    private fun normalizeType(currentType: FoxType): FoxType = when (currentType) {
-        is FoxPrimitiveType -> currentType
-        is FoxWildcardType -> when (currentType) {
-            FoxAnyType -> currentType
-            is FoxAnyOfType -> FoxAnyOfType(currentType.types.map { normalizeType(it) })
-            is FoxAllOfType -> FoxAllOfType(currentType.types.map { normalizeType(it) })
-            is FoxNoneOfType -> FoxNoneOfType(currentType.types.map { normalizeType(it) })
-            FoxAnyTupleType -> FoxAnyTupleType
-            is FoxAnyTupleOfType -> FoxAnyTupleOfType(normalizeType(currentType.component))
-            FoxAnyStructType -> FoxAnyStructType
-            is FoxAnyStructOfType -> FoxAnyStructOfType(currentType.fields.map { normalizeType(it) })
-            FoxAnyObjectType -> FoxAnyObjectType
-            FoxAnyEnumType -> FoxAnyEnumType
+    private fun normalizeType(currentType: SurfaceType): SurfaceType = when (currentType) {
+        is SurfacePrimitiveType -> currentType
+        is SurfaceWildcardType -> when (currentType) {
+            is SurfaceAnyType -> currentType
+            is SurfaceAnyTupleType -> SurfaceAnyTupleType()
+            is SurfaceAnyStructType -> SurfaceAnyStructType()
+            is SurfaceAnyObjectType -> SurfaceAnyObjectType()
+            is SurfaceAnyEnumType -> SurfaceAnyEnumType()
+            is SurfaceAnyOfType -> SurfaceAnyOfType(currentType.types.map { normalizeType(it) })
+            is SurfaceAllOfType -> SurfaceAllOfType(currentType.types.map { normalizeType(it) })
+            is SurfaceNoneOfType -> SurfaceNoneOfType(currentType.types.map { normalizeType(it) })
+            is SurfaceAnyTupleOfType -> SurfaceAnyTupleOfType(normalizeType(currentType.component))
+            is SurfaceAnyStructOfType -> SurfaceAnyStructOfType(currentType.fields.map { normalizeType(it) })
         }
-        is FoxBuiltInType -> when (currentType) {
-            is FoxTupleType -> currentType.components.map { normalizeType(it) }.toFoxTupleType()
-            is FoxStructType -> FoxStructType(currentType.fields.mapValues { normalizeType(it.value) })
-            is FoxObjectType -> FoxObjectType(currentType.members.mapValues { normalizeType(it.value) })
-            is FoxEnumType -> FoxEnumType(currentType.entries.mapValues { normalizeType(it.value) })
-            is FoxArrayType -> FoxArrayType(normalizeType(currentType.element))
-            is FoxRefType -> FoxRefType(normalizeType(currentType.referent))
-            is FoxMethodType -> FoxMethodType(
+        is SurfaceBuiltInType -> when (currentType) {
+            is SurfaceTupleType -> currentType.components.map { normalizeType(it) }.toFoxTupleType()
+            is SurfaceStructType -> SurfaceStructType(currentType.fields.mapValues { normalizeType(it.value) })
+            is SurfaceObjectType -> SurfaceObjectType(currentType.members.mapValues { normalizeType(it.value) })
+            is SurfaceEnumType -> SurfaceEnumType(currentType.entries.mapValues { normalizeType(it.value) })
+            is SurfaceArrayType -> SurfaceArrayType(normalizeType(currentType.element))
+            is SurfaceRefType -> SurfaceRefType(normalizeType(currentType.referent))
+            is SurfaceMethodType -> SurfaceMethodType(
                 normalizeType(currentType.`this`),
                 currentType.parameters.mapValues { normalizeType(it.value) },
                 normalizeType(currentType.`return`),
             )
         }
-        is FoxTransformType -> when (currentType) {
-            is FoxTupleGetComponentType -> {
+        is SurfaceTransformType -> when (currentType) {
+            is SurfaceTupleGetComponentType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetComponentType(normalizedBase, currentType.index)
+                val transform = SurfaceTupleGetComponentType(normalizedBase, currentType.index)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeTupleIndex(transform, currentType.index, tuple.arity) { tuple.getComponent(currentType.index) }
                 }
             }
-            is FoxTupleGetComponentBackType -> {
+            is SurfaceTupleGetComponentBackType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetComponentBackType(normalizedBase, currentType.index)
+                val transform = SurfaceTupleGetComponentBackType(normalizedBase, currentType.index)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeTupleIndex(transform, currentType.index, tuple.arity) { tuple.getComponentBack(currentType.index) }
                 }
             }
-            is FoxTupleGetFirstComponentsType -> {
+            is SurfaceTupleGetFirstComponentsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetFirstComponentsType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleGetFirstComponentsType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountLoose(transform, currentType.count, tuple.arity) { count ->
                         tuple.getFirstComponents(count)
                     }
                 }
             }
-            is FoxTupleGetFirstComponentsExactType -> {
+            is SurfaceTupleGetFirstComponentsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetFirstComponentsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleGetFirstComponentsExactType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountExact(transform, currentType.count, tuple.arity) {
                         tuple.getFirstComponents(currentType.count)
                     }
                 }
             }
-            is FoxTupleGetLastComponentsType -> {
+            is SurfaceTupleGetLastComponentsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetLastComponentsType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleGetLastComponentsType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountLoose(transform, currentType.count, tuple.arity) { count ->
                         tuple.getLastComponents(count)
                     }
                 }
             }
-            is FoxTupleGetLastComponentsExactType -> {
+            is SurfaceTupleGetLastComponentsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleGetLastComponentsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleGetLastComponentsExactType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountExact(transform, currentType.count, tuple.arity) {
                         tuple.getLastComponents(currentType.count)
                     }
                 }
             }
-            is FoxTupleDropFirstComponentsType -> {
+            is SurfaceTupleDropFirstComponentsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleDropFirstComponentsType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleDropFirstComponentsType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountLoose(transform, currentType.count, tuple.arity) { count ->
                         tuple.dropFirstComponents(count)
                     }
                 }
             }
-            is FoxTupleDropFirstComponentsExactType -> {
+            is SurfaceTupleDropFirstComponentsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleDropFirstComponentsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleDropFirstComponentsExactType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountExact(transform, currentType.count, tuple.arity) {
                         tuple.dropFirstComponents(currentType.count)
                     }
                 }
             }
-            is FoxTupleDropLastComponentsType -> {
+            is SurfaceTupleDropLastComponentsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleDropLastComponentsType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleDropLastComponentsType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountLoose(transform, currentType.count, tuple.arity) { count ->
                         tuple.dropLastComponents(count)
                     }
                 }
             }
-            is FoxTupleDropLastComponentsExactType -> {
+            is SurfaceTupleDropLastComponentsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxTupleDropLastComponentsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceTupleDropLastComponentsExactType(normalizedBase, currentType.count)
                 normalizeTupleTransform(transform, normalizedBase) { tuple ->
                     normalizeCountExact(transform, currentType.count, tuple.arity) {
                         tuple.dropLastComponents(currentType.count)
                     }
                 }
             }
-            is FoxTupleMergeTuplesType -> normalizeMergeTuple(currentType.types)
-            is FoxStructGetFieldTypeByNameType -> {
+            is SurfaceTupleMergeTuplesType -> normalizeMergeTuple(currentType.types)
+            is SurfaceStructGetFieldTypeByNameType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetFieldTypeByNameType(normalizedBase, currentType.name)
+                val transform = SurfaceStructGetFieldTypeByNameType(normalizedBase, currentType.name)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     if (currentType.name !in struct.fields) nameNotFound(transform, currentType.name)
                     else struct.fields.getValue(currentType.name)
                 }
             }
-            is FoxStructGetFieldTypeByIndexType -> {
+            is SurfaceStructGetFieldTypeByIndexType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetFieldTypeByIndexType(normalizedBase, currentType.index)
+                val transform = SurfaceStructGetFieldTypeByIndexType(normalizedBase, currentType.index)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeStructIndex(transform, currentType.index, struct.arity) { struct.getFieldTypeByIndex(currentType.index).value }
                 }
             }
-            is FoxStructGetFieldTypeByIndexBackType -> {
+            is SurfaceStructGetFieldTypeByIndexBackType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetFieldTypeByIndexBackType(normalizedBase, currentType.index)
+                val transform = SurfaceStructGetFieldTypeByIndexBackType(normalizedBase, currentType.index)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeStructIndex(transform, currentType.index, struct.arity) { struct.getFieldTypeByIndexBack(currentType.index).value }
                 }
             }
-            is FoxStructGetFirstFieldsType -> {
+            is SurfaceStructGetFirstFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetFirstFieldsType(normalizedBase, currentType.count)
+                val transform = SurfaceStructGetFirstFieldsType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountLoose(transform, currentType.count, struct.arity) { count ->
                         struct.getFirstFields(count)
                     }
                 }
             }
-            is FoxStructGetFirstFieldsExactType -> {
+            is SurfaceStructGetFirstFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetFirstFieldsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceStructGetFirstFieldsExactType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountExact(transform, currentType.count, struct.arity) {
                         struct.getFirstFields(currentType.count)
                     }
                 }
             }
-            is FoxStructGetLastFieldsType -> {
+            is SurfaceStructGetLastFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetLastFieldsType(normalizedBase, currentType.count)
+                val transform = SurfaceStructGetLastFieldsType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountLoose(transform, currentType.count, struct.arity) { count ->
                         struct.getLastFields(count)
                     }
                 }
             }
-            is FoxStructGetLastFieldsExactType -> {
+            is SurfaceStructGetLastFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructGetLastFieldsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceStructGetLastFieldsExactType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountExact(transform, currentType.count, struct.arity) {
                         struct.getLastFields(currentType.count)
                     }
                 }
             }
-            is FoxStructDropFirstFieldsType -> {
+            is SurfaceStructDropFirstFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropFirstFieldsType(normalizedBase, currentType.count)
+                val transform = SurfaceStructDropFirstFieldsType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountLoose(transform, currentType.count, struct.arity) { count ->
                         struct.dropFirstFields(count)
                     }
                 }
             }
-            is FoxStructDropFirstFieldsExactType -> {
+            is SurfaceStructDropFirstFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropFirstFieldsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceStructDropFirstFieldsExactType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountExact(transform, currentType.count, struct.arity) {
                         struct.dropFirstFields(currentType.count)
                     }
                 }
             }
-            is FoxStructDropLastFieldsType -> {
+            is SurfaceStructDropLastFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropLastFieldsType(normalizedBase, currentType.count)
+                val transform = SurfaceStructDropLastFieldsType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountLoose(transform, currentType.count, struct.arity) { count ->
                         struct.dropLastFields(count)
                     }
                 }
             }
-            is FoxStructDropLastFieldsExactType -> {
+            is SurfaceStructDropLastFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropLastFieldsExactType(normalizedBase, currentType.count)
+                val transform = SurfaceStructDropLastFieldsExactType(normalizedBase, currentType.count)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeCountExact(transform, currentType.count, struct.arity) {
                         struct.dropLastFields(currentType.count)
                     }
                 }
             }
-            is FoxStructSelectFieldsType -> {
+            is SurfaceStructSelectFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructSelectFieldsType(normalizedBase, currentType.names)
+                val transform = SurfaceStructSelectFieldsType(normalizedBase, currentType.names)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     struct.selectFields(currentType.names)
                 }
             }
-            is FoxStructSelectFieldsExactType -> {
+            is SurfaceStructSelectFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructSelectFieldsExactType(normalizedBase, currentType.names)
+                val transform = SurfaceStructSelectFieldsExactType(normalizedBase, currentType.names)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeStructNameSelectionExact(transform, struct, currentType.names)
                 }
             }
-            is FoxStructDropFieldsType -> {
+            is SurfaceStructDropFieldsType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropFieldsType(normalizedBase, currentType.names)
+                val transform = SurfaceStructDropFieldsType(normalizedBase, currentType.names)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     struct.dropFields(currentType.names)
                 }
             }
-            is FoxStructDropFieldsExactType -> {
+            is SurfaceStructDropFieldsExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructDropFieldsExactType(normalizedBase, currentType.names)
+                val transform = SurfaceStructDropFieldsExactType(normalizedBase, currentType.names)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     normalizeStructNameDropExact(transform, struct, currentType.names)
                 }
             }
-            is FoxStructExtractFieldTypesType -> {
+            is SurfaceStructExtractFieldTypesType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxStructExtractFieldTypesType(normalizedBase)
+                val transform = SurfaceStructExtractFieldTypesType(normalizedBase)
                 normalizeStructTransform(transform, normalizedBase) { struct ->
                     struct.fields.values.toFoxTupleType()
                 }
             }
-            is FoxStructMergeStructsType -> normalizeMergeStruct(currentType.types)
-            is FoxObjectGetMemberTypeType -> {
+            is SurfaceStructMergeStructsType -> normalizeMergeStruct(currentType.types)
+            is SurfaceObjectGetMemberTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxObjectGetMemberTypeType(normalizedBase, currentType.name)
+                val transform = SurfaceObjectGetMemberTypeType(normalizedBase, currentType.name)
                 normalizeObjectTransform(transform, normalizedBase) { obj ->
                     if (currentType.name !in obj.members) nameNotFound(transform, currentType.name)
                     else obj.members.getValue(currentType.name)
                 }
             }
-            is FoxObjectSelectMembersType -> {
+            is SurfaceObjectSelectMembersType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxObjectSelectMembersType(normalizedBase, currentType.names)
+                val transform = SurfaceObjectSelectMembersType(normalizedBase, currentType.names)
                 normalizeObjectTransform(transform, normalizedBase) { obj ->
                     obj.selectMembers(currentType.names)
                 }
             }
-            is FoxObjectSelectMembersExactType -> {
+            is SurfaceObjectSelectMembersExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxObjectSelectMembersExactType(normalizedBase, currentType.names)
+                val transform = SurfaceObjectSelectMembersExactType(normalizedBase, currentType.names)
                 normalizeObjectTransform(transform, normalizedBase) { obj ->
                     normalizeObjectNameSelectionExact(transform, obj, currentType.names)
                 }
             }
-            is FoxObjectDropMembersType -> {
+            is SurfaceObjectDropMembersType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxObjectDropMembersType(normalizedBase, currentType.names)
+                val transform = SurfaceObjectDropMembersType(normalizedBase, currentType.names)
                 normalizeObjectTransform(transform, normalizedBase) { obj ->
                     obj.dropMembers(currentType.names)
                 }
             }
-            is FoxObjectDropMembersExactType -> {
+            is SurfaceObjectDropMembersExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxObjectDropMembersExactType(normalizedBase, currentType.names)
+                val transform = SurfaceObjectDropMembersExactType(normalizedBase, currentType.names)
                 normalizeObjectTransform(transform, normalizedBase) { obj ->
                     normalizeObjectNameDropExact(transform, obj, currentType.names)
                 }
             }
-            is FoxObjectMergeObjectsType -> normalizeMergeObject(currentType.types)
-            is FoxEnumGetEntryTypeType -> {
+            is SurfaceObjectMergeObjectsType -> normalizeMergeObject(currentType.types)
+            is SurfaceEnumGetEntryTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxEnumGetEntryTypeType(normalizedBase, currentType.name)
+                val transform = SurfaceEnumGetEntryTypeType(normalizedBase, currentType.name)
                 normalizeEnumTransform(transform, normalizedBase) { enumType ->
                     if (currentType.name !in enumType.entries) nameNotFound(transform, currentType.name)
                     else enumType.entries.getValue(currentType.name)
                 }
             }
-            is FoxEnumSelectEntriesType -> {
+            is SurfaceEnumSelectEntriesType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxEnumSelectEntriesType(normalizedBase, currentType.names)
+                val transform = SurfaceEnumSelectEntriesType(normalizedBase, currentType.names)
                 normalizeEnumTransform(transform, normalizedBase) { enumType ->
                     enumType.selectEntries(currentType.names)
                 }
             }
-            is FoxEnumSelectEntriesExactType -> {
+            is SurfaceEnumSelectEntriesExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxEnumSelectEntriesExactType(normalizedBase, currentType.names)
+                val transform = SurfaceEnumSelectEntriesExactType(normalizedBase, currentType.names)
                 normalizeEnumTransform(transform, normalizedBase) { enumType ->
                     normalizeEnumNameSelectionExact(transform, enumType, currentType.names)
                 }
             }
-            is FoxEnumDropEntriesType -> {
+            is SurfaceEnumDropEntriesType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxEnumDropEntriesType(normalizedBase, currentType.names)
+                val transform = SurfaceEnumDropEntriesType(normalizedBase, currentType.names)
                 normalizeEnumTransform(transform, normalizedBase) { enumType ->
                     enumType.dropEntries(currentType.names)
                 }
             }
-            is FoxEnumDropEntriesExactType -> {
+            is SurfaceEnumDropEntriesExactType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxEnumDropEntriesExactType(normalizedBase, currentType.names)
+                val transform = SurfaceEnumDropEntriesExactType(normalizedBase, currentType.names)
                 normalizeEnumTransform(transform, normalizedBase) { enumType ->
                     normalizeEnumNameDropExact(transform, enumType, currentType.names)
                 }
             }
-            is FoxEnumMergeEnumsType -> normalizeMergeEnum(currentType.types)
-            is FoxArrayGetElementTypeType -> {
+            is SurfaceEnumMergeEnumsType -> normalizeMergeEnum(currentType.types)
+            is SurfaceArrayGetElementTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxArrayGetElementTypeType(normalizedBase)
+                val transform = SurfaceArrayGetElementTypeType(normalizedBase)
                 normalizeArrayTransform(transform, normalizedBase) { array -> array.element }
             }
-            is FoxRefGetReferentTypeType -> {
+            is SurfaceRefGetReferentTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxRefGetReferentTypeType(normalizedBase)
+                val transform = SurfaceRefGetReferentTypeType(normalizedBase)
                 normalizeRefTransform(transform, normalizedBase) { ref -> ref.referent }
             }
-            is FoxMethodGetThisTypeType -> {
+            is SurfaceMethodGetThisTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxMethodGetThisTypeType(normalizedBase)
+                val transform = SurfaceMethodGetThisTypeType(normalizedBase)
                 normalizeMethodTransform(transform, normalizedBase) { method -> method.`this` }
             }
-            is FoxMethodGetParameterStructType -> {
+            is SurfaceMethodGetParameterStructType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxMethodGetParameterStructType(normalizedBase)
+                val transform = SurfaceMethodGetParameterStructType(normalizedBase)
                 normalizeMethodTransform(transform, normalizedBase) { method ->
-                    FoxStructType(method.parameters)
+                    SurfaceStructType(method.parameters)
                 }
             }
-            is FoxMethodGetReturnTypeType -> {
+            is SurfaceMethodGetReturnTypeType -> {
                 val normalizedBase = normalizeType(currentType.type)
-                val transform = FoxMethodGetReturnTypeType(normalizedBase)
+                val transform = SurfaceMethodGetReturnTypeType(normalizedBase)
                 normalizeMethodTransform(transform, normalizedBase) { method -> method.`return` }
             }
-            is FoxMethodOfType -> {
+            is SurfaceMethodOfType -> {
                 val normalizedThis = normalizeType(currentType.`this`)
                 val normalizedParameters = normalizeType(currentType.parameters)
                 val normalizedReturn = normalizeType(currentType.`return`)
-                val transform = FoxMethodOfType(normalizedThis, normalizedParameters, normalizedReturn)
+                val transform = SurfaceMethodOfType(normalizedThis, normalizedParameters, normalizedReturn)
                 normalizeMethodOf(transform, normalizedThis, normalizedParameters, normalizedReturn) { `this`, parameters, `return` ->
-                    FoxMethodType(`this`, parameters.fields, `return`)
+                    SurfaceMethodType(`this`, parameters.fields, `return`)
                 }
             }
         }
-        is FoxUnresolvedType -> currentType.also { check(currentType.parameters == null) }
-        is FoxPlaceholderType -> error("unreachable")
+        is SurfaceUnresolvedType -> currentType.also { check(currentType.parameters == null) }
+        is SurfacePlaceholderType -> error("unreachable")
     }
 }

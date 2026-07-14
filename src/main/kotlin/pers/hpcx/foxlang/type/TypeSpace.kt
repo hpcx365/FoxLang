@@ -1,15 +1,15 @@
 package pers.hpcx.foxlang.type
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.utils.OrderedMap
 
 sealed interface TypeSpace {
-    operator fun contains(that: FoxType): Boolean
+    operator fun contains(that: SurfaceType): Boolean
 }
 
 fun emptyTypeSpace() = EmptyTypeSpace
 fun universalTypeSpace() = UniversalTypeSpace
-fun singleTypeSpace(single: FoxType) = SingleTypeSpace(single)
+fun singleTypeSpace(single: SurfaceType) = SingleTypeSpace(single)
 
 fun intersect(vararg spaces: TypeSpace) = intersect(spaces.toList())
 fun intersect(spaces: Iterable<TypeSpace>) = IntersectTypeSpace(spaces)
@@ -20,27 +20,27 @@ fun TypeSpace.complement() = ComplementTypeSpace(this)
 sealed interface GeneralTypeSpace : TypeSpace
 
 data object EmptyTypeSpace : GeneralTypeSpace {
-    override fun contains(that: FoxType) = false
+    override fun contains(that: SurfaceType) = false
 }
 
 data object UniversalTypeSpace : GeneralTypeSpace {
-    override fun contains(that: FoxType) = true
+    override fun contains(that: SurfaceType) = true
 }
 
-data class SingleTypeSpace(val single: FoxType) : GeneralTypeSpace {
-    override fun contains(that: FoxType) = single == that
+data class SingleTypeSpace(val single: SurfaceType) : GeneralTypeSpace {
+    override fun contains(that: SurfaceType) = single == that
 }
 
 data class IntersectTypeSpace(val parts: Iterable<TypeSpace>) : GeneralTypeSpace {
-    override fun contains(that: FoxType) = parts.all { that in it }
+    override fun contains(that: SurfaceType) = parts.all { that in it }
 }
 
 data class UnionTypeSpace(val parts: Iterable<TypeSpace>) : GeneralTypeSpace {
-    override fun contains(that: FoxType) = parts.any { that in it }
+    override fun contains(that: SurfaceType) = parts.any { that in it }
 }
 
 data class ComplementTypeSpace(val space: TypeSpace) : GeneralTypeSpace {
-    override fun contains(that: FoxType) = that !in space
+    override fun contains(that: SurfaceType) = that !in space
 }
 
 sealed interface TupleSubTypeSpace : TypeSpace
@@ -58,26 +58,26 @@ fun tupleConcatSpace(parts: List<TypeSpace>) = TupleConcatTypeSpace(parts)
 
 data object TupleTypeSpace : TupleSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxTupleType
+    override fun contains(that: SurfaceType) = that is SurfaceTupleType
 }
 
 data class TupleRepeatTypeSpace(val component: TypeSpace) : TupleSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxTupleType
+    override fun contains(that: SurfaceType) = that is SurfaceTupleType
         && that.components.all { it in component }
 }
 
 data class TuplePatternTypeSpace(val components: List<TypeSpace>) : TupleSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxTupleType
+    override fun contains(that: SurfaceType) = that is SurfaceTupleType
         && that.components.size == components.size
         && that.components.zip(components).all { it.first in it.second }
 }
 
 data class TupleConcatTypeSpace(val parts: List<TypeSpace>) : TupleSubTypeSpace {
     
-    override fun contains(that: FoxType): Boolean {
-        if (that !is FoxTupleType) return false
+    override fun contains(that: SurfaceType): Boolean {
+        if (that !is SurfaceTupleType) return false
         val targetSize = that.arity
         val partBounds = parts.map { arityBoundsOf(it) }
         val totalBounds = arityBoundsOf(this)
@@ -135,27 +135,27 @@ fun structConcatSpace(parts: List<TypeSpace>) = StructConcatTypeSpace(parts)
 
 data object StructTypeSpace : StructSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxStructType
+    override fun contains(that: SurfaceType) = that is SurfaceStructType
 }
 
 data class StructPatternTypeSpace(val fieldTypes: List<TypeSpace>) : StructSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxStructType
+    override fun contains(that: SurfaceType) = that is SurfaceStructType
         && that.fields.size == fieldTypes.size
         && that.fields.values.zip(fieldTypes).all { it.first in it.second }
 }
 
 data class StructFieldPatternTypeSpace(val fields: OrderedMap<String, TypeSpace>) : StructSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxStructType
+    override fun contains(that: SurfaceType) = that is SurfaceStructType
         && that.fields.keys == fields.keys
         && that.fields.values.zip(fields.values).all { it.first in it.second }
 }
 
 data class StructConcatTypeSpace(val parts: List<TypeSpace>) : StructSubTypeSpace {
     
-    override fun contains(that: FoxType): Boolean {
-        if (that !is FoxStructType) return false
+    override fun contains(that: SurfaceType): Boolean {
+        if (that !is SurfaceStructType) return false
         val targetSize = that.arity
         val partBounds = parts.map { arityBoundsOf(it) }
         val totalBounds = arityBoundsOf(this)
@@ -212,20 +212,20 @@ fun objectMergeSpace(parts: List<TypeSpace>) = ObjectMergeTypeSpace(parts)
 
 data object ObjectTypeSpace : ObjectSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxObjectType
+    override fun contains(that: SurfaceType) = that is SurfaceObjectType
 }
 
 data class ObjectPatternTypeSpace(val members: Map<String, TypeSpace>) : ObjectSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxObjectType
+    override fun contains(that: SurfaceType) = that is SurfaceObjectType
         && that.members.keys == members.keys
         && that.members.entries.all { it.value in members.getValue(it.key) }
 }
 
 data class ObjectMergeTypeSpace(val parts: List<TypeSpace>) : ObjectSubTypeSpace {
     
-    override fun contains(that: FoxType): Boolean {
-        if (that !is FoxObjectType) return false
+    override fun contains(that: SurfaceType): Boolean {
+        if (that !is SurfaceObjectType) return false
         val allKeys = that.members.keys.toList()
         val totalBounds = arityBoundsOf(this)
         if (totalBounds != null && that.arity !in totalBounds.min..totalBounds.max) return false
@@ -267,20 +267,20 @@ fun enumMergeSpace(parts: List<TypeSpace>) = EnumMergeTypeSpace(parts)
 
 data object EnumTypeSpace : EnumSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxEnumType
+    override fun contains(that: SurfaceType) = that is SurfaceEnumType
 }
 
 data class EnumPatternTypeSpace(val entries: Map<String, TypeSpace>) : EnumSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxEnumType
+    override fun contains(that: SurfaceType) = that is SurfaceEnumType
         && that.entries.keys == entries.keys
         && that.entries.entries.all { it.value in entries.getValue(it.key) }
 }
 
 data class EnumMergeTypeSpace(val parts: List<TypeSpace>) : EnumSubTypeSpace {
     
-    override fun contains(that: FoxType): Boolean {
-        if (that !is FoxEnumType) return false
+    override fun contains(that: SurfaceType): Boolean {
+        if (that !is SurfaceEnumType) return false
         val allKeys = that.entries.keys.toList()
         val totalBounds = arityBoundsOf(this)
         if (totalBounds != null && that.arity !in totalBounds.min..totalBounds.max) return false
@@ -320,14 +320,14 @@ fun arrayPatternSpace(element: TypeSpace) = ArrayPatternTypeSpace(element)
 
 data class ArrayPatternTypeSpace(val element: TypeSpace) : ArraySubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxArrayType && that.element in element
+    override fun contains(that: SurfaceType) = that is SurfaceArrayType && that.element in element
 }
 
 fun refPatternSpace(referent: TypeSpace) = RefPatternTypeSpace(referent)
 
 data class RefPatternTypeSpace(val referent: TypeSpace) : RefSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxRefType && that.referent in referent
+    override fun contains(that: SurfaceType) = that is SurfaceRefType && that.referent in referent
 }
 
 fun methodPatternSpace(
@@ -342,9 +342,9 @@ data class MethodPatternTypeSpace(
     val `return`: TypeSpace,
 ) : MethodSubTypeSpace {
     
-    override fun contains(that: FoxType) = that is FoxMethodType
+    override fun contains(that: SurfaceType) = that is SurfaceMethodType
         && `this`.contains(that.`this`)
-        && parameterStruct.contains(FoxStructType(that.parameters))
+        && parameterStruct.contains(SurfaceStructType(that.parameters))
         && `return`.contains(that.`return`)
 }
 

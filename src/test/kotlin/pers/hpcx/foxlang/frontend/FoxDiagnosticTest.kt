@@ -1,11 +1,11 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.ParsedFoxFile
 import pers.hpcx.foxlang.frontend.common.*
 import pers.hpcx.foxlang.frontend.fox.*
 import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.ParenClose
 import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.SquareClose
 import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.Comma
+import pers.hpcx.foxlang.ir.SyntaxFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -74,7 +74,7 @@ private fun Source<*>.plainPosition(text: String): SourcePosition {
     return SourcePosition(index)
 }
 
-private fun String.analyzeFoxOrThrow(): ParseAnalysis<ParsedFoxFile> {
+private fun String.analyzeFoxOrThrow(): ParseAnalysis<SyntaxFile> {
     return when (val result = sourceFox()) {
         is SourceFragmentationSuccess -> (result.value).analyzeFox()
         is SourceFragmentationFailure -> error(result.errors.joinToString { it })

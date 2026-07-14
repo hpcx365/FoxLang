@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.type.visitTypes
 import pers.hpcx.foxlang.utils.emptyOrderedMap
 import pers.hpcx.foxlang.utils.emptyOrderedSet
@@ -12,43 +12,43 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun reducesAliasDependencyChain() {
-        val file = FoxFile(
+        val file = SurfaceFile(
             listOf(
-                FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType),
-                FoxTypeAlias("Wrapped", emptyOrderedSet(), FoxArrayType(FoxUnresolvedType("Base", null))),
-                FoxTypeAlias("Final", emptyOrderedSet(), FoxRefType(FoxUnresolvedType("Wrapped", null))),
+                SurfaceTypeAlias("Base", emptyOrderedSet(), FoxIntType),
+                SurfaceTypeAlias("Wrapped", emptyOrderedSet(), SurfaceArrayType(SurfaceUnresolvedType("Base", null))),
+                SurfaceTypeAlias("Final", emptyOrderedSet(), SurfaceRefType(SurfaceUnresolvedType("Wrapped", null))),
             ),
         )
         
         val result = assertIs<TypeAliasFlattenSuccess>(runTypeAliasFlatten(file))
-        val aliases = result.newFile.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
+        val aliases = result.newFile.elements.filterIsInstance<SurfaceTypeAlias>().associateBy { it.name }
         
         assertEquals(FoxIntType, aliases.getValue("Base").alias)
-        assertEquals(FoxArrayType(FoxIntType), aliases.getValue("Wrapped").alias)
-        assertEquals(FoxRefType(FoxArrayType(FoxIntType)), aliases.getValue("Final").alias)
+        assertEquals(SurfaceArrayType(FoxIntType), aliases.getValue("Wrapped").alias)
+        assertEquals(SurfaceRefType(SurfaceArrayType(FoxIntType)), aliases.getValue("Final").alias)
         assertTrue(aliases.values.all { noAliasDependency(it.alias, aliases.keys) })
         assertTrue(noAliasDependency(aliases.getValue("Final").alias, aliases.keys))
     }
     
     @Test
     fun reducesGenericAliasDependencyChain() {
-        val file = FoxFile(
+        val file = SurfaceFile(
             listOf(
-                FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))),
-                FoxTypeAlias(
+                SurfaceTypeAlias("Box", orderedSetOf("T"), SurfaceArrayType(SurfaceUnresolvedType("T", null))),
+                SurfaceTypeAlias(
                     "PairBox",
                     orderedSetOf("A", "B"),
-                    FoxTupleType(
+                    SurfaceTupleType(
                         listOf(
-                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("A", null))),
-                            FoxUnresolvedType("Box", listOf(FoxUnresolvedType("B", null))),
+                            SurfaceUnresolvedType("Box", listOf(SurfaceUnresolvedType("A", null))),
+                            SurfaceUnresolvedType("Box", listOf(SurfaceUnresolvedType("B", null))),
                         ),
                     ),
                 ),
-                FoxTypeAlias(
+                SurfaceTypeAlias(
                     "Concrete",
                     emptyOrderedSet(),
-                    FoxUnresolvedType(
+                    SurfaceUnresolvedType(
                         "PairBox",
                         listOf(FoxIntType, FoxFloatType),
                     ),
@@ -57,25 +57,25 @@ class TypeAliasFlattenPassTest {
         )
         
         val result = assertIs<TypeAliasFlattenSuccess>(runTypeAliasFlatten(file))
-        val aliases = result.newFile.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
+        val aliases = result.newFile.elements.filterIsInstance<SurfaceTypeAlias>().associateBy { it.name }
         
-        assertEquals(FoxArrayType(FoxUnresolvedType("T", null)), aliases.getValue("Box").alias)
+        assertEquals(SurfaceArrayType(SurfaceUnresolvedType("T", null)), aliases.getValue("Box").alias)
         assertTrue(noAliasDependency(aliases.getValue("Box").alias, aliases.keys))
         assertEquals(
-            FoxTupleType(
+            SurfaceTupleType(
                 listOf(
-                    FoxArrayType(FoxUnresolvedType("A", null)),
-                    FoxArrayType(FoxUnresolvedType("B", null)),
+                    SurfaceArrayType(SurfaceUnresolvedType("A", null)),
+                    SurfaceArrayType(SurfaceUnresolvedType("B", null)),
                 ),
             ),
             aliases.getValue("PairBox").alias,
         )
         assertTrue(noAliasDependency(aliases.getValue("PairBox").alias, aliases.keys))
         assertEquals(
-            FoxTupleType(
+            SurfaceTupleType(
                 listOf(
-                    FoxArrayType(FoxIntType),
-                    FoxArrayType(FoxFloatType),
+                    SurfaceArrayType(FoxIntType),
+                    SurfaceArrayType(FoxFloatType),
                 ),
             ),
             aliases.getValue("Concrete").alias,
@@ -86,35 +86,35 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun flattensAliasUsedAsGenericArgument() {
-        val file = FoxFile(
+        val file = SurfaceFile(
             listOf(
-                FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType),
-                FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null))),
-                FoxTypeAlias("Use", emptyOrderedSet(), FoxUnresolvedType("Box", listOf(FoxUnresolvedType("Base", null)))),
+                SurfaceTypeAlias("Base", emptyOrderedSet(), FoxIntType),
+                SurfaceTypeAlias("Box", orderedSetOf("T"), SurfaceArrayType(SurfaceUnresolvedType("T", null))),
+                SurfaceTypeAlias("Use", emptyOrderedSet(), SurfaceUnresolvedType("Box", listOf(SurfaceUnresolvedType("Base", null)))),
             ),
         )
         
         val result = assertIs<TypeAliasFlattenSuccess>(runTypeAliasFlatten(file))
-        val aliases = result.newFile.elements.filterIsInstance<FoxTypeAlias>().associateBy { it.name }
+        val aliases = result.newFile.elements.filterIsInstance<SurfaceTypeAlias>().associateBy { it.name }
         
-        assertEquals(FoxArrayType(FoxIntType), aliases.getValue("Use").alias)
+        assertEquals(SurfaceArrayType(FoxIntType), aliases.getValue("Use").alias)
         assertTrue(noAliasDependency(aliases.getValue("Use").alias, aliases.keys))
     }
     
     @Test
     fun keepsMethodDefinitionsUntouched() {
-        val method = FoxMethodDefinition(
+        val method = SurfaceMethodDefinition(
             generics = emptyOrderedMap(),
             thisType = FoxUnitType,
             name = "id",
-            parameters = orderedMapOf("value" to FoxUnresolvedType("Wrapped", null)),
-            returnType = FoxUnresolvedType("Wrapped", null),
-            body = FoxReturn(FoxUnresolvedSymbol("value")),
+            parameters = orderedMapOf("value" to SurfaceUnresolvedType("Wrapped", null)),
+            returnType = SurfaceUnresolvedType("Wrapped", null),
+            body = SurfaceReturn(SurfaceUnresolvedSymbol("value")),
         )
-        val file = FoxFile(
+        val file = SurfaceFile(
             listOf(
-                FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType),
-                FoxTypeAlias("Wrapped", emptyOrderedSet(), FoxUnresolvedType("Base", null)),
+                SurfaceTypeAlias("Base", emptyOrderedSet(), FoxIntType),
+                SurfaceTypeAlias("Wrapped", emptyOrderedSet(), SurfaceUnresolvedType("Base", null)),
                 method,
             ),
         )
@@ -125,19 +125,19 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun keepsOriginalFileElementOrder() {
-        val method = FoxMethodDefinition(
+        val method = SurfaceMethodDefinition(
             generics = emptyOrderedMap(),
             thisType = FoxUnitType,
             name = "use",
             parameters = orderedMapOf("value" to FoxIntType),
             returnType = FoxIntType,
-            body = FoxReturn(FoxUnresolvedSymbol("value")),
+            body = SurfaceReturn(SurfaceUnresolvedSymbol("value")),
         )
-        val file = FoxFile(
+        val file = SurfaceFile(
             listOf(
                 method,
-                FoxTypeAlias("Base", emptyOrderedSet(), FoxIntType),
-                FoxTypeAlias("Wrapped", emptyOrderedSet(), FoxArrayType(FoxUnresolvedType("Base", null))),
+                SurfaceTypeAlias("Base", emptyOrderedSet(), FoxIntType),
+                SurfaceTypeAlias("Wrapped", emptyOrderedSet(), SurfaceArrayType(SurfaceUnresolvedType("Base", null))),
             ),
         )
         
@@ -147,8 +147,8 @@ class TypeAliasFlattenPassTest {
             listOf("use", "Base", "Wrapped"),
             result.newFile.elements.map {
                 when (it) {
-                    is FoxMethodDefinition -> it.name
-                    is FoxTypeAlias -> it.name
+                    is SurfaceMethodDefinition -> it.name
+                    is SurfaceTypeAlias -> it.name
                 }
             },
         )
@@ -156,10 +156,10 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsAliasLoop() {
-        val a = FoxTypeAlias("A", emptyOrderedSet(), FoxUnresolvedType("B", null))
-        val b = FoxTypeAlias("B", emptyOrderedSet(), FoxUnresolvedType("C", null))
-        val c = FoxTypeAlias("C", emptyOrderedSet(), FoxUnresolvedType("B", null))
-        val file = FoxFile(listOf(a, b, c))
+        val a = SurfaceTypeAlias("A", emptyOrderedSet(), SurfaceUnresolvedType("B", null))
+        val b = SurfaceTypeAlias("B", emptyOrderedSet(), SurfaceUnresolvedType("C", null))
+        val c = SurfaceTypeAlias("C", emptyOrderedSet(), SurfaceUnresolvedType("B", null))
+        val file = SurfaceFile(listOf(a, b, c))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val loop = assertIs<TypeAliasLoopDetected>(result.errors.single())
@@ -171,9 +171,9 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsDuplicatedAlias() {
-        val first = FoxTypeAlias("A", emptyOrderedSet(), FoxIntType)
-        val duplicate = FoxTypeAlias("A", emptyOrderedSet(), FoxFloatType)
-        val file = FoxFile(
+        val first = SurfaceTypeAlias("A", emptyOrderedSet(), FoxIntType)
+        val duplicate = SurfaceTypeAlias("A", emptyOrderedSet(), FoxFloatType)
+        val file = SurfaceFile(
             listOf(
                 first,
                 duplicate,
@@ -187,8 +187,8 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsMissingAliasReference() {
-        val alias = FoxTypeAlias("A", emptyOrderedSet(), FoxUnresolvedType("Missing", null))
-        val file = FoxFile(listOf(alias))
+        val alias = SurfaceTypeAlias("A", emptyOrderedSet(), SurfaceUnresolvedType("Missing", null))
+        val file = SurfaceFile(listOf(alias))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasNotFound>(result.errors.single())
@@ -200,10 +200,10 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsUnexpectedGenericsOnNonGenericAlias() {
-        val alias = FoxTypeAlias("A", emptyOrderedSet(), FoxIntType)
-        val reference = FoxUnresolvedType("A", listOf(FoxIntType))
-        val referrer = FoxTypeAlias("B", emptyOrderedSet(), reference)
-        val file = FoxFile(listOf(alias, referrer))
+        val alias = SurfaceTypeAlias("A", emptyOrderedSet(), FoxIntType)
+        val reference = SurfaceUnresolvedType("A", listOf(FoxIntType))
+        val referrer = SurfaceTypeAlias("B", emptyOrderedSet(), reference)
+        val file = SurfaceFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasGenericCountMismatch>(result.errors.single())
@@ -215,10 +215,10 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsMissingGenericsOnGenericAlias() {
-        val alias = FoxTypeAlias("Box", orderedSetOf("T"), FoxArrayType(FoxUnresolvedType("T", null)))
-        val reference = FoxUnresolvedType("Box", null)
-        val referrer = FoxTypeAlias("Use", emptyOrderedSet(), reference)
-        val file = FoxFile(listOf(alias, referrer))
+        val alias = SurfaceTypeAlias("Box", orderedSetOf("T"), SurfaceArrayType(SurfaceUnresolvedType("T", null)))
+        val reference = SurfaceUnresolvedType("Box", null)
+        val referrer = SurfaceTypeAlias("Use", emptyOrderedSet(), reference)
+        val file = SurfaceFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasGenericCountMismatch>(result.errors.single())
@@ -230,14 +230,14 @@ class TypeAliasFlattenPassTest {
     
     @Test
     fun detectsGenericCountMismatch() {
-        val alias = FoxTypeAlias(
+        val alias = SurfaceTypeAlias(
             "Pair",
             orderedSetOf("A", "B"),
-            FoxTupleType(listOf(FoxUnresolvedType("A", null), FoxUnresolvedType("B", null))),
+            SurfaceTupleType(listOf(SurfaceUnresolvedType("A", null), SurfaceUnresolvedType("B", null))),
         )
-        val reference = FoxUnresolvedType("Pair", listOf(FoxIntType))
-        val referrer = FoxTypeAlias("Use", emptyOrderedSet(), reference)
-        val file = FoxFile(listOf(alias, referrer))
+        val reference = SurfaceUnresolvedType("Pair", listOf(FoxIntType))
+        val referrer = SurfaceTypeAlias("Use", emptyOrderedSet(), reference)
+        val file = SurfaceFile(listOf(alias, referrer))
         
         val result = assertIs<TypeAliasFlattenFailure>(runTypeAliasFlatten(file))
         val error = assertIs<TypeAliasGenericCountMismatch>(result.errors.single())
@@ -247,11 +247,15 @@ class TypeAliasFlattenPassTest {
         assertSame(reference, error.type)
     }
     
-    private fun noAliasDependency(type: FoxType, aliasNames: Set<String>): Boolean {
+    private fun noAliasDependency(type: SurfaceType, aliasNames: Set<String>): Boolean {
         var result = true
-        type.visitTypes<FoxUnresolvedType> { unresolved ->
+        type.visitTypes<SurfaceUnresolvedType> { unresolved ->
             result = result && unresolved.name !in aliasNames && unresolved.parameters.orEmpty().all { noAliasDependency(it, aliasNames) }
         }
         return result
     }
 }
+
+private val FoxUnitType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit)
+private val FoxIntType = SurfacePrimitiveType(PrimitiveTypeEnum.Int)
+private val FoxFloatType = SurfacePrimitiveType(PrimitiveTypeEnum.Float)

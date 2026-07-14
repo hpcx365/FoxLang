@@ -1,51 +1,51 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 
 sealed interface DuplicateItemCheckResult
 data object DuplicateItemCheckSuccess : DuplicateItemCheckResult
 data class DuplicateItemCheckFailure(val errors: List<DuplicateItemCheckError>) : DuplicateItemCheckResult
 
 sealed interface DuplicateItemCheckError
-data class DuplicateTypeAliasGeneric(val typeAlias: ParsedFoxTypeAlias, val generic: ParsedString) : DuplicateItemCheckError
-data class DuplicateMethodGeneric(val method: ParsedFoxMethodDefinition, val generic: ParsedString) : DuplicateItemCheckError
-data class DuplicateMethodParameter(val method: ParsedFoxMethodDefinition, val parameter: ParsedString) : DuplicateItemCheckError
-data class DuplicateLambdaParameter(val lambda: ParsedFoxLambda, val parameter: ParsedString) : DuplicateItemCheckError
-data class DuplicateStructField(val type: ParsedFoxStructType, val field: ParsedString) : DuplicateItemCheckError
-data class DuplicateObjectMember(val type: ParsedFoxObjectType, val member: ParsedString) : DuplicateItemCheckError
-data class DuplicateEnumEntry(val type: ParsedFoxEnumType, val entry: ParsedString) : DuplicateItemCheckError
-data class DuplicateMethodTypeParameter(val type: ParsedFoxMethodType, val parameter: ParsedString) : DuplicateItemCheckError
-data class DuplicateStructFieldSelection(val type: ParsedFoxStructSelectFieldsType, val field: ParsedString) : DuplicateItemCheckError
-data class DuplicateStructFieldExactSelection(val type: ParsedFoxStructSelectFieldsExactType, val field: ParsedString) : DuplicateItemCheckError
-data class DuplicateStructFieldDrop(val type: ParsedFoxStructDropFieldsType, val field: ParsedString) : DuplicateItemCheckError
-data class DuplicateStructFieldExactDrop(val type: ParsedFoxStructDropFieldsExactType, val field: ParsedString) : DuplicateItemCheckError
-data class DuplicateObjectMemberSelection(val type: ParsedFoxObjectSelectMembersType, val member: ParsedString) : DuplicateItemCheckError
-data class DuplicateObjectMemberExactSelection(val type: ParsedFoxObjectSelectMembersExactType, val member: ParsedString) : DuplicateItemCheckError
-data class DuplicateObjectMemberDrop(val type: ParsedFoxObjectDropMembersType, val member: ParsedString) : DuplicateItemCheckError
-data class DuplicateObjectMemberExactDrop(val type: ParsedFoxObjectDropMembersExactType, val member: ParsedString) : DuplicateItemCheckError
-data class DuplicateEnumEntrySelection(val type: ParsedFoxEnumSelectEntriesType, val entry: ParsedString) : DuplicateItemCheckError
-data class DuplicateEnumEntryExactSelection(val type: ParsedFoxEnumSelectEntriesExactType, val entry: ParsedString) : DuplicateItemCheckError
-data class DuplicateEnumEntryDrop(val type: ParsedFoxEnumDropEntriesType, val entry: ParsedString) : DuplicateItemCheckError
-data class DuplicateEnumEntryExactDrop(val type: ParsedFoxEnumDropEntriesExactType, val entry: ParsedString) : DuplicateItemCheckError
-data class DuplicateConstructParameter(val construct: ParsedFoxConstruct, val parameter: ParsedString) : DuplicateItemCheckError
-data class DuplicateCallGenericArgument(val call: ParsedFoxCall, val argument: ParsedString) : DuplicateItemCheckError
-data class DuplicateCallParameter(val call: ParsedFoxCall, val parameter: ParsedString) : DuplicateItemCheckError
-data class DuplicateIndirectCallParameter(val call: ParsedFoxIndirectCall, val parameter: ParsedString) : DuplicateItemCheckError
+data class DuplicateTypeAliasGeneric(val typeAlias: SyntaxTypeAlias, val generic: SyntaxString) : DuplicateItemCheckError
+data class DuplicateMethodGeneric(val method: SyntaxMethodDefinition, val generic: SyntaxString) : DuplicateItemCheckError
+data class DuplicateMethodParameter(val method: SyntaxMethodDefinition, val parameter: SyntaxString) : DuplicateItemCheckError
+data class DuplicateLambdaParameter(val lambda: SyntaxLambda, val parameter: SyntaxString) : DuplicateItemCheckError
+data class DuplicateStructField(val type: SyntaxStructType, val field: SyntaxString) : DuplicateItemCheckError
+data class DuplicateObjectMember(val type: SyntaxObjectType, val member: SyntaxString) : DuplicateItemCheckError
+data class DuplicateEnumEntry(val type: SyntaxEnumType, val entry: SyntaxString) : DuplicateItemCheckError
+data class DuplicateMethodTypeParameter(val type: SyntaxMethodType, val parameter: SyntaxString) : DuplicateItemCheckError
+data class DuplicateStructFieldSelection(val type: SyntaxStructSelectFieldsType, val field: SyntaxString) : DuplicateItemCheckError
+data class DuplicateStructFieldExactSelection(val type: SyntaxStructSelectFieldsExactType, val field: SyntaxString) : DuplicateItemCheckError
+data class DuplicateStructFieldDrop(val type: SyntaxStructDropFieldsType, val field: SyntaxString) : DuplicateItemCheckError
+data class DuplicateStructFieldExactDrop(val type: SyntaxStructDropFieldsExactType, val field: SyntaxString) : DuplicateItemCheckError
+data class DuplicateObjectMemberSelection(val type: SyntaxObjectSelectMembersType, val member: SyntaxString) : DuplicateItemCheckError
+data class DuplicateObjectMemberExactSelection(val type: SyntaxObjectSelectMembersExactType, val member: SyntaxString) : DuplicateItemCheckError
+data class DuplicateObjectMemberDrop(val type: SyntaxObjectDropMembersType, val member: SyntaxString) : DuplicateItemCheckError
+data class DuplicateObjectMemberExactDrop(val type: SyntaxObjectDropMembersExactType, val member: SyntaxString) : DuplicateItemCheckError
+data class DuplicateEnumEntrySelection(val type: SyntaxEnumSelectEntriesType, val entry: SyntaxString) : DuplicateItemCheckError
+data class DuplicateEnumEntryExactSelection(val type: SyntaxEnumSelectEntriesExactType, val entry: SyntaxString) : DuplicateItemCheckError
+data class DuplicateEnumEntryDrop(val type: SyntaxEnumDropEntriesType, val entry: SyntaxString) : DuplicateItemCheckError
+data class DuplicateEnumEntryExactDrop(val type: SyntaxEnumDropEntriesExactType, val entry: SyntaxString) : DuplicateItemCheckError
+data class DuplicateConstructParameter(val construct: SyntaxConstruct, val parameter: SyntaxString) : DuplicateItemCheckError
+data class DuplicateCallGenericArgument(val call: SyntaxCall, val argument: SyntaxString) : DuplicateItemCheckError
+data class DuplicateCallParameter(val call: SyntaxCall, val parameter: SyntaxString) : DuplicateItemCheckError
+data class DuplicateIndirectCallParameter(val call: SyntaxIndirectCall, val parameter: SyntaxString) : DuplicateItemCheckError
 
-fun runDuplicateItemCheck(file: ParsedFoxFile) = DuplicateItemCheckContext().run(file)
+fun runDuplicateItemCheck(file: SyntaxFile) = DuplicateItemCheckContext().run(file)
 
 private class DuplicateItemCheckContext {
     
     private val errors = mutableListOf<DuplicateItemCheckError>()
     
-    fun run(file: ParsedFoxFile): DuplicateItemCheckResult {
+    fun run(file: SyntaxFile): DuplicateItemCheckResult {
         file.elements.forEach { element ->
             when (element) {
-                is ParsedFoxTypeAlias -> {
+                is SyntaxTypeAlias -> {
                     checkDuplicates(element.generics?.node.orEmpty()) { DuplicateTypeAliasGeneric(element, it) }
                     visitType(element.alias)
                 }
-                is ParsedFoxMethodDefinition -> {
+                is SyntaxMethodDefinition -> {
                     checkDuplicates(element.generics?.node?.map { it.node.first }.orEmpty()) {
                         DuplicateMethodGeneric(element, it)
                     }
@@ -65,7 +65,7 @@ private class DuplicateItemCheckContext {
         return DuplicateItemCheckSuccess
     }
     
-    private fun checkDuplicates(items: Iterable<ParsedString>, error: (ParsedString) -> DuplicateItemCheckError) {
+    private fun checkDuplicates(items: Iterable<SyntaxString>, error: (SyntaxString) -> DuplicateItemCheckError) {
         val seen = mutableSetOf<String>()
         items.forEach { item ->
             if (!seen.add(item.node)) errors += error(item)
@@ -73,41 +73,41 @@ private class DuplicateItemCheckContext {
     }
     
     private fun checkNamedDuplicates(
-        items: Iterable<ParsedPair<ParsedString?, *>>,
-        error: (ParsedString) -> DuplicateItemCheckError,
+        items: Iterable<SyntaxPair<SyntaxString?, *>>,
+        error: (SyntaxString) -> DuplicateItemCheckError,
     ) {
         checkDuplicates(items.mapNotNull { it.node.first }, error)
     }
     
-    private fun visitType(type: ParsedFoxType<*>) {
+    private fun visitType(type: SyntaxType<*>) {
         when (type) {
-            is ParsedFoxPrimitiveType -> {}
-            is ParsedFoxAnyType -> {}
-            is ParsedFoxAnyOfType -> type.types.forEach(::visitType)
-            is ParsedFoxAllOfType -> type.types.forEach(::visitType)
-            is ParsedFoxNoneOfType -> type.types.forEach(::visitType)
-            is ParsedFoxAnyTupleType -> {}
-            is ParsedFoxAnyTupleOfType -> visitType(type.component)
-            is ParsedFoxAnyStructType -> {}
-            is ParsedFoxAnyStructOfType -> type.fields.node.forEach(::visitType)
-            is ParsedFoxAnyObjectType -> {}
-            is ParsedFoxAnyEnumType -> {}
-            is ParsedFoxTupleType -> type.components.node.forEach(::visitType)
-            is ParsedFoxStructType -> {
+            is SyntaxPrimitiveType -> {}
+            is SyntaxAnyType -> {}
+            is SyntaxAnyOfType -> type.types.forEach(::visitType)
+            is SyntaxAllOfType -> type.types.forEach(::visitType)
+            is SyntaxNoneOfType -> type.types.forEach(::visitType)
+            is SyntaxAnyTupleType -> {}
+            is SyntaxAnyTupleOfType -> visitType(type.component)
+            is SyntaxAnyStructType -> {}
+            is SyntaxAnyStructOfType -> type.fields.node.forEach(::visitType)
+            is SyntaxAnyObjectType -> {}
+            is SyntaxAnyEnumType -> {}
+            is SyntaxTupleType -> type.components.node.forEach(::visitType)
+            is SyntaxStructType -> {
                 checkDuplicates(type.fields.node.map { it.node.first }) { DuplicateStructField(type, it) }
                 type.fields.node.forEach { visitType(it.node.second) }
             }
-            is ParsedFoxObjectType -> {
+            is SyntaxObjectType -> {
                 checkDuplicates(type.members.node.map { it.node.first }) { DuplicateObjectMember(type, it) }
                 type.members.node.forEach { visitType(it.node.second) }
             }
-            is ParsedFoxEnumType -> {
+            is SyntaxEnumType -> {
                 checkDuplicates(type.entries.node.map { it.node.first }) { DuplicateEnumEntry(type, it) }
                 type.entries.node.forEach { visitType(it.node.second) }
             }
-            is ParsedFoxArrayType -> visitType(type.element)
-            is ParsedFoxRefType -> visitType(type.referent)
-            is ParsedFoxMethodType -> {
+            is SyntaxArrayType -> visitType(type.element)
+            is SyntaxRefType -> visitType(type.referent)
+            is SyntaxMethodType -> {
                 checkDuplicates(type.parameters?.node?.map { it.node.first }.orEmpty()) {
                     DuplicateMethodTypeParameter(type, it)
                 }
@@ -115,170 +115,170 @@ private class DuplicateItemCheckContext {
                 type.parameters?.node?.forEach { visitType(it.node.second) }
                 type.`return`?.node?.second?.let(::visitType)
             }
-            is ParsedFoxTupleGetComponentType -> visitType(type.type)
-            is ParsedFoxTupleGetComponentBackType -> visitType(type.type)
-            is ParsedFoxTupleGetFirstComponentsType -> visitType(type.type)
-            is ParsedFoxTupleGetFirstComponentsExactType -> visitType(type.type)
-            is ParsedFoxTupleGetLastComponentsType -> visitType(type.type)
-            is ParsedFoxTupleGetLastComponentsExactType -> visitType(type.type)
-            is ParsedFoxTupleDropFirstComponentsType -> visitType(type.type)
-            is ParsedFoxTupleDropFirstComponentsExactType -> visitType(type.type)
-            is ParsedFoxTupleDropLastComponentsType -> visitType(type.type)
-            is ParsedFoxTupleDropLastComponentsExactType -> visitType(type.type)
-            is ParsedFoxTupleMergeTuplesType -> type.types.node.forEach(::visitType)
-            is ParsedFoxStructGetFieldTypeByNameType -> visitType(type.type)
-            is ParsedFoxStructGetFieldTypeByIndexType -> visitType(type.type)
-            is ParsedFoxStructGetFieldTypeByIndexBackType -> visitType(type.type)
-            is ParsedFoxStructGetFirstFieldsType -> visitType(type.type)
-            is ParsedFoxStructGetFirstFieldsExactType -> visitType(type.type)
-            is ParsedFoxStructGetLastFieldsType -> visitType(type.type)
-            is ParsedFoxStructGetLastFieldsExactType -> visitType(type.type)
-            is ParsedFoxStructDropFirstFieldsType -> visitType(type.type)
-            is ParsedFoxStructDropFirstFieldsExactType -> visitType(type.type)
-            is ParsedFoxStructDropLastFieldsType -> visitType(type.type)
-            is ParsedFoxStructDropLastFieldsExactType -> visitType(type.type)
-            is ParsedFoxStructExtractFieldTypesType -> visitType(type.type)
-            is ParsedFoxStructSelectFieldsType -> {
+            is SyntaxTupleGetComponentType -> visitType(type.type)
+            is SyntaxTupleGetComponentBackType -> visitType(type.type)
+            is SyntaxTupleGetFirstComponentsType -> visitType(type.type)
+            is SyntaxTupleGetFirstComponentsExactType -> visitType(type.type)
+            is SyntaxTupleGetLastComponentsType -> visitType(type.type)
+            is SyntaxTupleGetLastComponentsExactType -> visitType(type.type)
+            is SyntaxTupleDropFirstComponentsType -> visitType(type.type)
+            is SyntaxTupleDropFirstComponentsExactType -> visitType(type.type)
+            is SyntaxTupleDropLastComponentsType -> visitType(type.type)
+            is SyntaxTupleDropLastComponentsExactType -> visitType(type.type)
+            is SyntaxTupleMergeTuplesType -> type.types.node.forEach(::visitType)
+            is SyntaxStructGetFieldTypeByNameType -> visitType(type.type)
+            is SyntaxStructGetFieldTypeByIndexType -> visitType(type.type)
+            is SyntaxStructGetFieldTypeByIndexBackType -> visitType(type.type)
+            is SyntaxStructGetFirstFieldsType -> visitType(type.type)
+            is SyntaxStructGetFirstFieldsExactType -> visitType(type.type)
+            is SyntaxStructGetLastFieldsType -> visitType(type.type)
+            is SyntaxStructGetLastFieldsExactType -> visitType(type.type)
+            is SyntaxStructDropFirstFieldsType -> visitType(type.type)
+            is SyntaxStructDropFirstFieldsExactType -> visitType(type.type)
+            is SyntaxStructDropLastFieldsType -> visitType(type.type)
+            is SyntaxStructDropLastFieldsExactType -> visitType(type.type)
+            is SyntaxStructExtractFieldTypesType -> visitType(type.type)
+            is SyntaxStructSelectFieldsType -> {
                 checkDuplicates(type.names.node) { DuplicateStructFieldSelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxStructSelectFieldsExactType -> {
+            is SyntaxStructSelectFieldsExactType -> {
                 checkDuplicates(type.names.node) { DuplicateStructFieldExactSelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxStructDropFieldsType -> {
+            is SyntaxStructDropFieldsType -> {
                 checkDuplicates(type.names.node) { DuplicateStructFieldDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxStructDropFieldsExactType -> {
+            is SyntaxStructDropFieldsExactType -> {
                 checkDuplicates(type.names.node) { DuplicateStructFieldExactDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxStructMergeStructsType -> type.types.node.forEach(::visitType)
-            is ParsedFoxObjectGetMemberTypeType -> visitType(type.type)
-            is ParsedFoxObjectSelectMembersType -> {
+            is SyntaxStructMergeStructsType -> type.types.node.forEach(::visitType)
+            is SyntaxObjectGetMemberTypeType -> visitType(type.type)
+            is SyntaxObjectSelectMembersType -> {
                 checkDuplicates(type.names.node) { DuplicateObjectMemberSelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxObjectSelectMembersExactType -> {
+            is SyntaxObjectSelectMembersExactType -> {
                 checkDuplicates(type.names.node) { DuplicateObjectMemberExactSelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxObjectDropMembersType -> {
+            is SyntaxObjectDropMembersType -> {
                 checkDuplicates(type.names.node) { DuplicateObjectMemberDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxObjectDropMembersExactType -> {
+            is SyntaxObjectDropMembersExactType -> {
                 checkDuplicates(type.names.node) { DuplicateObjectMemberExactDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxObjectMergeObjectsType -> type.types.node.forEach(::visitType)
-            is ParsedFoxEnumGetEntryTypeType -> visitType(type.type)
-            is ParsedFoxEnumSelectEntriesType -> {
+            is SyntaxObjectMergeObjectsType -> type.types.node.forEach(::visitType)
+            is SyntaxEnumGetEntryTypeType -> visitType(type.type)
+            is SyntaxEnumSelectEntriesType -> {
                 checkDuplicates(type.names.node) { DuplicateEnumEntrySelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxEnumSelectEntriesExactType -> {
+            is SyntaxEnumSelectEntriesExactType -> {
                 checkDuplicates(type.names.node) { DuplicateEnumEntryExactSelection(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxEnumDropEntriesType -> {
+            is SyntaxEnumDropEntriesType -> {
                 checkDuplicates(type.names.node) { DuplicateEnumEntryDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxEnumDropEntriesExactType -> {
+            is SyntaxEnumDropEntriesExactType -> {
                 checkDuplicates(type.names.node) { DuplicateEnumEntryExactDrop(type, it) }
                 visitType(type.type)
             }
-            is ParsedFoxEnumMergeEnumsType -> type.types.node.forEach(::visitType)
-            is ParsedFoxArrayGetElementTypeType -> visitType(type.type)
-            is ParsedFoxRefGetReferentTypeType -> visitType(type.type)
-            is ParsedFoxMethodGetThisTypeType -> visitType(type.type)
-            is ParsedFoxMethodGetParameterStructType -> visitType(type.type)
-            is ParsedFoxMethodGetReturnTypeType -> visitType(type.type)
-            is ParsedFoxMethodOfType -> {
+            is SyntaxEnumMergeEnumsType -> type.types.node.forEach(::visitType)
+            is SyntaxArrayGetElementTypeType -> visitType(type.type)
+            is SyntaxRefGetReferentTypeType -> visitType(type.type)
+            is SyntaxMethodGetThisTypeType -> visitType(type.type)
+            is SyntaxMethodGetParameterStructType -> visitType(type.type)
+            is SyntaxMethodGetReturnTypeType -> visitType(type.type)
+            is SyntaxMethodOfType -> {
                 visitType(type.`this`)
                 visitType(type.parameters)
                 visitType(type.`return`)
             }
-            is ParsedFoxUnresolvedType -> type.parameters?.node?.forEach(::visitType)
+            is SyntaxUnresolvedType -> type.parameters?.node?.forEach(::visitType)
         }
     }
     
-    private fun visitStatement(statement: ParsedFoxStatement<*>) {
+    private fun visitStatement(statement: SyntaxStatement<*>) {
         when (statement) {
-            is ParsedFoxThis -> {}
-            is ParsedFoxUnresolvedSymbol -> {}
-            is ParsedFoxEntityStatement -> {}
-            is ParsedFoxIntStatement -> {}
-            is ParsedFoxLongStatement -> {}
-            is ParsedFoxFloatStatement -> {}
-            is ParsedFoxDoubleStatement -> {}
-            is ParsedFoxBreak -> {}
-            is ParsedFoxContinue -> {}
-            is ParsedFoxYield -> visitStatement(statement.value)
-            is ParsedFoxReturn -> statement.value?.let(::visitStatement)
-            is ParsedFoxUnary -> visitStatement(statement.right)
-            is ParsedFoxBinary -> {
+            is SyntaxThis -> {}
+            is SyntaxUnresolvedSymbol -> {}
+            is SyntaxEntityStatement -> {}
+            is SyntaxIntStatement -> {}
+            is SyntaxLongStatement -> {}
+            is SyntaxFloatStatement -> {}
+            is SyntaxDoubleStatement -> {}
+            is SyntaxBreak -> {}
+            is SyntaxContinue -> {}
+            is SyntaxYield -> visitStatement(statement.value)
+            is SyntaxReturn -> statement.value?.let(::visitStatement)
+            is SyntaxUnary -> visitStatement(statement.right)
+            is SyntaxBinary -> {
                 visitStatement(statement.left)
                 visitStatement(statement.right)
             }
-            is ParsedFoxTypeBinding -> visitType(statement.type)
-            is ParsedFoxAssign -> {
+            is SyntaxTypeBinding -> visitType(statement.type)
+            is SyntaxAssign -> {
                 visitStatement(statement.left)
                 visitStatement(statement.right)
             }
-            is ParsedFoxFieldAccess -> visitStatement(statement.target)
-            is ParsedFoxIndexAccess -> {
+            is SyntaxFieldAccess -> visitStatement(statement.target)
+            is SyntaxIndexAccess -> {
                 visitStatement(statement.target)
                 statement.indices.node.forEach(::visitStatement)
             }
-            is ParsedFoxFormattedString -> statement.parts?.node?.forEach { part ->
+            is SyntaxFormattedString -> statement.parts?.node?.forEach { part ->
                 when (part) {
-                    is ParsedFoxFormattedText -> {}
-                    is ParsedFoxFormattedExpression -> visitStatement(part.expression)
+                    is SyntaxFormattedText -> {}
+                    is SyntaxFormattedExpression -> visitStatement(part.expression)
                 }
             }
-            is ParsedFoxConstruct -> {
+            is SyntaxConstruct -> {
                 checkNamedDuplicates(statement.parameters.node) { DuplicateConstructParameter(statement, it) }
                 visitType(statement.type)
                 statement.parameters.node.forEach { visitStatement(it.node.second) }
             }
-            is ParsedFoxCall -> {
+            is SyntaxCall -> {
                 checkNamedDuplicates(statement.generics?.node.orEmpty()) { DuplicateCallGenericArgument(statement, it) }
                 checkNamedDuplicates(statement.parameters.node) { DuplicateCallParameter(statement, it) }
                 statement.target?.let(::visitStatement)
                 statement.generics?.node?.forEach { visitType(it.node.second) }
                 statement.parameters.node.forEach { visitStatement(it.node.second) }
             }
-            is ParsedFoxIndirectCall -> {
+            is SyntaxIndirectCall -> {
                 checkNamedDuplicates(statement.parameters.node) { DuplicateIndirectCallParameter(statement, it) }
                 statement.target?.let(::visitStatement)
                 visitStatement(statement.method)
                 statement.parameters.node.forEach { visitStatement(it.node.second) }
             }
-            is ParsedFoxBlock -> statement.statements.node.forEach(::visitStatement)
-            is ParsedFoxIf -> {
+            is SyntaxBlock -> statement.statements.node.forEach(::visitStatement)
+            is SyntaxIf -> {
                 visitStatement(statement.condition)
                 visitStatement(statement.thenBody)
                 statement.elseBody?.let(::visitStatement)
             }
-            is ParsedFoxWhen -> {
+            is SyntaxWhen -> {
                 statement.value?.let(::visitStatement)
                 statement.cases.node.forEach { case ->
                     case.conditions?.node?.forEach(::visitStatement)
                     visitStatement(case.body)
                 }
             }
-            is ParsedFoxWhile -> {
+            is SyntaxWhile -> {
                 visitStatement(statement.condition)
                 visitStatement(statement.body)
             }
-            is ParsedFoxDoWhile -> {
+            is SyntaxDoWhile -> {
                 visitStatement(statement.body)
                 visitStatement(statement.condition)
             }
-            is ParsedFoxLambda -> {
+            is SyntaxLambda -> {
                 checkDuplicates(statement.parameters?.node?.map { it.node.first }.orEmpty()) {
                     DuplicateLambdaParameter(statement, it)
                 }

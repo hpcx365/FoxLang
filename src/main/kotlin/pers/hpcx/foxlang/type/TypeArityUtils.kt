@@ -1,14 +1,14 @@
 package pers.hpcx.foxlang.type
 
-import pers.hpcx.foxlang.ast.FoxEnumType
-import pers.hpcx.foxlang.ast.FoxObjectType
-import pers.hpcx.foxlang.ast.FoxStructType
-import pers.hpcx.foxlang.ast.FoxTupleType
+import pers.hpcx.foxlang.ir.SurfaceEnumType
+import pers.hpcx.foxlang.ir.SurfaceObjectType
+import pers.hpcx.foxlang.ir.SurfaceStructType
+import pers.hpcx.foxlang.ir.SurfaceTupleType
 
-val FoxTupleType.arity get() = components.size
-val FoxStructType.arity get() = fields.size
-val FoxObjectType.arity get() = members.size
-val FoxEnumType.arity get() = entries.size
+val SurfaceTupleType.arity get() = components.size
+val SurfaceStructType.arity get() = fields.size
+val SurfaceObjectType.arity get() = members.size
+val SurfaceEnumType.arity get() = entries.size
 
 val INFINITY_ARITY_BOUNDS = ArityBounds(0, Int.MAX_VALUE)
 fun fixedArityBounds(arity: Int) = ArityBounds(arity, arity)
@@ -37,7 +37,7 @@ fun arityBoundsOf(space: TypeSpace): ArityBounds? = when (space) {
     is GeneralTypeSpace -> when (space) {
         is EmptyTypeSpace -> null
         is UniversalTypeSpace -> INFINITY_ARITY_BOUNDS
-        is SingleTypeSpace -> (space.single as? FoxTupleType)?.let { fixedArityBounds(it.arity) }
+        is SingleTypeSpace -> (space.single as? SurfaceTupleType)?.let { fixedArityBounds(it.arity) }
         is IntersectTypeSpace -> {
             val bounds = space.parts.map { arityBoundsOf(it) ?: return null }
             val min = bounds.maxOf { it.min }

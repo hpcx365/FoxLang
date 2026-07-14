@@ -1,25 +1,25 @@
 package pers.hpcx.foxlang.type
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.utils.mapValues
 import pers.hpcx.foxlang.utils.toOrderedMap
 import kotlin.math.min
 
-typealias TypeAssignments = Map<String, FoxType>
-typealias TypeConstraints = Map<String, FoxType>
+typealias TypeAssignments = Map<String, SurfaceType>
+typealias TypeConstraints = Map<String, SurfaceType>
 
 fun TypeAssignments.satisfies(constraints: TypeConstraints): Boolean {
     val compiled = ConstraintCompileContext(this).compile(constraints)
     return entries.all { (name, type) -> type.satisfies(compiled.getValue(name)) }
 }
 
-private fun FoxType.satisfies(constraint: ConstraintCompileResult) = when (constraint) {
+private fun SurfaceType.satisfies(constraint: ConstraintCompileResult) = when (constraint) {
     is ConcreteConstraint -> this == constraint.type
     is SpaceConstraint -> this in constraint.space
 }
 
 private sealed interface ConstraintCompileResult
-private data class ConcreteConstraint(val type: FoxType) : ConstraintCompileResult
+private data class ConcreteConstraint(val type: SurfaceType) : ConstraintCompileResult
 private data class SpaceConstraint(val space: TypeSpace) : ConstraintCompileResult
 
 private val EmptySpaceConstraint = SpaceConstraint(emptyTypeSpace())
@@ -30,17 +30,17 @@ private class ConstraintCompileContext(
     
     fun compile(constraints: TypeConstraints) = constraints.mapValues { compile(it.value) }
     
-    private fun compile(type: FoxType): ConstraintCompileResult = when (type) {
-        is FoxPrimitiveType -> ConcreteConstraint(type)
-        is FoxBuiltInType -> compileBuiltInType(type)
-        is FoxWildcardType -> compileWildcardType(type)
-        is FoxTransformType -> compileTransformType(type)
-        is FoxUnresolvedType -> ConcreteConstraint(assignments.getValue(type.name)).also { check(type.parameters == null) }
-        is FoxPlaceholderType -> error("unreachable")
+    private fun compile(type: SurfaceType): ConstraintCompileResult = when (type) {
+        is SurfacePrimitiveType -> ConcreteConstraint(type)
+        is SurfaceBuiltInType -> compileBuiltInType(type)
+        is SurfaceWildcardType -> compileWildcardType(type)
+        is SurfaceTransformType -> compileTransformType(type)
+        is SurfaceUnresolvedType -> ConcreteConstraint(assignments.getValue(type.name)).also { check(type.parameters == null) }
+        is SurfacePlaceholderType -> error("unreachable")
     }
     
-    private fun compileBuiltInType(type: FoxBuiltInType): ConstraintCompileResult = when (type) {
-        is FoxTupleType -> {
+    private fun compileBuiltInType(type: SurfaceBuiltInType): ConstraintCompileResult = when (type) {
+        is SurfaceTupleType -> {
             val results = type.components.map { compile(it) }
             if (results.all { it is ConcreteConstraint }) {
                 ConcreteConstraint(results.map { (it as ConcreteConstraint).type }.toFoxTupleType())
@@ -49,7 +49,7 @@ private class ConstraintCompileContext(
                 SpaceConstraint(tuplePatternSpace(spaces))
             }
         }
-        is FoxStructType -> {
+        is SurfaceStructType -> {
             val results = type.fields.map { it.key to compile(it.value) }
             if (results.all { it.second is ConcreteConstraint }) {
                 ConcreteConstraint(results.map { it.first to (it.second as ConcreteConstraint).type }.toFoxStructType())
@@ -58,7 +58,7 @@ private class ConstraintCompileContext(
                 SpaceConstraint(structFieldPatternSpace(spaces))
             }
         }
-        is FoxObjectType -> {
+        is SurfaceObjectType -> {
             val results = type.members.map { it.key to compile(it.value) }
             if (results.all { it.second is ConcreteConstraint }) {
                 ConcreteConstraint(results.map { it.first to (it.second as ConcreteConstraint).type }.toFoxObjectType())
@@ -67,7 +67,7 @@ private class ConstraintCompileContext(
                 SpaceConstraint(objectPatternSpace(spaces))
             }
         }
-        is FoxEnumType -> {
+        is SurfaceEnumType -> {
             val results = type.entries.map { it.key to compile(it.value) }
             if (results.all { it.second is ConcreteConstraint }) {
                 ConcreteConstraint(results.map { it.first to (it.second as ConcreteConstraint).type }.toFoxEnumType())
@@ -76,15 +76,15 @@ private class ConstraintCompileContext(
                 SpaceConstraint(enumPatternSpace(spaces))
             }
         }
-        is FoxArrayType -> when (val result = compile(type.element)) {
-            is ConcreteConstraint -> ConcreteConstraint(FoxArrayType(result.type))
+        is SurfaceArrayType -> when (val result = compile(type.element)) {
+            is ConcreteConstraint -> ConcreteConstraint(SurfaceArrayType(result.type))
             is SpaceConstraint -> SpaceConstraint(arrayPatternSpace(result.space))
         }
-        is FoxRefType -> when (val result = compile(type.referent)) {
-            is ConcreteConstraint -> ConcreteConstraint(FoxRefType(result.type))
+        is SurfaceRefType -> when (val result = compile(type.referent)) {
+            is ConcreteConstraint -> ConcreteConstraint(SurfaceRefType(result.type))
             is SpaceConstraint -> SpaceConstraint(refPatternSpace(result.space))
         }
-        is FoxMethodType -> {
+        is SurfaceMethodType -> {
             val thisResult = compile(type.`this`)
             val parameterResults = type.parameters.mapValues { compile(it.value) }
             val returnResult = compile(type.`return`)
@@ -94,7 +94,7 @@ private class ConstraintCompileContext(
                 returnResult is ConcreteConstraint
             ) {
                 ConcreteConstraint(
-                    FoxMethodType(
+                    SurfaceMethodType(
                         thisResult.type,
                         parameterResults.map { it.key to (it.value as ConcreteConstraint).type }.toOrderedMap(),
                         returnResult.type,
@@ -111,62 +111,62 @@ private class ConstraintCompileContext(
         }
     }
     
-    private fun compileWildcardType(type: FoxWildcardType): ConstraintCompileResult = when (type) {
-        FoxAnyType -> universalTypeSpace()
-        is FoxAnyOfType -> union(type.types.map { compile(it).toSpace() })
-        is FoxAllOfType -> intersect(type.types.map { compile(it).toSpace() })
-        is FoxNoneOfType -> union(type.types.map { compile(it).toSpace() }).complement()
-        FoxAnyTupleType -> tupleSpace()
-        is FoxAnyTupleOfType -> tupleRepeatSpace(compile(type.component).toSpace())
-        FoxAnyStructType -> structSpace()
-        is FoxAnyStructOfType -> structPatternSpace(type.fields.map { compile(it).toSpace() })
-        FoxAnyObjectType -> objectSpace()
-        FoxAnyEnumType -> enumSpace()
+    private fun compileWildcardType(type: SurfaceWildcardType): ConstraintCompileResult = when (type) {
+        is SurfaceAnyType -> universalTypeSpace()
+        is SurfaceAnyTupleType -> tupleSpace()
+        is SurfaceAnyStructType -> structSpace()
+        is SurfaceAnyObjectType -> objectSpace()
+        is SurfaceAnyEnumType -> enumSpace()
+        is SurfaceAnyOfType -> union(type.types.map { compile(it).toSpace() })
+        is SurfaceAllOfType -> intersect(type.types.map { compile(it).toSpace() })
+        is SurfaceNoneOfType -> union(type.types.map { compile(it).toSpace() }).complement()
+        is SurfaceAnyTupleOfType -> tupleRepeatSpace(compile(type.component).toSpace())
+        is SurfaceAnyStructOfType -> structPatternSpace(type.fields.map { compile(it).toSpace() })
     }.let { SpaceConstraint(it) }
     
-    private fun compileTransformType(type: FoxTransformType): ConstraintCompileResult = when (type) {
-        is FoxTupleGetComponentType -> compileProjection<FoxTupleType>(type.type) {
+    private fun compileTransformType(type: SurfaceTransformType): ConstraintCompileResult = when (type) {
+        is SurfaceTupleGetComponentType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.index !in 0..<it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getComponent(type.index))
         }
-        is FoxTupleGetComponentBackType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleGetComponentBackType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.index !in 0..<it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getComponentBack(type.index))
         }
-        is FoxTupleGetFirstComponentsType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleGetFirstComponentsType -> compileProjection<SurfaceTupleType>(type.type) {
             ConcreteConstraint(it.getFirstComponents(min(type.count, it.arity)))
         }
-        is FoxTupleGetFirstComponentsExactType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleGetFirstComponentsExactType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getFirstComponents(type.count))
         }
-        is FoxTupleGetLastComponentsType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleGetLastComponentsType -> compileProjection<SurfaceTupleType>(type.type) {
             ConcreteConstraint(it.getLastComponents(min(type.count, it.arity)))
         }
-        is FoxTupleGetLastComponentsExactType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleGetLastComponentsExactType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getLastComponents(type.count))
         }
-        is FoxTupleDropFirstComponentsType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleDropFirstComponentsType -> compileProjection<SurfaceTupleType>(type.type) {
             ConcreteConstraint(it.dropFirstComponents(min(type.count, it.arity)))
         }
-        is FoxTupleDropFirstComponentsExactType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleDropFirstComponentsExactType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.dropFirstComponents(type.count))
         }
-        is FoxTupleDropLastComponentsType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleDropLastComponentsType -> compileProjection<SurfaceTupleType>(type.type) {
             ConcreteConstraint(it.dropLastComponents(min(type.count, it.arity)))
         }
-        is FoxTupleDropLastComponentsExactType -> compileProjection<FoxTupleType>(type.type) {
+        is SurfaceTupleDropLastComponentsExactType -> compileProjection<SurfaceTupleType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.dropLastComponents(type.count))
         }
-        is FoxTupleMergeTuplesType -> {
+        is SurfaceTupleMergeTuplesType -> {
             val results = type.types.map { compile(it) }
             if (results.all { it is ConcreteConstraint }) {
                 val resultTypes = results.map { (it as ConcreteConstraint).type }
-                if (resultTypes.all { it is FoxTupleType }) {
-                    val components = resultTypes.flatMap { (it as FoxTupleType).components }
+                if (resultTypes.all { it is SurfaceTupleType }) {
+                    val components = resultTypes.flatMap { (it as SurfaceTupleType).components }
                     ConcreteConstraint(components.toFoxTupleType())
                 } else EmptySpaceConstraint
             } else {
@@ -175,69 +175,69 @@ private class ConstraintCompileContext(
             }
         }
         
-        is FoxStructGetFieldTypeByNameType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetFieldTypeByNameType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.name !in it.fields) EmptySpaceConstraint
             else ConcreteConstraint(it.getFieldTypeByName(type.name))
         }
-        is FoxStructGetFieldTypeByIndexType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetFieldTypeByIndexType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.index !in 0..<it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getFieldTypeByIndex(type.index).value)
         }
-        is FoxStructGetFieldTypeByIndexBackType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetFieldTypeByIndexBackType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.index !in 0..<it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getFieldTypeByIndexBack(type.index).value)
         }
-        is FoxStructGetFirstFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetFirstFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.getFirstFields(min(type.count, it.arity)))
         }
-        is FoxStructGetFirstFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetFirstFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getFirstFields(type.count))
         }
-        is FoxStructGetLastFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetLastFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.getLastFields(min(type.count, it.arity)))
         }
-        is FoxStructGetLastFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructGetLastFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.getLastFields(type.count))
         }
-        is FoxStructDropFirstFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropFirstFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.dropFirstFields(min(type.count, it.arity)))
         }
-        is FoxStructDropFirstFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropFirstFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.dropFirstFields(type.count))
         }
-        is FoxStructDropLastFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropLastFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.dropLastFields(min(type.count, it.arity)))
         }
-        is FoxStructDropLastFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropLastFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (type.count !in 0..it.arity) EmptySpaceConstraint
             else ConcreteConstraint(it.dropLastFields(type.count))
         }
-        is FoxStructSelectFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructSelectFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.selectFields(type.names))
         }
-        is FoxStructSelectFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructSelectFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (!type.names.all(it.fields::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.selectFields(type.names))
         }
-        is FoxStructDropFieldsType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropFieldsType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.dropFields(type.names))
         }
-        is FoxStructDropFieldsExactType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructDropFieldsExactType -> compileProjection<SurfaceStructType>(type.type) {
             if (!type.names.all(it.fields::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.dropFields(type.names))
         }
-        is FoxStructExtractFieldTypesType -> compileProjection<FoxStructType>(type.type) {
+        is SurfaceStructExtractFieldTypesType -> compileProjection<SurfaceStructType>(type.type) {
             ConcreteConstraint(it.extractFieldTypes())
         }
-        is FoxStructMergeStructsType -> {
+        is SurfaceStructMergeStructsType -> {
             val results = type.types.map { compile(it) }
             if (results.all { it is ConcreteConstraint }) {
                 val resultTypes = results.map { (it as ConcreteConstraint).type }
-                if (resultTypes.all { it is FoxStructType }) {
-                    val fields = resultTypes.flatMap { (it as FoxStructType).fields.entries }.map { it.key to it.value }
+                if (resultTypes.all { it is SurfaceStructType }) {
+                    val fields = resultTypes.flatMap { (it as SurfaceStructType).fields.entries }.map { it.key to it.value }
                     ConcreteConstraint(fields.toFoxStructType())
                 } else EmptySpaceConstraint
             } else {
@@ -246,30 +246,30 @@ private class ConstraintCompileContext(
             }
         }
         
-        is FoxObjectGetMemberTypeType -> compileProjection<FoxObjectType>(type.type) {
+        is SurfaceObjectGetMemberTypeType -> compileProjection<SurfaceObjectType>(type.type) {
             if (type.name !in it.members) EmptySpaceConstraint
             else ConcreteConstraint(it.getMemberType(type.name))
         }
-        is FoxObjectSelectMembersType -> compileProjection<FoxObjectType>(type.type) {
+        is SurfaceObjectSelectMembersType -> compileProjection<SurfaceObjectType>(type.type) {
             ConcreteConstraint(it.selectMembers(type.names))
         }
-        is FoxObjectSelectMembersExactType -> compileProjection<FoxObjectType>(type.type) {
+        is SurfaceObjectSelectMembersExactType -> compileProjection<SurfaceObjectType>(type.type) {
             if (!type.names.all(it.members::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.selectMembers(type.names))
         }
-        is FoxObjectDropMembersType -> compileProjection<FoxObjectType>(type.type) {
+        is SurfaceObjectDropMembersType -> compileProjection<SurfaceObjectType>(type.type) {
             ConcreteConstraint(it.dropMembers(type.names))
         }
-        is FoxObjectDropMembersExactType -> compileProjection<FoxObjectType>(type.type) {
+        is SurfaceObjectDropMembersExactType -> compileProjection<SurfaceObjectType>(type.type) {
             if (!type.names.all(it.members::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.dropMembers(type.names))
         }
-        is FoxObjectMergeObjectsType -> {
+        is SurfaceObjectMergeObjectsType -> {
             val results = type.types.map { compile(it) }
             if (results.all { it is ConcreteConstraint }) {
                 val resultTypes = results.map { (it as ConcreteConstraint).type }
-                if (resultTypes.all { it is FoxObjectType }) {
-                    val members = resultTypes.flatMap { (it as FoxObjectType).members.entries }.map { it.key to it.value }
+                if (resultTypes.all { it is SurfaceObjectType }) {
+                    val members = resultTypes.flatMap { (it as SurfaceObjectType).members.entries }.map { it.key to it.value }
                     ConcreteConstraint(members.toFoxObjectType())
                 } else EmptySpaceConstraint
             } else {
@@ -278,30 +278,30 @@ private class ConstraintCompileContext(
             }
         }
         
-        is FoxEnumGetEntryTypeType -> compileProjection<FoxEnumType>(type.type) {
+        is SurfaceEnumGetEntryTypeType -> compileProjection<SurfaceEnumType>(type.type) {
             if (type.name !in it.entries) EmptySpaceConstraint
             else ConcreteConstraint(it.getEntryType(type.name))
         }
-        is FoxEnumSelectEntriesType -> compileProjection<FoxEnumType>(type.type) {
+        is SurfaceEnumSelectEntriesType -> compileProjection<SurfaceEnumType>(type.type) {
             ConcreteConstraint(it.selectEntries(type.names))
         }
-        is FoxEnumSelectEntriesExactType -> compileProjection<FoxEnumType>(type.type) {
+        is SurfaceEnumSelectEntriesExactType -> compileProjection<SurfaceEnumType>(type.type) {
             if (!type.names.all(it.entries::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.selectEntries(type.names))
         }
-        is FoxEnumDropEntriesType -> compileProjection<FoxEnumType>(type.type) {
+        is SurfaceEnumDropEntriesType -> compileProjection<SurfaceEnumType>(type.type) {
             ConcreteConstraint(it.dropEntries(type.names))
         }
-        is FoxEnumDropEntriesExactType -> compileProjection<FoxEnumType>(type.type) {
+        is SurfaceEnumDropEntriesExactType -> compileProjection<SurfaceEnumType>(type.type) {
             if (!type.names.all(it.entries::contains)) EmptySpaceConstraint
             else ConcreteConstraint(it.dropEntries(type.names))
         }
-        is FoxEnumMergeEnumsType -> {
+        is SurfaceEnumMergeEnumsType -> {
             val results = type.types.map { compile(it) }
             if (results.all { it is ConcreteConstraint }) {
                 val resultTypes = results.map { (it as ConcreteConstraint).type }
-                if (resultTypes.all { it is FoxEnumType }) {
-                    val entries = resultTypes.flatMap { (it as FoxEnumType).entries.entries }.map { it.key to it.value }
+                if (resultTypes.all { it is SurfaceEnumType }) {
+                    val entries = resultTypes.flatMap { (it as SurfaceEnumType).entries.entries }.map { it.key to it.value }
                     ConcreteConstraint(entries.toFoxEnumType())
                 } else EmptySpaceConstraint
             } else {
@@ -310,23 +310,23 @@ private class ConstraintCompileContext(
             }
         }
         
-        is FoxArrayGetElementTypeType -> compileProjection<FoxArrayType>(type.type) {
+        is SurfaceArrayGetElementTypeType -> compileProjection<SurfaceArrayType>(type.type) {
             ConcreteConstraint(it.element)
         }
-        is FoxRefGetReferentTypeType -> compileProjection<FoxRefType>(type.type) {
+        is SurfaceRefGetReferentTypeType -> compileProjection<SurfaceRefType>(type.type) {
             ConcreteConstraint(it.referent)
         }
         
-        is FoxMethodGetThisTypeType -> compileProjection<FoxMethodType>(type.type) {
+        is SurfaceMethodGetThisTypeType -> compileProjection<SurfaceMethodType>(type.type) {
             ConcreteConstraint(it.`this`)
         }
-        is FoxMethodGetParameterStructType -> compileProjection<FoxMethodType>(type.type) {
-            ConcreteConstraint(FoxStructType(it.parameters))
+        is SurfaceMethodGetParameterStructType -> compileProjection<SurfaceMethodType>(type.type) {
+            ConcreteConstraint(SurfaceStructType(it.parameters))
         }
-        is FoxMethodGetReturnTypeType -> compileProjection<FoxMethodType>(type.type) {
+        is SurfaceMethodGetReturnTypeType -> compileProjection<SurfaceMethodType>(type.type) {
             ConcreteConstraint(it.`return`)
         }
-        is FoxMethodOfType -> {
+        is SurfaceMethodOfType -> {
             val thisResult = compile(type.`this`)
             val parametersResult = compile(type.parameters)
             val returnResult = compile(type.`return`)
@@ -336,8 +336,8 @@ private class ConstraintCompileContext(
                 returnResult is ConcreteConstraint
             ) {
                 val parameters = parametersResult.type
-                if (parameters is FoxStructType) ConcreteConstraint(
-                    FoxMethodType(
+                if (parameters is SurfaceStructType) ConcreteConstraint(
+                    SurfaceMethodType(
                         thisResult.type,
                         parameters.fields,
                         returnResult.type,
@@ -355,8 +355,8 @@ private class ConstraintCompileContext(
         }
     }
     
-    private inline fun <reified T : FoxType> compileProjection(
-        base: FoxType,
+    private inline fun <reified T : SurfaceType> compileProjection(
+        base: SurfaceType,
         factory: (T) -> ConstraintCompileResult,
     ): ConstraintCompileResult {
         val result = compile(base)

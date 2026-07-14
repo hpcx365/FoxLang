@@ -1,11 +1,11 @@
 package pers.hpcx.foxlang.pipeline
 
-import pers.hpcx.foxlang.ast.FoxFile
-import pers.hpcx.foxlang.ast.ParsedFoxFile
+import pers.hpcx.foxlang.ir.CoreProgram
+import pers.hpcx.foxlang.ir.SyntaxFile
 import pers.hpcx.foxlang.pipeline.pass.*
 
 sealed interface PipelineResult
-data class PipelineSuccess(val newFile: FoxFile) : PipelineResult
+data class PipelineSuccess(val program: CoreProgram) : PipelineResult
 
 sealed interface PipelineFailure : PipelineResult
 data class PipelineNumericLiteralCheckFailure(val errors: List<NumericLiteralCheckError>) : PipelineFailure
@@ -16,7 +16,7 @@ data class PipelineTypeAliasEliminationFailure(val errors: List<TypeAliasElimina
 data class PipelineMethodTypeNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : PipelineFailure
 data class PipelineConstraintCompilePrecheckFailure(val errors: List<ConstraintCompilePrecheckError>) : PipelineFailure
 
-fun runPipeline(file: ParsedFoxFile): PipelineResult {
+fun runPipeline(file: SyntaxFile): PipelineResult {
     when (val result = runNumericLiteralCheck(file)) {
         NumericLiteralCheckSuccess -> {}
         is NumericLiteralCheckFailure -> return PipelineNumericLiteralCheckFailure(result.errors)
@@ -54,5 +54,9 @@ fun runPipeline(file: ParsedFoxFile): PipelineResult {
         is ConstraintCompilePrecheckFailure -> return PipelineConstraintCompilePrecheckFailure(result.errors)
     }
     
-    TODO()
+    val core = when (val result = runCoreLowering(normalized)) {
+        is CoreLoweringSuccess -> result.program
+    }
+    
+    return PipelineSuccess(core)
 }

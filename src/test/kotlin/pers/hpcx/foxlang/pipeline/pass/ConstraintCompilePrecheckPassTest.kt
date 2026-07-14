@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.emptyOrderedMap
 import pers.hpcx.foxlang.utils.orderedMapOf
@@ -14,8 +14,8 @@ class ConstraintCompilePrecheckPassTest {
     fun allowsCyclicGenericConstraints() {
         val method = method(
             orderedMapOf(
-                "T" to FoxAnyTupleOfType(FoxUnresolvedType("R", null)),
-                "R" to FoxTupleGetComponentType(FoxUnresolvedType("T", null), 2),
+                "T" to SurfaceAnyTupleOfType(SurfaceUnresolvedType("R", null)),
+                "R" to SurfaceTupleGetComponentType(SurfaceUnresolvedType("T", null), 2),
             ),
         )
         
@@ -26,8 +26,8 @@ class ConstraintCompilePrecheckPassTest {
     fun allowsProjectionFromGenericReferenceBase() {
         val method = method(
             orderedMapOf(
-                "T" to FoxAnyTupleType,
-                "R" to FoxTupleGetComponentType(FoxUnresolvedType("T", null), 2),
+                "T" to SurfaceAnyTupleType(),
+                "R" to SurfaceTupleGetComponentType(SurfaceUnresolvedType("T", null), 2),
             ),
         )
         
@@ -38,7 +38,7 @@ class ConstraintCompilePrecheckPassTest {
     fun allowsProjectionFromConcreteBase() {
         val method = method(
             orderedMapOf(
-                "T" to FoxTupleGetComponentType(FoxTupleType(listOf(FoxIntType)), 0),
+                "T" to SurfaceTupleGetComponentType(SurfaceTupleType(listOf(SurfacePrimitiveType(PrimitiveTypeEnum.Int))), 0),
             ),
         )
         
@@ -47,20 +47,20 @@ class ConstraintCompilePrecheckPassTest {
     
     @Test
     fun detectsProjectionBaseTypeSpace() {
-        val transform = FoxTupleGetComponentType(FoxAnyTupleType, 2)
+        val transform = SurfaceTupleGetComponentType(SurfaceAnyTupleType(), 2)
         val method = method(orderedMapOf("R" to transform))
         
         val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
         val error = assertIs<ConstraintCompileProjectionBaseMustBeConcrete>(result.errors.single())
         
         assertEquals(transform, error.transform)
-        assertEquals(FoxAnyTupleType, error.base)
+        assertEquals(SurfaceAnyTupleType(), error.base)
     }
     
     @Test
     fun detectsProjectionBasePatternSpace() {
-        val base = FoxTupleType(listOf(FoxAnyType))
-        val transform = FoxTupleGetComponentType(base, 0)
+        val base = SurfaceTupleType(listOf(SurfaceAnyType()))
+        val transform = SurfaceTupleGetComponentType(base, 0)
         val method = method(orderedMapOf("R" to transform))
         
         val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
@@ -72,12 +72,18 @@ class ConstraintCompilePrecheckPassTest {
     
     @Test
     fun detectsAnyOfProjectionBaseAsTypeSpace() {
-        val base = FoxAnyOfType(
+        val base = SurfaceAnyOfType(
             listOf(
-                FoxTupleType(listOf(FoxIntType, FoxFloatType, FoxStringType)),
+                SurfaceTupleType(
+                    listOf(
+                        SurfacePrimitiveType(PrimitiveTypeEnum.Int),
+                        SurfacePrimitiveType(PrimitiveTypeEnum.Float),
+                        SurfacePrimitiveType(PrimitiveTypeEnum.String),
+                    ),
+                ),
             ),
         )
-        val transform = FoxTupleGetComponentType(base, 2)
+        val transform = SurfaceTupleGetComponentType(base, 2)
         val method = method(orderedMapOf("R" to transform))
         
         val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
@@ -89,22 +95,22 @@ class ConstraintCompilePrecheckPassTest {
     
     @Test
     fun detectsStructProjectionBaseTypeSpace() {
-        val transform = FoxStructGetFieldTypeByNameType(FoxAnyStructType, "value")
+        val transform = SurfaceStructGetFieldTypeByNameType(SurfaceAnyStructType(), "value")
         val method = method(orderedMapOf("R" to transform))
         
         val result = assertIs<ConstraintCompilePrecheckFailure>(runConstraintCompilePrecheck(method))
         val error = assertIs<ConstraintCompileProjectionBaseMustBeConcrete>(result.errors.single())
         
         assertEquals(transform, error.transform)
-        assertEquals(FoxAnyStructType, error.base)
+        assertEquals(SurfaceAnyStructType(), error.base)
     }
     
-    private fun method(generics: OrderedMap<String, FoxType>) = FoxMethodDefinition(
+    private fun method(generics: OrderedMap<String, SurfaceType>) = SurfaceMethodDefinition(
         generics = generics,
-        thisType = FoxUnitType,
+        thisType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit),
         name = "test",
         parameters = emptyOrderedMap(),
-        returnType = FoxUnitType,
-        body = FoxBlock(null, emptyList()),
+        returnType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit),
+        body = SurfaceBlock(null, emptyList()),
     )
 }

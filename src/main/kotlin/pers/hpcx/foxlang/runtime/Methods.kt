@@ -1,6 +1,9 @@
 package pers.hpcx.foxlang.runtime
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.PrimitiveTypeEnum
+import pers.hpcx.foxlang.ir.SurfaceArrayType
+import pers.hpcx.foxlang.ir.SurfacePrimitiveType
+import pers.hpcx.foxlang.ir.SurfaceType
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.emptyOrderedMap
 import pers.hpcx.foxlang.utils.mapValues
@@ -8,17 +11,17 @@ import pers.hpcx.foxlang.utils.orderedMapOf
 
 data class FoxMethodIdentifier(
     val name: String,
-    val generics: OrderedMap<String, FoxType>,
-    val thisType: FoxType,
-    val parameters: OrderedMap<String, FoxType>,
+    val generics: OrderedMap<String, SurfaceType>,
+    val thisType: SurfaceType,
+    val parameters: OrderedMap<String, SurfaceType>,
 )
 
 data class FoxMethodSignature(
     val name: String,
-    val generics: OrderedMap<String, FoxType>,
-    val thisType: FoxType,
-    val parameters: OrderedMap<String, FoxType>,
-    val returnType: FoxType,
+    val generics: OrderedMap<String, SurfaceType>,
+    val thisType: SurfaceType,
+    val parameters: OrderedMap<String, SurfaceType>,
+    val returnType: SurfaceType,
     val isInline: Boolean,
 )
 
@@ -82,11 +85,22 @@ data class JumpReturn(
     val value: FoxFetchSlot,
 ) : FoxJump
 
+private val FoxUnitType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit)
+private val FoxBoolType = SurfacePrimitiveType(PrimitiveTypeEnum.Bool)
+private val FoxByteType = SurfacePrimitiveType(PrimitiveTypeEnum.Byte)
+private val FoxShortType = SurfacePrimitiveType(PrimitiveTypeEnum.Short)
+private val FoxIntType = SurfacePrimitiveType(PrimitiveTypeEnum.Int)
+private val FoxLongType = SurfacePrimitiveType(PrimitiveTypeEnum.Long)
+private val FoxFloatType = SurfacePrimitiveType(PrimitiveTypeEnum.Float)
+private val FoxDoubleType = SurfacePrimitiveType(PrimitiveTypeEnum.Double)
+private val FoxCharType = SurfacePrimitiveType(PrimitiveTypeEnum.Char)
+private val FoxStringType = SurfacePrimitiveType(PrimitiveTypeEnum.String)
+
 val mainMethodIdentifier = FoxMethodIdentifier(
     name = "main",
     generics = orderedMapOf(),
     thisType = FoxUnitType,
-    parameters = orderedMapOf("args" to FoxArrayType(FoxStringType)),
+    parameters = orderedMapOf("args" to SurfaceArrayType(FoxStringType)),
 )
 
 val panicMethodIdentifier = FoxMethodIdentifier(
@@ -98,10 +112,10 @@ val panicMethodIdentifier = FoxMethodIdentifier(
 
 enum class FoxBuiltInMethodImplementation(
     name: String,
-    generics: OrderedMap<String, FoxType>,
-    thisType: FoxType,
-    parameters: OrderedMap<String, FoxType>,
-    returnType: FoxType,
+    generics: OrderedMap<String, SurfaceType>,
+    thisType: SurfaceType,
+    parameters: OrderedMap<String, SurfaceType>,
+    returnType: SurfaceType,
     val signature: FoxMethodSignature = FoxMethodSignature(
         name = name,
         generics = generics.mapValues { it.value },

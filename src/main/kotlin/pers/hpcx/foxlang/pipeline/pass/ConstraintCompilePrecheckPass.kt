@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 
 sealed interface ConstraintCompilePrecheckResult
 data object ConstraintCompilePrecheckSuccess : ConstraintCompilePrecheckResult
@@ -9,29 +9,29 @@ data class ConstraintCompilePrecheckFailure(val errors: List<ConstraintCompilePr
 sealed interface ConstraintCompilePrecheckError
 
 data class ConstraintCompileProjectionBaseMustBeConcrete(
-    val method: FoxMethodDefinition,
-    val transform: FoxTransformType,
-    val base: FoxType,
+    val method: SurfaceMethodDefinition,
+    val transform: SurfaceTransformType,
+    val base: SurfaceType,
 ) : ConstraintCompilePrecheckError
 
-fun runConstraintCompilePrecheck(file: FoxFile) =
-    ConstraintCompilePrecheckContext().check(file.elements.filterIsInstance<FoxMethodDefinition>())
+fun runConstraintCompilePrecheck(file: SurfaceFile) =
+    ConstraintCompilePrecheckContext().check(file.elements.filterIsInstance<SurfaceMethodDefinition>())
 
-fun runConstraintCompilePrecheck(method: FoxMethodDefinition) =
+fun runConstraintCompilePrecheck(method: SurfaceMethodDefinition) =
     ConstraintCompilePrecheckContext().check(listOf(method))
 
 private class ConstraintCompilePrecheckContext {
     
     private val errors = mutableListOf<ConstraintCompilePrecheckError>()
     
-    fun check(methods: List<FoxMethodDefinition>): ConstraintCompilePrecheckResult {
+    fun check(methods: List<SurfaceMethodDefinition>): ConstraintCompilePrecheckResult {
         methods.forEach { errors += ConstraintCompilePrecheckCollector(it).run() }
         return if (errors.isEmpty()) ConstraintCompilePrecheckSuccess else ConstraintCompilePrecheckFailure(errors)
     }
 }
 
 private class ConstraintCompilePrecheckCollector(
-    private val method: FoxMethodDefinition,
+    private val method: SurfaceMethodDefinition,
 ) {
     
     private val errors = mutableListOf<ConstraintCompilePrecheckError>()
@@ -41,43 +41,43 @@ private class ConstraintCompilePrecheckCollector(
         return errors
     }
     
-    private fun Iterable<FoxType>.allCompileToConcrete(): Boolean {
+    private fun Iterable<SurfaceType>.allCompileToConcrete(): Boolean {
         var result = true
         forEach { if (!it.compilesToConcrete()) result = false }
         return result
     }
     
-    private fun FoxType.compilesToConcrete(): Boolean = when (this) {
-        is FoxPrimitiveType -> true
-        is FoxBuiltInType -> when (this) {
-            is FoxTupleType -> components.allCompileToConcrete()
-            is FoxStructType -> fields.values.allCompileToConcrete()
-            is FoxObjectType -> members.values.allCompileToConcrete()
-            is FoxEnumType -> entries.values.allCompileToConcrete()
-            is FoxArrayType -> element.compilesToConcrete()
-            is FoxRefType -> referent.compilesToConcrete()
-            is FoxMethodType -> {
+    private fun SurfaceType.compilesToConcrete(): Boolean = when (this) {
+        is SurfacePrimitiveType -> true
+        is SurfaceBuiltInType -> when (this) {
+            is SurfaceTupleType -> components.allCompileToConcrete()
+            is SurfaceStructType -> fields.values.allCompileToConcrete()
+            is SurfaceObjectType -> members.values.allCompileToConcrete()
+            is SurfaceEnumType -> entries.values.allCompileToConcrete()
+            is SurfaceArrayType -> element.compilesToConcrete()
+            is SurfaceRefType -> referent.compilesToConcrete()
+            is SurfaceMethodType -> {
                 `this`.compilesToConcrete()
                 parameters.values.allCompileToConcrete()
                 `return`.compilesToConcrete()
             }
         }
-        is FoxWildcardType -> {
+        is SurfaceWildcardType -> {
             when (this) {
-                FoxAnyType -> {}
-                FoxAnyTupleType -> {}
-                FoxAnyStructType -> {}
-                FoxAnyObjectType -> {}
-                FoxAnyEnumType -> {}
-                is FoxAnyOfType -> types.allCompileToConcrete()
-                is FoxAllOfType -> types.allCompileToConcrete()
-                is FoxNoneOfType -> types.allCompileToConcrete()
-                is FoxAnyTupleOfType -> component.compilesToConcrete()
-                is FoxAnyStructOfType -> fields.allCompileToConcrete()
+                is SurfaceAnyType -> {}
+                is SurfaceAnyTupleType -> {}
+                is SurfaceAnyStructType -> {}
+                is SurfaceAnyObjectType -> {}
+                is SurfaceAnyEnumType -> {}
+                is SurfaceAnyOfType -> types.allCompileToConcrete()
+                is SurfaceAllOfType -> types.allCompileToConcrete()
+                is SurfaceNoneOfType -> types.allCompileToConcrete()
+                is SurfaceAnyTupleOfType -> component.compilesToConcrete()
+                is SurfaceAnyStructOfType -> fields.allCompileToConcrete()
             }
             false
         }
-        is FoxTransformType -> {
+        is SurfaceTransformType -> {
             val projectionBase = projectionBase()
             if (projectionBase != null) {
                 val baseCompilesToConcrete = projectionBase.compilesToConcrete()
@@ -89,110 +89,110 @@ private class ConstraintCompilePrecheckCollector(
                 transformChildren().allCompileToConcrete()
             }
         }
-        is FoxUnresolvedType -> {
+        is SurfaceUnresolvedType -> {
             check(parameters == null)
             check(name in method.generics)
             true
         }
-        is FoxPlaceholderType -> error("unreachable")
+        is SurfacePlaceholderType -> error("unreachable")
     }
 }
 
-private fun FoxTransformType.projectionBase(): FoxType? = when (this) {
-    is FoxTupleGetComponentType -> type
-    is FoxTupleGetComponentBackType -> type
-    is FoxTupleGetFirstComponentsType -> type
-    is FoxTupleGetFirstComponentsExactType -> type
-    is FoxTupleGetLastComponentsType -> type
-    is FoxTupleGetLastComponentsExactType -> type
-    is FoxTupleDropFirstComponentsType -> type
-    is FoxTupleDropFirstComponentsExactType -> type
-    is FoxTupleDropLastComponentsType -> type
-    is FoxTupleDropLastComponentsExactType -> type
-    is FoxStructGetFieldTypeByNameType -> type
-    is FoxStructGetFieldTypeByIndexType -> type
-    is FoxStructGetFieldTypeByIndexBackType -> type
-    is FoxStructGetFirstFieldsType -> type
-    is FoxStructGetFirstFieldsExactType -> type
-    is FoxStructGetLastFieldsType -> type
-    is FoxStructGetLastFieldsExactType -> type
-    is FoxStructDropFirstFieldsType -> type
-    is FoxStructDropFirstFieldsExactType -> type
-    is FoxStructDropLastFieldsType -> type
-    is FoxStructDropLastFieldsExactType -> type
-    is FoxStructSelectFieldsType -> type
-    is FoxStructSelectFieldsExactType -> type
-    is FoxStructDropFieldsType -> type
-    is FoxStructDropFieldsExactType -> type
-    is FoxStructExtractFieldTypesType -> type
-    is FoxObjectGetMemberTypeType -> type
-    is FoxObjectSelectMembersType -> type
-    is FoxObjectSelectMembersExactType -> type
-    is FoxObjectDropMembersType -> type
-    is FoxObjectDropMembersExactType -> type
-    is FoxEnumGetEntryTypeType -> type
-    is FoxEnumSelectEntriesType -> type
-    is FoxEnumSelectEntriesExactType -> type
-    is FoxEnumDropEntriesType -> type
-    is FoxEnumDropEntriesExactType -> type
-    is FoxArrayGetElementTypeType -> type
-    is FoxRefGetReferentTypeType -> type
-    is FoxMethodGetThisTypeType -> type
-    is FoxMethodGetParameterStructType -> type
-    is FoxMethodGetReturnTypeType -> type
-    is FoxTupleMergeTuplesType,
-    is FoxStructMergeStructsType,
-    is FoxObjectMergeObjectsType,
-    is FoxEnumMergeEnumsType,
-    is FoxMethodOfType,
+private fun SurfaceTransformType.projectionBase(): SurfaceType? = when (this) {
+    is SurfaceTupleGetComponentType -> type
+    is SurfaceTupleGetComponentBackType -> type
+    is SurfaceTupleGetFirstComponentsType -> type
+    is SurfaceTupleGetFirstComponentsExactType -> type
+    is SurfaceTupleGetLastComponentsType -> type
+    is SurfaceTupleGetLastComponentsExactType -> type
+    is SurfaceTupleDropFirstComponentsType -> type
+    is SurfaceTupleDropFirstComponentsExactType -> type
+    is SurfaceTupleDropLastComponentsType -> type
+    is SurfaceTupleDropLastComponentsExactType -> type
+    is SurfaceStructGetFieldTypeByNameType -> type
+    is SurfaceStructGetFieldTypeByIndexType -> type
+    is SurfaceStructGetFieldTypeByIndexBackType -> type
+    is SurfaceStructGetFirstFieldsType -> type
+    is SurfaceStructGetFirstFieldsExactType -> type
+    is SurfaceStructGetLastFieldsType -> type
+    is SurfaceStructGetLastFieldsExactType -> type
+    is SurfaceStructDropFirstFieldsType -> type
+    is SurfaceStructDropFirstFieldsExactType -> type
+    is SurfaceStructDropLastFieldsType -> type
+    is SurfaceStructDropLastFieldsExactType -> type
+    is SurfaceStructSelectFieldsType -> type
+    is SurfaceStructSelectFieldsExactType -> type
+    is SurfaceStructDropFieldsType -> type
+    is SurfaceStructDropFieldsExactType -> type
+    is SurfaceStructExtractFieldTypesType -> type
+    is SurfaceObjectGetMemberTypeType -> type
+    is SurfaceObjectSelectMembersType -> type
+    is SurfaceObjectSelectMembersExactType -> type
+    is SurfaceObjectDropMembersType -> type
+    is SurfaceObjectDropMembersExactType -> type
+    is SurfaceEnumGetEntryTypeType -> type
+    is SurfaceEnumSelectEntriesType -> type
+    is SurfaceEnumSelectEntriesExactType -> type
+    is SurfaceEnumDropEntriesType -> type
+    is SurfaceEnumDropEntriesExactType -> type
+    is SurfaceArrayGetElementTypeType -> type
+    is SurfaceRefGetReferentTypeType -> type
+    is SurfaceMethodGetThisTypeType -> type
+    is SurfaceMethodGetParameterStructType -> type
+    is SurfaceMethodGetReturnTypeType -> type
+    is SurfaceTupleMergeTuplesType,
+    is SurfaceStructMergeStructsType,
+    is SurfaceObjectMergeObjectsType,
+    is SurfaceEnumMergeEnumsType,
+    is SurfaceMethodOfType,
         -> null
 }
 
-private fun FoxTransformType.transformChildren(): List<FoxType> = when (this) {
-    is FoxTupleGetComponentType -> listOf(type)
-    is FoxTupleGetComponentBackType -> listOf(type)
-    is FoxTupleGetFirstComponentsType -> listOf(type)
-    is FoxTupleGetFirstComponentsExactType -> listOf(type)
-    is FoxTupleGetLastComponentsType -> listOf(type)
-    is FoxTupleGetLastComponentsExactType -> listOf(type)
-    is FoxTupleDropFirstComponentsType -> listOf(type)
-    is FoxTupleDropFirstComponentsExactType -> listOf(type)
-    is FoxTupleDropLastComponentsType -> listOf(type)
-    is FoxTupleDropLastComponentsExactType -> listOf(type)
-    is FoxTupleMergeTuplesType -> types
-    is FoxStructGetFieldTypeByNameType -> listOf(type)
-    is FoxStructGetFieldTypeByIndexType -> listOf(type)
-    is FoxStructGetFieldTypeByIndexBackType -> listOf(type)
-    is FoxStructGetFirstFieldsType -> listOf(type)
-    is FoxStructGetFirstFieldsExactType -> listOf(type)
-    is FoxStructGetLastFieldsType -> listOf(type)
-    is FoxStructGetLastFieldsExactType -> listOf(type)
-    is FoxStructDropFirstFieldsType -> listOf(type)
-    is FoxStructDropFirstFieldsExactType -> listOf(type)
-    is FoxStructDropLastFieldsType -> listOf(type)
-    is FoxStructDropLastFieldsExactType -> listOf(type)
-    is FoxStructSelectFieldsType -> listOf(type)
-    is FoxStructSelectFieldsExactType -> listOf(type)
-    is FoxStructDropFieldsType -> listOf(type)
-    is FoxStructDropFieldsExactType -> listOf(type)
-    is FoxStructExtractFieldTypesType -> listOf(type)
-    is FoxStructMergeStructsType -> types
-    is FoxObjectGetMemberTypeType -> listOf(type)
-    is FoxObjectSelectMembersType -> listOf(type)
-    is FoxObjectSelectMembersExactType -> listOf(type)
-    is FoxObjectDropMembersType -> listOf(type)
-    is FoxObjectDropMembersExactType -> listOf(type)
-    is FoxObjectMergeObjectsType -> types
-    is FoxEnumGetEntryTypeType -> listOf(type)
-    is FoxEnumSelectEntriesType -> listOf(type)
-    is FoxEnumSelectEntriesExactType -> listOf(type)
-    is FoxEnumDropEntriesType -> listOf(type)
-    is FoxEnumDropEntriesExactType -> listOf(type)
-    is FoxEnumMergeEnumsType -> types
-    is FoxArrayGetElementTypeType -> listOf(type)
-    is FoxRefGetReferentTypeType -> listOf(type)
-    is FoxMethodGetThisTypeType -> listOf(type)
-    is FoxMethodGetParameterStructType -> listOf(type)
-    is FoxMethodGetReturnTypeType -> listOf(type)
-    is FoxMethodOfType -> listOf(`this`, parameters, `return`)
+private fun SurfaceTransformType.transformChildren(): List<SurfaceType> = when (this) {
+    is SurfaceTupleGetComponentType -> listOf(type)
+    is SurfaceTupleGetComponentBackType -> listOf(type)
+    is SurfaceTupleGetFirstComponentsType -> listOf(type)
+    is SurfaceTupleGetFirstComponentsExactType -> listOf(type)
+    is SurfaceTupleGetLastComponentsType -> listOf(type)
+    is SurfaceTupleGetLastComponentsExactType -> listOf(type)
+    is SurfaceTupleDropFirstComponentsType -> listOf(type)
+    is SurfaceTupleDropFirstComponentsExactType -> listOf(type)
+    is SurfaceTupleDropLastComponentsType -> listOf(type)
+    is SurfaceTupleDropLastComponentsExactType -> listOf(type)
+    is SurfaceTupleMergeTuplesType -> types
+    is SurfaceStructGetFieldTypeByNameType -> listOf(type)
+    is SurfaceStructGetFieldTypeByIndexType -> listOf(type)
+    is SurfaceStructGetFieldTypeByIndexBackType -> listOf(type)
+    is SurfaceStructGetFirstFieldsType -> listOf(type)
+    is SurfaceStructGetFirstFieldsExactType -> listOf(type)
+    is SurfaceStructGetLastFieldsType -> listOf(type)
+    is SurfaceStructGetLastFieldsExactType -> listOf(type)
+    is SurfaceStructDropFirstFieldsType -> listOf(type)
+    is SurfaceStructDropFirstFieldsExactType -> listOf(type)
+    is SurfaceStructDropLastFieldsType -> listOf(type)
+    is SurfaceStructDropLastFieldsExactType -> listOf(type)
+    is SurfaceStructSelectFieldsType -> listOf(type)
+    is SurfaceStructSelectFieldsExactType -> listOf(type)
+    is SurfaceStructDropFieldsType -> listOf(type)
+    is SurfaceStructDropFieldsExactType -> listOf(type)
+    is SurfaceStructExtractFieldTypesType -> listOf(type)
+    is SurfaceStructMergeStructsType -> types
+    is SurfaceObjectGetMemberTypeType -> listOf(type)
+    is SurfaceObjectSelectMembersType -> listOf(type)
+    is SurfaceObjectSelectMembersExactType -> listOf(type)
+    is SurfaceObjectDropMembersType -> listOf(type)
+    is SurfaceObjectDropMembersExactType -> listOf(type)
+    is SurfaceObjectMergeObjectsType -> types
+    is SurfaceEnumGetEntryTypeType -> listOf(type)
+    is SurfaceEnumSelectEntriesType -> listOf(type)
+    is SurfaceEnumSelectEntriesExactType -> listOf(type)
+    is SurfaceEnumDropEntriesType -> listOf(type)
+    is SurfaceEnumDropEntriesExactType -> listOf(type)
+    is SurfaceEnumMergeEnumsType -> types
+    is SurfaceArrayGetElementTypeType -> listOf(type)
+    is SurfaceRefGetReferentTypeType -> listOf(type)
+    is SurfaceMethodGetThisTypeType -> listOf(type)
+    is SurfaceMethodGetParameterStructType -> listOf(type)
+    is SurfaceMethodGetReturnTypeType -> listOf(type)
+    is SurfaceMethodOfType -> listOf(`this`, parameters, `return`)
 }

@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.frontend.fox
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.runtime.*
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.OrderedSet
@@ -23,7 +23,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     private val canonical = options.style == AstSourceStyle.CANONICAL
     private val fileSeparator = if (options.compact) "\n" else "\n\n"
     
-    fun PrintWriter.printFile(file: FoxFile) {
+    fun PrintWriter.printFile(file: SurfaceFile) {
         file.elements.forEachIndexed { index, element ->
             if (index > 0) print(fileSeparator)
             printFileElement(element)
@@ -31,29 +31,29 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    fun PrintWriter.printFileElement(element: FoxFileElement) {
+    fun PrintWriter.printFileElement(element: SurfaceFileElement) {
         when (element) {
-            is FoxTypeAlias -> printTypeAlias(element)
-            is FoxMethodDefinition -> printMethodDefinition(element)
+            is SurfaceTypeAlias -> printTypeAlias(element)
+            is SurfaceMethodDefinition -> printMethodDefinition(element)
         }
     }
     
-    fun PrintWriter.printType(type: FoxType) {
+    fun PrintWriter.printType(type: SurfaceType) {
         when (type) {
-            is FoxPrimitiveType -> printPrimitiveType(type)
-            is FoxWildcardType -> printWildcardType(type)
-            is FoxBuiltInType -> printBuiltInType(type)
-            is FoxTransformType -> printTransformType(type)
-            is FoxUnresolvedType -> printUnresolvedType(type)
-            is FoxPlaceholderType -> error("Placeholder type should not be printed")
+            is SurfacePrimitiveType -> printPrimitiveType(type)
+            is SurfaceWildcardType -> printWildcardType(type)
+            is SurfaceBuiltInType -> printBuiltInType(type)
+            is SurfaceTransformType -> printTransformType(type)
+            is SurfaceUnresolvedType -> printUnresolvedType(type)
+            is SurfacePlaceholderType -> error("Placeholder type should not be printed")
         }
     }
     
-    fun PrintWriter.printStatement(statement: FoxStatement) {
+    fun PrintWriter.printStatement(statement: SurfaceStatement) {
         printStatement(statement, 0, Standalone)
     }
     
-    fun PrintWriter.printTypeAlias(element: FoxTypeAlias) {
+    fun PrintWriter.printTypeAlias(element: SurfaceTypeAlias) {
         print("type ")
         print(element.name)
         printTypeParameterNames(element.generics)
@@ -61,19 +61,19 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printType(element.alias)
     }
     
-    fun PrintWriter.printMethodDefinition(element: FoxMethodDefinition) {
+    fun PrintWriter.printMethodDefinition(element: SurfaceMethodDefinition) {
         print("def ")
         if (canonical || element.generics.isNotEmpty()) {
             printFormalGenerics(element.generics)
             print(' ')
         }
-        if (canonical || element.thisType != FoxUnitType) {
+        if (canonical || element.thisType.isNotUnit()) {
             printType(element.thisType)
             print('.')
         }
         print(element.name)
         printFormalParameters(element.parameters)
-        if (canonical || element.returnType != FoxUnitType) {
+        if (canonical || element.returnType.isNotUnit()) {
             print(": ")
             printType(element.returnType)
         }
@@ -81,101 +81,95 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printMethodBody(element.body)
     }
     
-    private fun PrintWriter.printPrimitiveType(type: FoxPrimitiveType) {
-        when (type) {
-            FoxVoidType -> print("Void")
-            FoxUnitType -> print("Unit")
-            FoxBoolType -> print("Bool")
-            FoxByteType -> print("Byte")
-            FoxShortType -> print("Short")
-            FoxIntType -> print("Int")
-            FoxLongType -> print("Long")
-            FoxFloatType -> print("Float")
-            FoxDoubleType -> print("Double")
-            FoxCharType -> print("Char")
-            FoxStringType -> print("String")
-        }
+    private fun SurfaceType.isNotUnit() = this !is SurfacePrimitiveType || type != PrimitiveTypeEnum.Unit
+    
+    private fun PrintWriter.printPrimitiveType(type: SurfacePrimitiveType) = when (type.type) {
+        PrimitiveTypeEnum.Void -> print("Void")
+        PrimitiveTypeEnum.Unit -> print("Unit")
+        PrimitiveTypeEnum.Bool -> print("Bool")
+        PrimitiveTypeEnum.Byte -> print("Byte")
+        PrimitiveTypeEnum.Short -> print("Short")
+        PrimitiveTypeEnum.Int -> print("Int")
+        PrimitiveTypeEnum.Long -> print("Long")
+        PrimitiveTypeEnum.Float -> print("Float")
+        PrimitiveTypeEnum.Double -> print("Double")
+        PrimitiveTypeEnum.Char -> print("Char")
+        PrimitiveTypeEnum.String -> print("String")
     }
     
-    private fun PrintWriter.printWildcardType(type: FoxWildcardType) {
-        when (type) {
-            FoxAnyType -> print("Any")
-            FoxAnyTupleType -> print("AnyTuple")
-            FoxAnyStructType -> print("AnyStruct")
-            FoxAnyObjectType -> print("AnyObject")
-            FoxAnyEnumType -> print("AnyEnum")
-            is FoxAnyOfType -> printTypeListArgument("AnyOf", type.types)
-            is FoxAllOfType -> printTypeListArgument("AllOf", type.types)
-            is FoxNoneOfType -> printTypeListArgument("NoneOf", type.types)
-            is FoxAnyTupleOfType -> printSingleTypeArgument("AnyTupleOf", type.component)
-            is FoxAnyStructOfType -> printTypeListArgument("AnyStructOf", type.fields)
-        }
+    private fun PrintWriter.printWildcardType(type: SurfaceWildcardType) = when (type) {
+        is SurfaceAnyType -> print("Any")
+        is SurfaceAnyTupleType -> print("AnyTuple")
+        is SurfaceAnyStructType -> print("AnyStruct")
+        is SurfaceAnyObjectType -> print("AnyObject")
+        is SurfaceAnyEnumType -> print("AnyEnum")
+        is SurfaceAnyOfType -> printTypeListArgument("AnyOf", type.types)
+        is SurfaceAllOfType -> printTypeListArgument("AllOf", type.types)
+        is SurfaceNoneOfType -> printTypeListArgument("NoneOf", type.types)
+        is SurfaceAnyTupleOfType -> printSingleTypeArgument("AnyTupleOf", type.component)
+        is SurfaceAnyStructOfType -> printTypeListArgument("AnyStructOf", type.fields)
     }
     
-    private fun PrintWriter.printBuiltInType(type: FoxBuiltInType) {
-        when (type) {
-            is FoxTupleType -> printTupleType(type)
-            is FoxStructType -> printStructType(type)
-            is FoxObjectType -> printObjectType(type)
-            is FoxEnumType -> printEnumType(type)
-            is FoxArrayType -> printSingleTypeArgument("Array", type.element)
-            is FoxRefType -> printSingleTypeArgument("Ref", type.referent)
-            is FoxMethodType -> printMethodType(type)
-        }
+    private fun PrintWriter.printBuiltInType(type: SurfaceBuiltInType) = when (type) {
+        is SurfaceTupleType -> printTupleType(type)
+        is SurfaceStructType -> printStructType(type)
+        is SurfaceObjectType -> printObjectType(type)
+        is SurfaceEnumType -> printEnumType(type)
+        is SurfaceArrayType -> printSingleTypeArgument("Array", type.element)
+        is SurfaceRefType -> printSingleTypeArgument("Ref", type.referent)
+        is SurfaceMethodType -> printMethodType(type)
     }
     
-    private fun PrintWriter.printTransformType(type: FoxTransformType) {
-        when (type) {
-            is FoxTupleGetComponentType -> printTypeAndIntArgument("GetComponent", type.type, type.index)
-            is FoxTupleGetComponentBackType -> printTypeAndIntArgument("GetComponentBack", type.type, type.index)
-            is FoxTupleGetFirstComponentsType -> printTypeAndIntArgument("GetFirstComponents", type.type, type.count)
-            is FoxTupleGetFirstComponentsExactType -> printTypeAndIntArgument("GetFirstComponentsExact", type.type, type.count)
-            is FoxTupleGetLastComponentsType -> printTypeAndIntArgument("GetLastComponents", type.type, type.count)
-            is FoxTupleGetLastComponentsExactType -> printTypeAndIntArgument("GetLastComponentsExact", type.type, type.count)
-            is FoxTupleDropFirstComponentsType -> printTypeAndIntArgument("DropFirstComponents", type.type, type.count)
-            is FoxTupleDropFirstComponentsExactType -> printTypeAndIntArgument("DropFirstComponentsExact", type.type, type.count)
-            is FoxTupleDropLastComponentsType -> printTypeAndIntArgument("DropLastComponents", type.type, type.count)
-            is FoxTupleDropLastComponentsExactType -> printTypeAndIntArgument("DropLastComponentsExact", type.type, type.count)
-            is FoxTupleMergeTuplesType -> printTypeListArgument("MergeTuples", type.types)
-            is FoxStructGetFieldTypeByNameType -> printTypeAndNameArgument("GetFieldTypeByName", type.type, type.name)
-            is FoxStructGetFieldTypeByIndexType -> printTypeAndIntArgument("GetFieldTypeByIndex", type.type, type.index)
-            is FoxStructGetFieldTypeByIndexBackType -> printTypeAndIntArgument("GetFieldTypeByIndexBack", type.type, type.index)
-            is FoxStructGetFirstFieldsType -> printTypeAndIntArgument("GetFirstFields", type.type, type.count)
-            is FoxStructGetFirstFieldsExactType -> printTypeAndIntArgument("GetFirstFieldsExact", type.type, type.count)
-            is FoxStructGetLastFieldsType -> printTypeAndIntArgument("GetLastFields", type.type, type.count)
-            is FoxStructGetLastFieldsExactType -> printTypeAndIntArgument("GetLastFieldsExact", type.type, type.count)
-            is FoxStructDropFirstFieldsType -> printTypeAndIntArgument("DropFirstFields", type.type, type.count)
-            is FoxStructDropFirstFieldsExactType -> printTypeAndIntArgument("DropFirstFieldsExact", type.type, type.count)
-            is FoxStructDropLastFieldsType -> printTypeAndIntArgument("DropLastFields", type.type, type.count)
-            is FoxStructDropLastFieldsExactType -> printTypeAndIntArgument("DropLastFieldsExact", type.type, type.count)
-            is FoxStructSelectFieldsType -> printTypeAndNamesArgument("SelectFields", type.type, type.names)
-            is FoxStructSelectFieldsExactType -> printTypeAndNamesArgument("SelectFieldsExact", type.type, type.names)
-            is FoxStructDropFieldsType -> printTypeAndNamesArgument("DropFields", type.type, type.names)
-            is FoxStructDropFieldsExactType -> printTypeAndNamesArgument("DropFieldsExact", type.type, type.names)
-            is FoxStructExtractFieldTypesType -> printSingleTypeArgument("ExtractFieldTypes", type.type)
-            is FoxStructMergeStructsType -> printTypeListArgument("MergeStructs", type.types)
-            is FoxObjectGetMemberTypeType -> printTypeAndNameArgument("GetMemberType", type.type, type.name)
-            is FoxObjectSelectMembersType -> printTypeAndNamesArgument("SelectMembers", type.type, type.names)
-            is FoxObjectSelectMembersExactType -> printTypeAndNamesArgument("SelectMembersExact", type.type, type.names)
-            is FoxObjectDropMembersType -> printTypeAndNamesArgument("DropMembers", type.type, type.names)
-            is FoxObjectDropMembersExactType -> printTypeAndNamesArgument("DropMembersExact", type.type, type.names)
-            is FoxObjectMergeObjectsType -> printTypeListArgument("MergeObjects", type.types)
-            is FoxEnumGetEntryTypeType -> printTypeAndNameArgument("GetEntryType", type.type, type.name)
-            is FoxEnumSelectEntriesType -> printTypeAndNamesArgument("SelectEntries", type.type, type.names)
-            is FoxEnumSelectEntriesExactType -> printTypeAndNamesArgument("SelectEntriesExact", type.type, type.names)
-            is FoxEnumDropEntriesType -> printTypeAndNamesArgument("DropEntries", type.type, type.names)
-            is FoxEnumDropEntriesExactType -> printTypeAndNamesArgument("DropEntriesExact", type.type, type.names)
-            is FoxEnumMergeEnumsType -> printTypeListArgument("MergeEnums", type.types)
-            is FoxArrayGetElementTypeType -> printSingleTypeArgument("GetElementType", type.type)
-            is FoxRefGetReferentTypeType -> printSingleTypeArgument("GetReferentType", type.type)
-            is FoxMethodGetThisTypeType -> printSingleTypeArgument("GetThisType", type.type)
-            is FoxMethodGetParameterStructType -> printSingleTypeArgument("GetParameterStruct", type.type)
-            is FoxMethodGetReturnTypeType -> printSingleTypeArgument("GetReturnType", type.type)
-            is FoxMethodOfType -> printTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`))
-        }
+    private fun PrintWriter.printTransformType(type: SurfaceTransformType) = when (type) {
+        is SurfaceTupleGetComponentType -> printTypeAndIntArgument("GetComponent", type.type, type.index)
+        is SurfaceTupleGetComponentBackType -> printTypeAndIntArgument("GetComponentBack", type.type, type.index)
+        is SurfaceTupleGetFirstComponentsType -> printTypeAndIntArgument("GetFirstComponents", type.type, type.count)
+        is SurfaceTupleGetFirstComponentsExactType -> printTypeAndIntArgument("GetFirstComponentsExact", type.type, type.count)
+        is SurfaceTupleGetLastComponentsType -> printTypeAndIntArgument("GetLastComponents", type.type, type.count)
+        is SurfaceTupleGetLastComponentsExactType -> printTypeAndIntArgument("GetLastComponentsExact", type.type, type.count)
+        is SurfaceTupleDropFirstComponentsType -> printTypeAndIntArgument("DropFirstComponents", type.type, type.count)
+        is SurfaceTupleDropFirstComponentsExactType -> printTypeAndIntArgument("DropFirstComponentsExact", type.type, type.count)
+        is SurfaceTupleDropLastComponentsType -> printTypeAndIntArgument("DropLastComponents", type.type, type.count)
+        is SurfaceTupleDropLastComponentsExactType -> printTypeAndIntArgument("DropLastComponentsExact", type.type, type.count)
+        is SurfaceTupleMergeTuplesType -> printTypeListArgument("MergeTuples", type.types)
+        is SurfaceStructGetFieldTypeByNameType -> printTypeAndNameArgument("GetFieldTypeByName", type.type, type.name)
+        is SurfaceStructGetFieldTypeByIndexType -> printTypeAndIntArgument("GetFieldTypeByIndex", type.type, type.index)
+        is SurfaceStructGetFieldTypeByIndexBackType -> printTypeAndIntArgument("GetFieldTypeByIndexBack", type.type, type.index)
+        is SurfaceStructGetFirstFieldsType -> printTypeAndIntArgument("GetFirstFields", type.type, type.count)
+        is SurfaceStructGetFirstFieldsExactType -> printTypeAndIntArgument("GetFirstFieldsExact", type.type, type.count)
+        is SurfaceStructGetLastFieldsType -> printTypeAndIntArgument("GetLastFields", type.type, type.count)
+        is SurfaceStructGetLastFieldsExactType -> printTypeAndIntArgument("GetLastFieldsExact", type.type, type.count)
+        is SurfaceStructDropFirstFieldsType -> printTypeAndIntArgument("DropFirstFields", type.type, type.count)
+        is SurfaceStructDropFirstFieldsExactType -> printTypeAndIntArgument("DropFirstFieldsExact", type.type, type.count)
+        is SurfaceStructDropLastFieldsType -> printTypeAndIntArgument("DropLastFields", type.type, type.count)
+        is SurfaceStructDropLastFieldsExactType -> printTypeAndIntArgument("DropLastFieldsExact", type.type, type.count)
+        is SurfaceStructSelectFieldsType -> printTypeAndNamesArgument("SelectFields", type.type, type.names)
+        is SurfaceStructSelectFieldsExactType -> printTypeAndNamesArgument("SelectFieldsExact", type.type, type.names)
+        is SurfaceStructDropFieldsType -> printTypeAndNamesArgument("DropFields", type.type, type.names)
+        is SurfaceStructDropFieldsExactType -> printTypeAndNamesArgument("DropFieldsExact", type.type, type.names)
+        is SurfaceStructExtractFieldTypesType -> printSingleTypeArgument("ExtractFieldTypes", type.type)
+        is SurfaceStructMergeStructsType -> printTypeListArgument("MergeStructs", type.types)
+        is SurfaceObjectGetMemberTypeType -> printTypeAndNameArgument("GetMemberType", type.type, type.name)
+        is SurfaceObjectSelectMembersType -> printTypeAndNamesArgument("SelectMembers", type.type, type.names)
+        is SurfaceObjectSelectMembersExactType -> printTypeAndNamesArgument("SelectMembersExact", type.type, type.names)
+        is SurfaceObjectDropMembersType -> printTypeAndNamesArgument("DropMembers", type.type, type.names)
+        is SurfaceObjectDropMembersExactType -> printTypeAndNamesArgument("DropMembersExact", type.type, type.names)
+        is SurfaceObjectMergeObjectsType -> printTypeListArgument("MergeObjects", type.types)
+        is SurfaceEnumGetEntryTypeType -> printTypeAndNameArgument("GetEntryType", type.type, type.name)
+        is SurfaceEnumSelectEntriesType -> printTypeAndNamesArgument("SelectEntries", type.type, type.names)
+        is SurfaceEnumSelectEntriesExactType -> printTypeAndNamesArgument("SelectEntriesExact", type.type, type.names)
+        is SurfaceEnumDropEntriesType -> printTypeAndNamesArgument("DropEntries", type.type, type.names)
+        is SurfaceEnumDropEntriesExactType -> printTypeAndNamesArgument("DropEntriesExact", type.type, type.names)
+        is SurfaceEnumMergeEnumsType -> printTypeListArgument("MergeEnums", type.types)
+        is SurfaceArrayGetElementTypeType -> printSingleTypeArgument("GetElementType", type.type)
+        is SurfaceRefGetReferentTypeType -> printSingleTypeArgument("GetReferentType", type.type)
+        is SurfaceMethodGetThisTypeType -> printSingleTypeArgument("GetThisType", type.type)
+        is SurfaceMethodGetParameterStructType -> printSingleTypeArgument("GetParameterStruct", type.type)
+        is SurfaceMethodGetReturnTypeType -> printSingleTypeArgument("GetReturnType", type.type)
+        is SurfaceMethodOfType -> printTypeListArgument("MethodOf", listOf(type.`this`, type.parameters, type.`return`))
     }
     
-    private fun PrintWriter.printTupleType(type: FoxTupleType) {
+    private fun PrintWriter.printTupleType(type: SurfaceTupleType) {
         print("Tuple<")
         printCommaSeparated(type.components) { component ->
             printType(component)
@@ -183,7 +177,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printStructType(type: FoxStructType) {
+    private fun PrintWriter.printStructType(type: SurfaceStructType) {
         print("Struct<")
         printCommaSeparated(type.fields.entries) { field ->
             print(field.key)
@@ -193,7 +187,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printObjectType(type: FoxObjectType) {
+    private fun PrintWriter.printObjectType(type: SurfaceObjectType) {
         print("Object<")
         printCommaSeparated(type.members.entries) { member ->
             print(member.key)
@@ -203,7 +197,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printEnumType(type: FoxEnumType) {
+    private fun PrintWriter.printEnumType(type: SurfaceEnumType) {
         print("Enum<")
         printCommaSeparated(type.entries.entries) { entry ->
             print(entry.key)
@@ -213,7 +207,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printMethodType(type: FoxMethodType) {
+    private fun PrintWriter.printMethodType(type: SurfaceMethodType) {
         print("Method<")
         print("this")
         print(": ")
@@ -231,7 +225,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printUnresolvedType(type: FoxUnresolvedType) {
+    private fun PrintWriter.printUnresolvedType(type: SurfaceUnresolvedType) {
         print(type.name)
         type.parameters?.let { parameters ->
             print('<')
@@ -242,14 +236,14 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun PrintWriter.printSingleTypeArgument(keyword: String, type: FoxType) {
+    private fun PrintWriter.printSingleTypeArgument(keyword: String, type: SurfaceType) {
         print(keyword)
         print('<')
         printType(type)
         print('>')
     }
     
-    private fun PrintWriter.printTypeAndIntArgument(keyword: String, type: FoxType, value: Int) {
+    private fun PrintWriter.printTypeAndIntArgument(keyword: String, type: SurfaceType, value: Int) {
         print(keyword)
         print('<')
         printType(type)
@@ -258,7 +252,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printTypeAndNameArgument(keyword: String, type: FoxType, name: String) {
+    private fun PrintWriter.printTypeAndNameArgument(keyword: String, type: SurfaceType, name: String) {
         print(keyword)
         print('<')
         printType(type)
@@ -267,7 +261,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printTypeAndNamesArgument(keyword: String, type: FoxType, names: Iterable<String>) {
+    private fun PrintWriter.printTypeAndNamesArgument(keyword: String, type: SurfaceType, names: Iterable<String>) {
         print(keyword)
         print('<')
         printType(type)
@@ -278,7 +272,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printTypeListArgument(keyword: String, types: Iterable<FoxType>) {
+    private fun PrintWriter.printTypeListArgument(keyword: String, types: Iterable<SurfaceType>) {
         print(keyword)
         print('<')
         printCommaSeparated(types) { type ->
@@ -287,35 +281,35 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printStatement(statement: FoxStatement, indentLevel: Int, position: StatementPosition) {
+    private fun PrintWriter.printStatement(statement: SurfaceStatement, indentLevel: Int, position: StatementPosition) {
         val precedence = precedenceOf(statement)
         if (needsParentheses(statement, precedence, position)) print('(')
         printRawStatement(statement, indentLevel)
         if (needsParentheses(statement, precedence, position)) print(')')
     }
     
-    private fun PrintWriter.printRawStatement(statement: FoxStatement, indentLevel: Int) {
+    private fun PrintWriter.printRawStatement(statement: SurfaceStatement, indentLevel: Int) {
         when (statement) {
-            FoxThis -> print("this")
-            is FoxUnresolvedSymbol -> print(statement.name)
-            is FoxEntityStatement -> printEntity(statement.value)
-            is FoxFormattedString -> printFormattedString(statement)
-            is FoxLambda -> printLambda(statement, indentLevel)
-            is FoxBlock -> printBlock(statement, indentLevel)
-            is FoxUnary -> printUnary(statement, indentLevel)
-            is FoxBinary -> printBinary(statement, indentLevel)
-            is FoxAssign -> printAssign(statement, indentLevel)
-            is FoxTypeBinding -> {
+            SurfaceThis -> print("this")
+            is SurfaceUnresolvedSymbol -> print(statement.name)
+            is SurfaceEntityStatement -> printEntity(statement.value)
+            is SurfaceFormattedString -> printFormattedString(statement)
+            is SurfaceLambda -> printLambda(statement, indentLevel)
+            is SurfaceBlock -> printBlock(statement, indentLevel)
+            is SurfaceUnary -> printUnary(statement, indentLevel)
+            is SurfaceBinary -> printBinary(statement, indentLevel)
+            is SurfaceAssign -> printAssign(statement, indentLevel)
+            is SurfaceTypeBinding -> {
                 print(statement.name)
                 print(": ")
                 printType(statement.type)
             }
-            is FoxFieldAccess -> {
+            is SurfaceFieldAccess -> {
                 printStatement(statement.target, indentLevel, PostfixTarget)
                 print('.')
                 print(statement.name)
             }
-            is FoxIndexAccess -> {
+            is SurfaceIndexAccess -> {
                 printStatement(statement.target, indentLevel, PostfixTarget)
                 print('[')
                 printCommaSeparated(statement.indices) {
@@ -323,31 +317,31 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
                 }
                 print(']')
             }
-            is FoxCall -> printCall(statement, indentLevel)
-            is FoxConstruct -> {
+            is SurfaceCall -> printCall(statement, indentLevel)
+            is SurfaceConstruct -> {
                 printType(statement.type)
                 printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
             }
-            is FoxIndirectCall -> printIndirectCall(statement, indentLevel)
-            is FoxIf -> printIf(statement, indentLevel)
-            is FoxWhen -> printWhen(statement, indentLevel)
-            is FoxWhile -> printWhile(statement, indentLevel)
-            is FoxDoWhile -> printDoWhile(statement, indentLevel)
-            is FoxBreak -> {
+            is SurfaceIndirectCall -> printIndirectCall(statement, indentLevel)
+            is SurfaceIf -> printIf(statement, indentLevel)
+            is SurfaceWhen -> printWhen(statement, indentLevel)
+            is SurfaceWhile -> printWhile(statement, indentLevel)
+            is SurfaceDoWhile -> printDoWhile(statement, indentLevel)
+            is SurfaceBreak -> {
                 print("break")
                 statement.label?.let {
                     print(" #")
                     print(it)
                 }
             }
-            is FoxContinue -> {
+            is SurfaceContinue -> {
                 print("continue")
                 statement.label?.let {
                     print(" #")
                     print(it)
                 }
             }
-            is FoxYield -> {
+            is SurfaceYield -> {
                 print("yield")
                 statement.label?.let {
                     print(" #")
@@ -356,7 +350,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
                 print(' ')
                 printStatement(statement.value, indentLevel, Standalone)
             }
-            is FoxReturn -> {
+            is SurfaceReturn -> {
                 print("return")
                 statement.value?.let {
                     print(' ')
@@ -366,7 +360,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun PrintWriter.printBlock(block: FoxBlock, indentLevel: Int) {
+    private fun PrintWriter.printBlock(block: SurfaceBlock, indentLevel: Int) {
         printLabelPrefix(block.label)
         if (block.statements.isEmpty()) {
             print("{}")
@@ -383,12 +377,12 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('}')
     }
     
-    private fun PrintWriter.printUnary(statement: FoxUnary, indentLevel: Int) {
+    private fun PrintWriter.printUnary(statement: SurfaceUnary, indentLevel: Int) {
         print(unaryOperatorText(statement.operator))
         printStatement(statement.right, indentLevel, UnaryOperand)
     }
     
-    private fun PrintWriter.printBinary(statement: FoxBinary, indentLevel: Int) {
+    private fun PrintWriter.printBinary(statement: SurfaceBinary, indentLevel: Int) {
         val precedence = binaryPrecedence(statement.operator)
         printStatement(statement.left, indentLevel, BinaryLeft(precedence))
         print(' ')
@@ -397,7 +391,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printStatement(statement.right, indentLevel, BinaryRight(precedence))
     }
     
-    private fun PrintWriter.printAssign(statement: FoxAssign, indentLevel: Int) {
+    private fun PrintWriter.printAssign(statement: SurfaceAssign, indentLevel: Int) {
         printStatement(statement.left, indentLevel, AssignLeft)
         print(' ')
         print(assignOperatorText(statement.operator))
@@ -405,8 +399,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printStatement(statement.right, indentLevel, AssignRight)
     }
     
-    private fun PrintWriter.printCall(statement: FoxCall, indentLevel: Int) {
-        if (canonical || statement.target != FoxEntityStatement(FoxUnit)) {
+    private fun PrintWriter.printCall(statement: SurfaceCall, indentLevel: Int) {
+        if (canonical || statement.target != SurfaceEntityStatement(FoxUnit)) {
             printStatement(statement.target, indentLevel, PostfixTarget)
             print('.')
         }
@@ -415,8 +409,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
     }
     
-    private fun PrintWriter.printIndirectCall(statement: FoxIndirectCall, indentLevel: Int) {
-        if (canonical || statement.target != FoxEntityStatement(FoxUnit)) {
+    private fun PrintWriter.printIndirectCall(statement: SurfaceIndirectCall, indentLevel: Int) {
+        if (canonical || statement.target != SurfaceEntityStatement(FoxUnit)) {
             printStatement(statement.target, indentLevel, PostfixTarget)
             print('.')
         }
@@ -426,7 +420,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printActualParametersWithTrailingLambda(statement.parameters, indentLevel)
     }
     
-    private fun PrintWriter.printIf(statement: FoxIf, indentLevel: Int) {
+    private fun PrintWriter.printIf(statement: SurfaceIf, indentLevel: Int) {
         printLabelPrefix(statement.label)
         print("if (")
         printStatement(statement.condition, indentLevel, Standalone)
@@ -438,7 +432,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun PrintWriter.printWhen(statement: FoxWhen, indentLevel: Int) {
+    private fun PrintWriter.printWhen(statement: SurfaceWhen, indentLevel: Int) {
         printLabelPrefix(statement.label)
         print("when")
         statement.value?.let {
@@ -469,7 +463,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('}')
     }
     
-    private fun PrintWriter.printWhile(statement: FoxWhile, indentLevel: Int) {
+    private fun PrintWriter.printWhile(statement: SurfaceWhile, indentLevel: Int) {
         printLabelPrefix(statement.label)
         print("while (")
         printStatement(statement.condition, indentLevel, Standalone)
@@ -477,7 +471,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printControlBody(statement.body, indentLevel)
     }
     
-    private fun PrintWriter.printDoWhile(statement: FoxDoWhile, indentLevel: Int) {
+    private fun PrintWriter.printDoWhile(statement: SurfaceDoWhile, indentLevel: Int) {
         printLabelPrefix(statement.label)
         print("do ")
         printControlBody(statement.body, indentLevel)
@@ -486,14 +480,14 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print(')')
     }
     
-    private fun PrintWriter.printMethodBody(statement: FoxStatement) {
-        if (statement is FoxBlock) printBlock(statement, 0)
+    private fun PrintWriter.printMethodBody(statement: SurfaceStatement) {
+        if (statement is SurfaceBlock) printBlock(statement, 0)
         else printBlockBody(statement, 0)
     }
     
-    private fun PrintWriter.printControlBody(statement: FoxStatement, indentLevel: Int, allowElseIfChain: Boolean = false) {
+    private fun PrintWriter.printControlBody(statement: SurfaceStatement, indentLevel: Int, allowElseIfChain: Boolean = false) {
         when {
-            canonical && statement is FoxIf && allowElseIfChain ->
+            canonical && statement is SurfaceIf && allowElseIfChain ->
                 printStatement(statement, indentLevel, Standalone)
             
             canonical -> printBlockBody(statement, indentLevel)
@@ -501,8 +495,8 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun PrintWriter.printBlockBody(statement: FoxStatement, indentLevel: Int) {
-        if (statement is FoxBlock) {
+    private fun PrintWriter.printBlockBody(statement: SurfaceStatement, indentLevel: Int) {
+        if (statement is SurfaceBlock) {
             printBlock(statement, indentLevel)
             return
         }
@@ -530,7 +524,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun PrintWriter.printFormalGenerics(generics: OrderedMap<String, FoxType>) {
+    private fun PrintWriter.printFormalGenerics(generics: OrderedMap<String, SurfaceType>) {
         print('<')
         printCommaSeparated(generics.entries) { (name, pattern) ->
             print(name)
@@ -540,7 +534,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printFormalParameters(parameters: OrderedMap<String, FoxType>) {
+    private fun PrintWriter.printFormalParameters(parameters: OrderedMap<String, SurfaceType>) {
         print('(')
         printCommaSeparated(parameters.entries) { parameter ->
             print(parameter.key)
@@ -550,7 +544,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print(')')
     }
     
-    private fun PrintWriter.printActualParameters(parameters: List<Pair<String?, FoxStatement>>, indentLevel: Int) {
+    private fun PrintWriter.printActualParameters(parameters: List<Pair<String?, SurfaceStatement>>, indentLevel: Int) {
         print('(')
         printCommaSeparated(parameters) { (name, value) ->
             if (name != null) {
@@ -563,12 +557,12 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
     }
     
     private fun PrintWriter.printActualParametersWithTrailingLambda(
-        parameters: List<Pair<String?, FoxStatement>>,
+        parameters: List<Pair<String?, SurfaceStatement>>,
         indentLevel: Int,
     ) {
         val trailingLambda = parameters.lastOrNull()
-            ?.takeIf { !canonical && it.first == null && it.second is FoxLambda }
-            ?.second as FoxLambda?
+            ?.takeIf { !canonical && it.first == null && it.second is SurfaceLambda }
+            ?.second as SurfaceLambda?
         if (trailingLambda == null) {
             printActualParameters(parameters, indentLevel)
             return
@@ -584,7 +578,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         printLambda(trailingLambda, indentLevel)
     }
     
-    private fun PrintWriter.printActualTypeArguments(generics: List<Pair<String?, FoxType>>) {
+    private fun PrintWriter.printActualTypeArguments(generics: List<Pair<String?, SurfaceType>>) {
         if (generics.isEmpty()) return
         print('<')
         printCommaSeparated(generics) { (name, type) ->
@@ -597,7 +591,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('>')
     }
     
-    private fun PrintWriter.printFormattedString(statement: FoxFormattedString) {
+    private fun PrintWriter.printFormattedString(statement: SurfaceFormattedString) {
         val isRaw = false
         print(if (isRaw) "rf\"" else "f\"")
         statement.parts.forEach { part ->
@@ -615,7 +609,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         print('"')
     }
     
-    private fun PrintWriter.printLambda(statement: FoxLambda, indentLevel: Int) {
+    private fun PrintWriter.printLambda(statement: SurfaceLambda, indentLevel: Int) {
         print('{')
         statement.parameters?.let { parameters ->
             if (parameters.isNotEmpty()) {
@@ -631,7 +625,7 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
         print(" ->")
         when (val body = statement.body) {
-            is FoxBlock -> {
+            is SurfaceBlock -> {
                 if (body.statements.isEmpty()) {
                     if (statement.parameters != null) print(' ')
                     print('}')
@@ -691,103 +685,103 @@ class AstSourceContext(options: AstSourceOptions = AstSourceOptions()) {
         }
     }
     
-    private fun unaryOperatorText(operator: FoxUnaryOperator) = when (operator) {
-        FoxNotOperator -> "!"
-        FoxNegOperator -> "-"
+    private fun unaryOperatorText(operator: FoxUnaryOperator) = when (operator.operator) {
+        UnaryOperatorEnum.Not -> "!"
+        UnaryOperatorEnum.Neg -> "-"
     }
     
-    private fun binaryOperatorText(operator: FoxBinaryOperator) = when (operator) {
-        FoxAddOperator -> "+"
-        FoxSubOperator -> "-"
-        FoxMulOperator -> "*"
-        FoxDivOperator -> "/"
-        FoxRemOperator -> "%"
-        FoxAndOperator -> "&"
-        FoxOrOperator -> "|"
-        FoxXorOperator -> "^"
-        FoxShlOperator -> "<<"
-        FoxShrOperator -> ">>"
-        FoxUshrOperator -> ">>>"
-        FoxEqOperator -> "=="
-        FoxNeqOperator -> "!="
-        FoxLtOperator -> "<"
-        FoxGtOperator -> ">"
-        FoxLeqOperator -> "<="
-        FoxGeqOperator -> ">="
-        FoxAndAndOperator -> "&&"
-        FoxOrOrOperator -> "||"
+    private fun binaryOperatorText(operator: FoxBinaryOperator) = when (operator.operator) {
+        BinaryOperatorEnum.Add -> "+"
+        BinaryOperatorEnum.Sub -> "-"
+        BinaryOperatorEnum.Mul -> "*"
+        BinaryOperatorEnum.Div -> "/"
+        BinaryOperatorEnum.Rem -> "%"
+        BinaryOperatorEnum.And -> "&"
+        BinaryOperatorEnum.Or -> "|"
+        BinaryOperatorEnum.Xor -> "^"
+        BinaryOperatorEnum.Shl -> "<<"
+        BinaryOperatorEnum.Shr -> ">>"
+        BinaryOperatorEnum.Ushr -> ">>>"
+        BinaryOperatorEnum.Eq -> "=="
+        BinaryOperatorEnum.Neq -> "!="
+        BinaryOperatorEnum.Lt -> "<"
+        BinaryOperatorEnum.Gt -> ">"
+        BinaryOperatorEnum.Leq -> "<="
+        BinaryOperatorEnum.Geq -> ">="
+        BinaryOperatorEnum.AndAnd -> "&&"
+        BinaryOperatorEnum.OrOr -> "||"
     }
     
-    private fun assignOperatorText(operator: FoxAssignOperator) = when (operator) {
-        FoxPlainAssignOperator -> "="
-        FoxDefAssignOperator -> ":="
-        FoxAddAssignOperator -> "+="
-        FoxSubAssignOperator -> "-="
-        FoxMulAssignOperator -> "*="
-        FoxDivAssignOperator -> "/="
-        FoxRemAssignOperator -> "%="
-        FoxAndAssignOperator -> "&="
-        FoxOrAssignOperator -> "|="
-        FoxXorAssignOperator -> "^="
-        FoxShlAssignOperator -> "<<="
-        FoxShrAssignOperator -> ">>="
-        FoxUshrAssignOperator -> ">>>="
-        FoxAndAndAssignOperator -> "&&="
-        FoxOrOrAssignOperator -> "||="
+    private fun assignOperatorText(operator: FoxAssignOperator) = when (operator.operator) {
+        AssignOperatorEnum.Plain -> "="
+        AssignOperatorEnum.Def -> ":="
+        AssignOperatorEnum.Add -> "+="
+        AssignOperatorEnum.Sub -> "-="
+        AssignOperatorEnum.Mul -> "*="
+        AssignOperatorEnum.Div -> "/="
+        AssignOperatorEnum.Rem -> "%="
+        AssignOperatorEnum.And -> "&="
+        AssignOperatorEnum.Or -> "|="
+        AssignOperatorEnum.Xor -> "^="
+        AssignOperatorEnum.Shl -> "<<="
+        AssignOperatorEnum.Shr -> ">>="
+        AssignOperatorEnum.Ushr -> ">>>="
+        AssignOperatorEnum.AndAnd -> "&&="
+        AssignOperatorEnum.OrOr -> "||="
     }
     
-    private fun precedenceOf(statement: FoxStatement): Int = when (statement) {
-        is FoxIf,
-        is FoxWhen,
-        is FoxWhile,
-        is FoxDoWhile,
-        is FoxBreak,
-        is FoxContinue,
-        is FoxYield,
-        is FoxReturn,
-        is FoxBlock,
-        is FoxTypeBinding,
+    private fun precedenceOf(statement: SurfaceStatement): Int = when (statement) {
+        is SurfaceIf,
+        is SurfaceWhen,
+        is SurfaceWhile,
+        is SurfaceDoWhile,
+        is SurfaceBreak,
+        is SurfaceContinue,
+        is SurfaceYield,
+        is SurfaceReturn,
+        is SurfaceBlock,
+        is SurfaceTypeBinding,
             -> 0
         
-        is FoxLambda -> 5
-        is FoxAssign -> 10
-        is FoxBinary -> binaryPrecedence(statement.operator)
-        is FoxUnary -> 120
-        is FoxFieldAccess,
-        is FoxIndexAccess,
-        is FoxCall,
-        is FoxConstruct,
-        is FoxIndirectCall,
+        is SurfaceLambda -> 5
+        is SurfaceAssign -> 10
+        is SurfaceBinary -> binaryPrecedence(statement.operator)
+        is SurfaceUnary -> 120
+        is SurfaceFieldAccess,
+        is SurfaceIndexAccess,
+        is SurfaceCall,
+        is SurfaceConstruct,
+        is SurfaceIndirectCall,
             -> 130
         
-        FoxThis,
-        is FoxUnresolvedSymbol,
-        is FoxFormattedString,
-        is FoxEntityStatement,
+        SurfaceThis,
+        is SurfaceUnresolvedSymbol,
+        is SurfaceFormattedString,
+        is SurfaceEntityStatement,
             -> 140
     }
     
-    private fun binaryPrecedence(operator: FoxBinaryOperator): Int = when (operator) {
-        FoxOrOrOperator -> 20
-        FoxAndAndOperator -> 30
-        FoxOrOperator -> 40
-        FoxXorOperator -> 50
-        FoxAndOperator -> 60
-        FoxEqOperator, FoxNeqOperator -> 70
-        FoxLtOperator, FoxGtOperator, FoxLeqOperator, FoxGeqOperator -> 80
-        FoxShlOperator, FoxShrOperator, FoxUshrOperator -> 90
-        FoxAddOperator, FoxSubOperator -> 100
-        FoxMulOperator, FoxDivOperator, FoxRemOperator -> 110
+    private fun binaryPrecedence(operator: FoxBinaryOperator): Int = when (operator.operator) {
+        BinaryOperatorEnum.OrOr -> 20
+        BinaryOperatorEnum.AndAnd -> 30
+        BinaryOperatorEnum.Or -> 40
+        BinaryOperatorEnum.Xor -> 50
+        BinaryOperatorEnum.And -> 60
+        BinaryOperatorEnum.Eq, BinaryOperatorEnum.Neq -> 70
+        BinaryOperatorEnum.Lt, BinaryOperatorEnum.Gt, BinaryOperatorEnum.Leq, BinaryOperatorEnum.Geq -> 80
+        BinaryOperatorEnum.Shl, BinaryOperatorEnum.Shr, BinaryOperatorEnum.Ushr -> 90
+        BinaryOperatorEnum.Add, BinaryOperatorEnum.Sub -> 100
+        BinaryOperatorEnum.Mul, BinaryOperatorEnum.Div, BinaryOperatorEnum.Rem -> 110
     }
     
     private fun needsParentheses(
-        statement: FoxStatement,
+        statement: SurfaceStatement,
         precedence: Int,
         position: StatementPosition,
     ): Boolean {
         val parentPrecedence = position.parentPrecedence
         if (precedence < parentPrecedence) return true
-        if (statement is FoxBinary && position is BinaryRight && precedence == parentPrecedence) return true
+        if (statement is SurfaceBinary && position is BinaryRight && precedence == parentPrecedence) return true
         return false
     }
     

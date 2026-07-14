@@ -1,43 +1,43 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.type.mapTypes
 import pers.hpcx.foxlang.type.visitTypes
 
 sealed interface TypeAliasFlattenResult
-data class TypeAliasFlattenSuccess(val newFile: FoxFile) : TypeAliasFlattenResult
+data class TypeAliasFlattenSuccess(val newFile: SurfaceFile) : TypeAliasFlattenResult
 data class TypeAliasFlattenFailure(val errors: List<TypeAliasFlattenError>) : TypeAliasFlattenResult
 
 sealed interface TypeAliasFlattenError
-data class TypeAliasDuplicated(val typeAlias: FoxTypeAlias) : TypeAliasFlattenError
-data class TypeAliasNotFound(val referredBy: FoxTypeAlias, val typeName: String) : TypeAliasFlattenError
-data class TypeAliasGenericCountMismatch(val referredBy: FoxTypeAlias, val type: FoxType) : TypeAliasFlattenError
-data class TypeAliasLoopDetected(val typeAliases: List<FoxTypeAlias>) : TypeAliasFlattenError
+data class TypeAliasDuplicated(val typeAlias: SurfaceTypeAlias) : TypeAliasFlattenError
+data class TypeAliasNotFound(val referredBy: SurfaceTypeAlias, val typeName: String) : TypeAliasFlattenError
+data class TypeAliasGenericCountMismatch(val referredBy: SurfaceTypeAlias, val type: SurfaceType) : TypeAliasFlattenError
+data class TypeAliasLoopDetected(val typeAliases: List<SurfaceTypeAlias>) : TypeAliasFlattenError
 
-private sealed interface FoxFlattenMarker : FoxPlaceholderType
-private data class FoxGenericRefMarker(val genericName: String) : FoxFlattenMarker
-private data class FoxAliasRefMarker(
+private sealed class SurfaceFlattenMarker : SurfacePlaceholderType()
+private data class SurfaceGenericRefMarker(val genericName: String) : SurfaceFlattenMarker()
+private data class SurfaceAliasRefMarker(
     val aliasName: String,
-    val parameters: List<FoxType>?,
-    val originalType: FoxUnresolvedType,
-) : FoxFlattenMarker
+    val parameters: List<SurfaceType>?,
+    val originalType: SurfaceUnresolvedType,
+) : SurfaceFlattenMarker()
 
-fun runTypeAliasFlatten(file: FoxFile) = TypeAliasFlattenContext(file).run()
+fun runTypeAliasFlatten(file: SurfaceFile) = TypeAliasFlattenContext(file).run()
 
 private class TypeAliasFlattenContext(
-    private val file: FoxFile,
+    private val file: SurfaceFile,
 ) {
     
     private val errors = mutableListOf<TypeAliasFlattenError>()
-    private val originalAliases = file.elements.filterIsInstance<FoxTypeAlias>()
+    private val originalAliases = file.elements.filterIsInstance<SurfaceTypeAlias>()
     private val classifiedAliases = originalAliases.map { classifyAlias(it) }
-    private val aliasByName = mutableMapOf<String, FoxTypeAlias>()
-    private val originalAliasByName = mutableMapOf<String, FoxTypeAlias>()
+    private val aliasByName = mutableMapOf<String, SurfaceTypeAlias>()
+    private val originalAliasByName = mutableMapOf<String, SurfaceTypeAlias>()
     private val aliasDeps = mutableMapOf<String, MutableSet<String>>()
     private val visitedAliases = mutableSetOf<String>()
     private val activeAliases = mutableSetOf<String>()
     private val aliasStack = mutableListOf<String>()
-    private val flattenedAliasByName = mutableMapOf<String, FoxTypeAlias>()
+    private val flattenedAliasByName = mutableMapOf<String, SurfaceTypeAlias>()
     
     fun run(): TypeAliasFlattenResult {
         buildAliasMaps()
@@ -57,25 +57,25 @@ private class TypeAliasFlattenContext(
         
         val publicAliasByName = publicAliases.associateBy { it.name }
         return TypeAliasFlattenSuccess(
-            FoxFile(
+            SurfaceFile(
                 file.elements.map { element ->
-                    if (element is FoxTypeAlias) publicAliasByName.getValue(element.name)
+                    if (element is SurfaceTypeAlias) publicAliasByName.getValue(element.name)
                     else element
                 },
             ),
         )
     }
     
-    private fun classifyAlias(typeAlias: FoxTypeAlias): Pair<FoxTypeAlias, FoxTypeAlias> {
-        return typeAlias to FoxTypeAlias(typeAlias.name, typeAlias.generics, classifyTypeRef(typeAlias, typeAlias.alias))
+    private fun classifyAlias(typeAlias: SurfaceTypeAlias): Pair<SurfaceTypeAlias, SurfaceTypeAlias> {
+        return typeAlias to SurfaceTypeAlias(typeAlias.name, typeAlias.generics, classifyTypeRef(typeAlias, typeAlias.alias))
     }
     
-    private fun classifyTypeRef(typeAlias: FoxTypeAlias, type: FoxType): FoxType =
-        type.mapTypes<FoxUnresolvedType> { unresolved ->
+    private fun classifyTypeRef(typeAlias: SurfaceTypeAlias, type: SurfaceType): SurfaceType =
+        type.mapTypes<SurfaceUnresolvedType> { unresolved ->
             if (unresolved.name in typeAlias.generics && unresolved.parameters == null) {
-                FoxGenericRefMarker(unresolved.name)
+                SurfaceGenericRefMarker(unresolved.name)
             } else {
-                FoxAliasRefMarker(
+                SurfaceAliasRefMarker(
                     unresolved.name,
                     unresolved.parameters?.map { classifyTypeRef(typeAlias, it) },
                     unresolved,
@@ -101,13 +101,13 @@ private class TypeAliasFlattenContext(
     }
     
     private fun collectAliasDeps(
-        originalAlias: FoxTypeAlias,
-        classifiedAlias: FoxTypeAlias,
-        type: FoxType,
-    ): Unit = type.visitTypes<FoxFlattenMarker> { marker ->
+        originalAlias: SurfaceTypeAlias,
+        classifiedAlias: SurfaceTypeAlias,
+        type: SurfaceType,
+    ): Unit = type.visitTypes<SurfaceFlattenMarker> { marker ->
         when (marker) {
-            is FoxGenericRefMarker -> {}
-            is FoxAliasRefMarker -> {
+            is SurfaceGenericRefMarker -> {}
+            is SurfaceAliasRefMarker -> {
                 val alias = aliasByName[marker.aliasName] ?: run {
                     errors += TypeAliasNotFound(originalAlias, marker.aliasName)
                     return@visitTypes
@@ -149,18 +149,18 @@ private class TypeAliasFlattenContext(
         return false
     }
     
-    private fun flattenAlias(typeAlias: FoxTypeAlias): FoxTypeAlias {
+    private fun flattenAlias(typeAlias: SurfaceTypeAlias): SurfaceTypeAlias {
         flattenedAliasByName[typeAlias.name]?.let { return it }
         
-        val result = FoxTypeAlias(typeAlias.name, typeAlias.generics, flattenType(typeAlias.alias))
+        val result = SurfaceTypeAlias(typeAlias.name, typeAlias.generics, flattenType(typeAlias.alias))
         flattenedAliasByName[typeAlias.name] = result
         return result
     }
     
-    private fun flattenType(type: FoxType): FoxType = type.mapTypes<FoxFlattenMarker> { marker ->
+    private fun flattenType(type: SurfaceType): SurfaceType = type.mapTypes<SurfaceFlattenMarker> { marker ->
         when (marker) {
-            is FoxGenericRefMarker -> marker
-            is FoxAliasRefMarker -> {
+            is SurfaceGenericRefMarker -> marker
+            is SurfaceAliasRefMarker -> {
                 val flattened = flattenAlias(aliasByName.getValue(marker.aliasName))
                 if (marker.parameters != null) {
                     val genericReplacement = flattened.generics.zip(marker.parameters.map { flattenType(it) }).toMap()
@@ -172,23 +172,23 @@ private class TypeAliasFlattenContext(
         }
     }
     
-    private fun substituteGenerics(type: FoxType, replacement: Map<String, FoxType>): FoxType =
-        type.mapTypes<FoxFlattenMarker> { marker ->
+    private fun substituteGenerics(type: SurfaceType, replacement: Map<String, SurfaceType>): SurfaceType =
+        type.mapTypes<SurfaceFlattenMarker> { marker ->
             when (marker) {
-                is FoxGenericRefMarker -> replacement.getValue(marker.genericName)
-                is FoxAliasRefMarker -> error("unreachable")
+                is SurfaceGenericRefMarker -> replacement.getValue(marker.genericName)
+                is SurfaceAliasRefMarker -> error("unreachable")
             }
         }
     
-    private fun restorePublicAlias(typeAlias: FoxTypeAlias): FoxTypeAlias {
-        return FoxTypeAlias(typeAlias.name, typeAlias.generics, restoreGenericRefs(typeAlias.alias))
+    private fun restorePublicAlias(typeAlias: SurfaceTypeAlias): SurfaceTypeAlias {
+        return SurfaceTypeAlias(typeAlias.name, typeAlias.generics, restoreGenericRefs(typeAlias.alias))
     }
     
-    private fun restoreGenericRefs(type: FoxType): FoxType =
-        type.mapTypes<FoxFlattenMarker> { marker ->
+    private fun restoreGenericRefs(type: SurfaceType): SurfaceType =
+        type.mapTypes<SurfaceFlattenMarker> { marker ->
             when (marker) {
-                is FoxGenericRefMarker -> FoxUnresolvedType(marker.genericName, null)
-                is FoxAliasRefMarker -> error("unreachable")
+                is SurfaceGenericRefMarker -> SurfaceUnresolvedType(marker.genericName, null)
+                is SurfaceAliasRefMarker -> error("unreachable")
             }
         }
 }

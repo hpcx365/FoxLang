@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.type
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.utils.RleArrayList
 import pers.hpcx.foxlang.utils.orderedMapOf
 import kotlin.test.Test
@@ -24,7 +24,7 @@ class TypeShapeUtilsTest {
     @Test
     fun reverseIndexHelpersWork() {
         val tuple = listOf(FoxStringType, FoxIntType, FoxDoubleType).toFoxTupleType()
-        val struct = FoxStructType(
+        val struct = SurfaceStructType(
             orderedMapOf(
                 "name" to FoxStringType,
                 "age" to FoxIntType,
@@ -40,7 +40,7 @@ class TypeShapeUtilsTest {
     
     @Test
     fun structFieldOrderHelpersWork() {
-        val struct = FoxStructType(
+        val struct = SurfaceStructType(
             orderedMapOf(
                 "name" to FoxStringType,
                 "age" to FoxIntType,
@@ -50,33 +50,33 @@ class TypeShapeUtilsTest {
         
         assertEquals("age" to FoxIntType, struct.getFieldTypeByIndex(1).toPair())
         assertEquals(
-            FoxStructType(orderedMapOf("name" to FoxStringType, "age" to FoxIntType)),
+            SurfaceStructType(orderedMapOf("name" to FoxStringType, "age" to FoxIntType)),
             struct.getFirstFields(2),
         )
         assertEquals(
-            FoxStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
+            SurfaceStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
             struct.getLastFields(2),
         )
         assertEquals(
-            FoxStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
+            SurfaceStructType(orderedMapOf("age" to FoxIntType, "height" to FoxDoubleType)),
             struct.dropFirstFields(1),
         )
         assertEquals(
-            FoxStructType(orderedMapOf("name" to FoxStringType, "age" to FoxIntType)),
+            SurfaceStructType(orderedMapOf("name" to FoxStringType, "age" to FoxIntType)),
             struct.dropLastFields(1),
         )
     }
     
     @Test
     fun structSelectionDropAndMergeRespectOrder() {
-        val left = FoxStructType(
+        val left = SurfaceStructType(
             orderedMapOf(
                 "a" to FoxIntType,
                 "b" to FoxStringType,
                 "c" to FoxDoubleType,
             ),
         )
-        val right = FoxStructType(
+        val right = SurfaceStructType(
             orderedMapOf(
                 "b" to FoxBoolType,
                 "d" to FoxUnitType,
@@ -84,15 +84,15 @@ class TypeShapeUtilsTest {
         )
         
         assertEquals(
-            FoxStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
+            SurfaceStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
             left.selectFields(setOf("c", "a")),
         )
         assertEquals(
-            FoxStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
+            SurfaceStructType(orderedMapOf("a" to FoxIntType, "c" to FoxDoubleType)),
             left.dropFields(setOf("b")),
         )
         assertEquals(
-            FoxStructType(
+            SurfaceStructType(
                 orderedMapOf(
                     "a" to FoxIntType,
                     "b" to FoxBoolType,
@@ -106,14 +106,14 @@ class TypeShapeUtilsTest {
     
     @Test
     fun objectSelectionDropAndMergeIgnoreLogicalOrder() {
-        val left = FoxObjectType(
+        val left = SurfaceObjectType(
             linkedMapOf(
                 "a" to FoxIntType,
                 "b" to FoxStringType,
                 "c" to FoxDoubleType,
             ),
         )
-        val right = FoxObjectType(
+        val right = SurfaceObjectType(
             linkedMapOf(
                 "b" to FoxBoolType,
                 "d" to FoxUnitType,
@@ -122,15 +122,15 @@ class TypeShapeUtilsTest {
         
         assertEquals(FoxStringType, left.getMemberType("b"))
         assertEquals(
-            FoxObjectType(mapOf("c" to FoxDoubleType, "a" to FoxIntType)),
+            SurfaceObjectType(mapOf("c" to FoxDoubleType, "a" to FoxIntType)),
             left.selectMembers(linkedSetOf("c", "a")),
         )
         assertEquals(
-            FoxObjectType(mapOf("a" to FoxIntType, "c" to FoxDoubleType)),
+            SurfaceObjectType(mapOf("a" to FoxIntType, "c" to FoxDoubleType)),
             left.dropMembers(setOf("b")),
         )
         assertEquals(
-            FoxObjectType(
+            SurfaceObjectType(
                 mapOf(
                     "a" to FoxIntType,
                     "b" to FoxBoolType,
@@ -144,14 +144,14 @@ class TypeShapeUtilsTest {
     
     @Test
     fun enumSelectionDropAndMergePreserveRequestedNames() {
-        val left = FoxEnumType(
+        val left = SurfaceEnumType(
             linkedMapOf(
                 "A" to FoxIntType,
                 "B" to FoxStringType,
                 "C" to FoxDoubleType,
             ),
         )
-        val right = FoxEnumType(
+        val right = SurfaceEnumType(
             linkedMapOf(
                 "B" to FoxBoolType,
                 "D" to FoxUnitType,
@@ -166,3 +166,9 @@ class TypeShapeUtilsTest {
         assertEquals(FoxBoolType, merged.entries.getValue("B"))
     }
 }
+
+private val FoxUnitType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit)
+private val FoxBoolType = SurfacePrimitiveType(PrimitiveTypeEnum.Bool)
+private val FoxIntType = SurfacePrimitiveType(PrimitiveTypeEnum.Int)
+private val FoxDoubleType = SurfacePrimitiveType(PrimitiveTypeEnum.Double)
+private val FoxStringType = SurfacePrimitiveType(PrimitiveTypeEnum.String)

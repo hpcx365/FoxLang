@@ -1,49 +1,49 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.type.mapTypes
 import pers.hpcx.foxlang.type.visitTypes
 import pers.hpcx.foxlang.utils.mapValues
 
 sealed interface MethodTypeNormalizationResult
-data class MethodTypeNormalizationSuccess(val newFile: FoxFile) : MethodTypeNormalizationResult
+data class MethodTypeNormalizationSuccess(val newFile: SurfaceFile) : MethodTypeNormalizationResult
 data class MethodTypeNormalizationFailure(val errors: List<MethodTypeNormalizationError>) : MethodTypeNormalizationResult
 
 sealed interface MethodTypeNormalizationError
 
 data class MethodTypeNormalizationWildcardNotAllowed(
-    val method: FoxMethodDefinition,
-    val type: FoxWildcardType,
+    val method: SurfaceMethodDefinition,
+    val type: SurfaceWildcardType,
 ) : MethodTypeNormalizationError
 
 data class MethodTypeNormalizationTransformNotAllowed(
-    val method: FoxMethodDefinition,
-    val type: FoxTransformType,
+    val method: SurfaceMethodDefinition,
+    val type: SurfaceTransformType,
 ) : MethodTypeNormalizationError
 
 data class MethodTypeNormalizationFailedError(
-    val method: FoxMethodDefinition,
+    val method: SurfaceMethodDefinition,
     val error: TypeNormalizationError,
 ) : MethodTypeNormalizationError
 
 data class MethodTypeNormalizationUnknownGenericReference(
-    val method: FoxMethodDefinition,
-    val type: FoxUnresolvedType,
+    val method: SurfaceMethodDefinition,
+    val type: SurfaceUnresolvedType,
 ) : MethodTypeNormalizationError
 
-fun runMethodTypeNormalization(file: FoxFile) = MethodTypeNormalizationContext().run(file)
+fun runMethodTypeNormalization(file: SurfaceFile) = MethodTypeNormalizationContext().run(file)
 
 private class MethodTypeNormalizationContext {
     
     private val errors = mutableListOf<MethodTypeNormalizationError>()
     
-    fun run(file: FoxFile): MethodTypeNormalizationResult {
+    fun run(file: SurfaceFile): MethodTypeNormalizationResult {
         val newElements = file.elements.map { element ->
             when (element) {
-                is FoxTypeAlias -> error("unreachable")
-                is FoxMethodDefinition -> {
+                is SurfaceTypeAlias -> error("unreachable")
+                is SurfaceMethodDefinition -> {
                     element.generics.values.forEach { checkGenericReferences(element, it) }
-                    FoxMethodDefinition(
+                    SurfaceMethodDefinition(
                         element.generics,
                         normalizeType(element, element.thisType),
                         element.name,
@@ -56,18 +56,18 @@ private class MethodTypeNormalizationContext {
         }
         
         if (errors.isNotEmpty()) return MethodTypeNormalizationFailure(errors)
-        return MethodTypeNormalizationSuccess(FoxFile(newElements))
+        return MethodTypeNormalizationSuccess(SurfaceFile(newElements))
     }
     
-    private fun normalizeType(method: FoxMethodDefinition, type: FoxType): FoxType {
+    private fun normalizeType(method: SurfaceMethodDefinition, type: SurfaceType): SurfaceType {
         checkGenericReferences(method, type)
         
-        type.visitTypes<FoxWildcardType> { wildcard ->
+        type.visitTypes<SurfaceWildcardType> { wildcard ->
             errors += MethodTypeNormalizationWildcardNotAllowed(method, wildcard)
         }
         
         var normalizationFailed = false
-        val normalizedType = type.mapTypes<FoxType> { currentType ->
+        val normalizedType = type.mapTypes<SurfaceType> { currentType ->
             when (val result = runTypeNormalization(currentType)) {
                 is TypeNormalizationSuccess -> result.type
                 is TypeNormalizationFailure -> {
@@ -78,15 +78,15 @@ private class MethodTypeNormalizationContext {
             }
         }
         if (!normalizationFailed) {
-            normalizedType.visitTypes<FoxTransformType> { transform ->
+            normalizedType.visitTypes<SurfaceTransformType> { transform ->
                 errors += MethodTypeNormalizationTransformNotAllowed(method, transform)
             }
         }
         return normalizedType
     }
     
-    private fun checkGenericReferences(method: FoxMethodDefinition, type: FoxType) {
-        type.visitTypes<FoxUnresolvedType> { unresolved ->
+    private fun checkGenericReferences(method: SurfaceMethodDefinition, type: SurfaceType) {
+        type.visitTypes<SurfaceUnresolvedType> { unresolved ->
             check(unresolved.parameters == null)
             if (unresolved.name !in method.generics) {
                 errors += MethodTypeNormalizationUnknownGenericReference(method, unresolved)
@@ -94,28 +94,28 @@ private class MethodTypeNormalizationContext {
         }
     }
     
-    private fun normalizeStatement(method: FoxMethodDefinition, statement: FoxStatement): FoxStatement = when (statement) {
-        FoxThis -> statement
-        is FoxUnresolvedSymbol -> statement
-        is FoxEntityStatement -> statement
-        is FoxBreak -> statement
-        is FoxContinue -> statement
-        is FoxYield -> FoxYield(statement.label, normalizeStatement(method, statement.value))
-        is FoxReturn -> FoxReturn(statement.value?.let { normalizeStatement(method, it) })
-        is FoxUnary -> FoxUnary(statement.operator, normalizeStatement(method, statement.right))
-        is FoxBinary -> FoxBinary(
+    private fun normalizeStatement(method: SurfaceMethodDefinition, statement: SurfaceStatement): SurfaceStatement = when (statement) {
+        SurfaceThis -> statement
+        is SurfaceUnresolvedSymbol -> statement
+        is SurfaceEntityStatement -> statement
+        is SurfaceBreak -> statement
+        is SurfaceContinue -> statement
+        is SurfaceYield -> SurfaceYield(statement.label, normalizeStatement(method, statement.value))
+        is SurfaceReturn -> SurfaceReturn(statement.value?.let { normalizeStatement(method, it) })
+        is SurfaceUnary -> SurfaceUnary(statement.operator, normalizeStatement(method, statement.right))
+        is SurfaceBinary -> SurfaceBinary(
             normalizeStatement(method, statement.left),
             statement.operator,
             normalizeStatement(method, statement.right),
         )
-        is FoxTypeBinding -> FoxTypeBinding(statement.name, normalizeType(method, statement.type))
-        is FoxAssign -> FoxAssign(statement.left, statement.operator, normalizeStatement(method, statement.right), statement.beforeEvaluation)
-        is FoxFieldAccess -> FoxFieldAccess(normalizeStatement(method, statement.target), statement.name)
-        is FoxIndexAccess -> FoxIndexAccess(
+        is SurfaceTypeBinding -> SurfaceTypeBinding(statement.name, normalizeType(method, statement.type))
+        is SurfaceAssign -> SurfaceAssign(statement.left, statement.operator, normalizeStatement(method, statement.right), statement.beforeEvaluation)
+        is SurfaceFieldAccess -> SurfaceFieldAccess(normalizeStatement(method, statement.target), statement.name)
+        is SurfaceIndexAccess -> SurfaceIndexAccess(
             normalizeStatement(method, statement.target),
             statement.indices.map { normalizeStatement(method, it) },
         )
-        is FoxFormattedString -> FoxFormattedString(
+        is SurfaceFormattedString -> SurfaceFormattedString(
             statement.parts.map { part ->
                 when (part) {
                     is FoxFormattedText -> part
@@ -123,33 +123,33 @@ private class MethodTypeNormalizationContext {
                 }
             },
         )
-        is FoxLambda -> FoxLambda(
+        is SurfaceLambda -> SurfaceLambda(
             statement.parameters?.map { (name, type) -> name to type?.let { normalizeType(method, it) } },
             normalizeStatement(method, statement.body),
         )
-        is FoxConstruct -> FoxConstruct(
+        is SurfaceConstruct -> SurfaceConstruct(
             normalizeType(method, statement.type),
             statement.parameters.map { (name, value) -> name to normalizeStatement(method, value) },
         )
-        is FoxCall -> FoxCall(
+        is SurfaceCall -> SurfaceCall(
             normalizeStatement(method, statement.target),
             statement.name,
             statement.generics?.map { (name, type) -> name to normalizeType(method, type) },
             statement.parameters.map { (name, value) -> name to normalizeStatement(method, value) },
         )
-        is FoxIndirectCall -> FoxIndirectCall(
+        is SurfaceIndirectCall -> SurfaceIndirectCall(
             normalizeStatement(method, statement.target),
             normalizeStatement(method, statement.method),
             statement.parameters.map { (name, value) -> name to normalizeStatement(method, value) },
         )
-        is FoxBlock -> FoxBlock(statement.label, statement.statements.map { normalizeStatement(method, it) })
-        is FoxIf -> FoxIf(
+        is SurfaceBlock -> SurfaceBlock(statement.label, statement.statements.map { normalizeStatement(method, it) })
+        is SurfaceIf -> SurfaceIf(
             statement.label,
             normalizeStatement(method, statement.condition),
             normalizeStatement(method, statement.thenBody),
             statement.elseBody?.let { normalizeStatement(method, it) },
         )
-        is FoxWhen -> FoxWhen(
+        is SurfaceWhen -> SurfaceWhen(
             statement.label,
             statement.value?.let { normalizeStatement(method, it) },
             statement.cases.map { case ->
@@ -159,12 +159,12 @@ private class MethodTypeNormalizationContext {
                 )
             },
         )
-        is FoxWhile -> FoxWhile(
+        is SurfaceWhile -> SurfaceWhile(
             statement.label,
             normalizeStatement(method, statement.condition),
             normalizeStatement(method, statement.body),
         )
-        is FoxDoWhile -> FoxDoWhile(
+        is SurfaceDoWhile -> SurfaceDoWhile(
             statement.label,
             normalizeStatement(method, statement.body),
             normalizeStatement(method, statement.condition),

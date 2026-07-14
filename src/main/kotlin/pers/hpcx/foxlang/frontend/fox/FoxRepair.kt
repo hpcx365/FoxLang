@@ -8,7 +8,6 @@ import pers.hpcx.foxlang.frontend.fox.FoxExpressionSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxFormattedStringPartSymbol.FormattedStringEnd
 import pers.hpcx.foxlang.frontend.fox.FoxFormattedStringPartSymbol.FormattedStringStart
 import pers.hpcx.foxlang.frontend.fox.FoxKeywordSymbol.*
-import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxLiteralSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.*
 

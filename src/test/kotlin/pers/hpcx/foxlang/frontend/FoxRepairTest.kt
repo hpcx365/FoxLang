@@ -1,10 +1,10 @@
 package pers.hpcx.foxlang.frontend
 
-import pers.hpcx.foxlang.ast.ParsedFoxFile
 import pers.hpcx.foxlang.frontend.common.*
 import pers.hpcx.foxlang.frontend.fox.*
 import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.AngleClose
 import pers.hpcx.foxlang.frontend.fox.FoxTerminalSymbol.Comma
+import pers.hpcx.foxlang.ir.SyntaxFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -654,31 +654,31 @@ class FoxRepairTest {
 //    }
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairFormalParameterList() {
+private fun ParseAnalysis<SyntaxFile>.repairFormalParameterList() {
     context.repair(Expectation(FormalParameterList, source.span), FoxRepairStrategy)
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairType() {
+private fun ParseAnalysis<SyntaxFile>.repairType() {
     context.repair(Expectation(Type, source.span), FoxRepairStrategy)
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairStructFieldNameList() {
+private fun ParseAnalysis<SyntaxFile>.repairStructFieldNameList() {
     context.repair(Expectation(StructFieldNameList, source.span), FoxRepairStrategy)
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairLambdaLiteral() {
+private fun ParseAnalysis<SyntaxFile>.repairLambdaLiteral() {
     context.repair(Expectation(LambdaLiteral, source.span), FoxRepairStrategy)
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairStatement() {
+private fun ParseAnalysis<SyntaxFile>.repairStatement() {
     context.repair(Expectation(Statement, source.span), FoxRepairStrategy)
 }
 
-private fun ParseAnalysis<ParsedFoxFile>.repairWhenCase() {
+private fun ParseAnalysis<SyntaxFile>.repairWhenCase() {
     context.repair(Expectation(WhenCase, source.span), FoxRepairStrategy)
 }
 
-private fun String.analyzeFoxOrThrow(): ParseAnalysis<ParsedFoxFile> {
+private fun String.analyzeFoxOrThrow(): ParseAnalysis<SyntaxFile> {
     return when (val result = sourceFox()) {
         is SourceFragmentationSuccess -> (result.value).analyzeFox()
         is SourceFragmentationFailure -> error(result.errors.joinToString { it })

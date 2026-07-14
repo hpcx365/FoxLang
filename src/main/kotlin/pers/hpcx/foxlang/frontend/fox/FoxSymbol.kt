@@ -1,18 +1,16 @@
 package pers.hpcx.foxlang.frontend.fox
 
-import pers.hpcx.foxlang.ast.*
 import pers.hpcx.foxlang.frontend.common.GrammarSymbol
 import pers.hpcx.foxlang.frontend.fox.FoxBinaryOperatorCategorySymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxBracketSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxExpressionSymbol.ParenthesizedExpression
-import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.Identifier
-import pers.hpcx.foxlang.frontend.fox.FoxLexicalSymbol.TypeName
 import pers.hpcx.foxlang.frontend.fox.FoxLiteralSymbol.*
 import pers.hpcx.foxlang.frontend.fox.FoxSyntheticTypeKeywordSymbol.*
+import pers.hpcx.foxlang.ir.*
 
 sealed interface FoxGrammarSymbol<N> : GrammarSymbol<N>
 
-enum class FoxTerminalSymbol(val text: String) : FoxGrammarSymbol<ParsedUnit> {
+enum class FoxTerminalSymbol(val text: String) : FoxGrammarSymbol<SyntaxUnit> {
     LParen("("),
     RParen(")"),
     LBracket("["),
@@ -33,7 +31,7 @@ enum class FoxTerminalSymbol(val text: String) : FoxGrammarSymbol<ParsedUnit> {
     LineBreak("\n"),
 }
 
-enum class FoxBracketSymbol : FoxGrammarSymbol<ParsedUnit> {
+enum class FoxBracketSymbol : FoxGrammarSymbol<SyntaxUnit> {
     ParenOpen,
     ParenClose,
     SquareOpen,
@@ -44,18 +42,18 @@ enum class FoxBracketSymbol : FoxGrammarSymbol<ParsedUnit> {
     AngleClose,
 }
 
-enum class FoxFormattedStringPartSymbol : FoxGrammarSymbol<ParsedUnit> {
+enum class FoxFormattedStringPartSymbol : FoxGrammarSymbol<SyntaxUnit> {
     FormattedStringStart,
     FormattedStringEnd,
     FormattedExpressionOpen,
     FormattedExpressionClose,
 }
 
-data object UnaryOperator : FoxGrammarSymbol<ParsedFoxUnaryOperator>
-data object BinaryOperator : FoxGrammarSymbol<ParsedFoxBinaryOperator>
-data object AssignOperator : FoxGrammarSymbol<ParsedFoxAssignOperator>
+data object UnaryOperator : FoxGrammarSymbol<SyntaxUnaryOperator>
+data object BinaryOperator : FoxGrammarSymbol<SyntaxBinaryOperator>
+data object AssignOperator : FoxGrammarSymbol<SyntaxAssignOperator>
 
-enum class FoxBinaryOperatorCategorySymbol : FoxGrammarSymbol<ParsedFoxBinaryOperator> {
+enum class FoxBinaryOperatorCategorySymbol : FoxGrammarSymbol<SyntaxBinaryOperator> {
     MultiplicativeOperator,
     AdditiveOperator,
     ShiftOperator,
@@ -68,56 +66,56 @@ enum class FoxBinaryOperatorCategorySymbol : FoxGrammarSymbol<ParsedFoxBinaryOpe
     LogicalOrOperator,
 }
 
-enum class FoxUnaryOperatorSymbol(val text: String, val operator: FoxUnaryOperator) : FoxGrammarSymbol<ParsedUnit> {
-    Not("!", FoxNotOperator),
-    Neg("-", FoxNegOperator),
+enum class FoxUnaryOperatorSymbol(val text: String, val operator: UnaryOperatorEnum) : FoxGrammarSymbol<SyntaxUnit> {
+    Not("!", UnaryOperatorEnum.Not),
+    Neg("-", UnaryOperatorEnum.Neg),
 }
 
 enum class FoxBinaryOperatorSymbol(
     val text: String,
-    val operator: FoxBinaryOperator,
+    val operator: BinaryOperatorEnum,
     val category: FoxBinaryOperatorCategorySymbol,
-) : FoxGrammarSymbol<ParsedUnit> {
-    Add("+", FoxAddOperator, AdditiveOperator),
-    Sub("-", FoxSubOperator, AdditiveOperator),
-    Mul("*", FoxMulOperator, MultiplicativeOperator),
-    Div("/", FoxDivOperator, MultiplicativeOperator),
-    Rem("%", FoxRemOperator, MultiplicativeOperator),
-    And("&", FoxAndOperator, BitAndOperator),
-    Or("|", FoxOrOperator, BitOrOperator),
-    Xor("^", FoxXorOperator, BitXorOperator),
-    Shl("<<", FoxShlOperator, ShiftOperator),
-    Shr(">>", FoxShrOperator, ShiftOperator),
-    Ushr(">>>", FoxUshrOperator, ShiftOperator),
-    Eq("==", FoxEqOperator, EqualityOperator),
-    Neq("!=", FoxNeqOperator, EqualityOperator),
-    Lt("<", FoxLtOperator, ComparisonOperator),
-    Gt(">", FoxGtOperator, ComparisonOperator),
-    Leq("<=", FoxLeqOperator, ComparisonOperator),
-    Geq(">=", FoxGeqOperator, ComparisonOperator),
-    AndAnd("&&", FoxAndAndOperator, LogicalAndOperator),
-    OrOr("||", FoxOrOrOperator, LogicalOrOperator),
+) : FoxGrammarSymbol<SyntaxUnit> {
+    Add("+", BinaryOperatorEnum.Add, AdditiveOperator),
+    Sub("-", BinaryOperatorEnum.Sub, AdditiveOperator),
+    Mul("*", BinaryOperatorEnum.Mul, MultiplicativeOperator),
+    Div("/", BinaryOperatorEnum.Div, MultiplicativeOperator),
+    Rem("%", BinaryOperatorEnum.Rem, MultiplicativeOperator),
+    And("&", BinaryOperatorEnum.And, BitAndOperator),
+    Or("|", BinaryOperatorEnum.Or, BitOrOperator),
+    Xor("^", BinaryOperatorEnum.Xor, BitXorOperator),
+    Shl("<<", BinaryOperatorEnum.Shl, ShiftOperator),
+    Shr(">>", BinaryOperatorEnum.Shr, ShiftOperator),
+    Ushr(">>>", BinaryOperatorEnum.Ushr, ShiftOperator),
+    Eq("==", BinaryOperatorEnum.Eq, EqualityOperator),
+    Neq("!=", BinaryOperatorEnum.Neq, EqualityOperator),
+    Lt("<", BinaryOperatorEnum.Lt, ComparisonOperator),
+    Gt(">", BinaryOperatorEnum.Gt, ComparisonOperator),
+    Leq("<=", BinaryOperatorEnum.Leq, ComparisonOperator),
+    Geq(">=", BinaryOperatorEnum.Geq, ComparisonOperator),
+    AndAnd("&&", BinaryOperatorEnum.AndAnd, LogicalAndOperator),
+    OrOr("||", BinaryOperatorEnum.OrOr, LogicalOrOperator),
 }
 
-enum class FoxAssignOperatorSymbol(val text: String, val operator: FoxAssignOperator) : FoxGrammarSymbol<ParsedUnit> {
-    PlainAssign("=", FoxPlainAssignOperator),
-    DefAssign(":=", FoxDefAssignOperator),
-    AddAssign("+=", FoxAddAssignOperator),
-    SubAssign("-=", FoxSubAssignOperator),
-    MulAssign("*=", FoxMulAssignOperator),
-    DivAssign("/=", FoxDivAssignOperator),
-    RemAssign("%=", FoxRemAssignOperator),
-    AndAssign("&=", FoxAndAssignOperator),
-    OrAssign("|=", FoxOrAssignOperator),
-    XorAssign("^=", FoxXorAssignOperator),
-    ShlAssign("<<=", FoxShlAssignOperator),
-    ShrAssign(">>=", FoxShrAssignOperator),
-    UshrAssign(">>>=", FoxUshrAssignOperator),
-    AndAndAssign("&&=", FoxAndAndAssignOperator),
-    OrOrAssign("||=", FoxOrOrAssignOperator),
+enum class FoxAssignOperatorSymbol(val text: String, val operator: AssignOperatorEnum) : FoxGrammarSymbol<SyntaxUnit> {
+    PlainAssign("=", AssignOperatorEnum.Plain),
+    DefAssign(":=", AssignOperatorEnum.Def),
+    AddAssign("+=", AssignOperatorEnum.Add),
+    SubAssign("-=", AssignOperatorEnum.Sub),
+    MulAssign("*=", AssignOperatorEnum.Mul),
+    DivAssign("/=", AssignOperatorEnum.Div),
+    RemAssign("%=", AssignOperatorEnum.Rem),
+    AndAssign("&=", AssignOperatorEnum.And),
+    OrAssign("|=", AssignOperatorEnum.Or),
+    XorAssign("^=", AssignOperatorEnum.Xor),
+    ShlAssign("<<=", AssignOperatorEnum.Shl),
+    ShrAssign(">>=", AssignOperatorEnum.Shr),
+    UshrAssign(">>>=", AssignOperatorEnum.Ushr),
+    AndAndAssign("&&=", AssignOperatorEnum.AndAnd),
+    OrOrAssign("||=", AssignOperatorEnum.OrOr),
 }
 
-enum class FoxKeywordSymbol(val text: String) : FoxGrammarSymbol<ParsedUnit> {
+enum class FoxKeywordSymbol(val text: String) : FoxGrammarSymbol<SyntaxUnit> {
     KwConst("const"),
     KwType("type"),
     KwDef("def"),
@@ -142,21 +140,21 @@ enum class FoxKeywordSymbol(val text: String) : FoxGrammarSymbol<ParsedUnit> {
     KwFalse("false"),
 }
 
-enum class FoxPrimitiveTypeKeywordSymbol(val text: String, val type: FoxPrimitiveType) : FoxGrammarSymbol<ParsedUnit> {
-    KwVoid("Void", FoxVoidType),
-    KwUnit("Unit", FoxUnitType),
-    KwBool("Bool", FoxBoolType),
-    KwByte("Byte", FoxByteType),
-    KwShort("Short", FoxShortType),
-    KwInt("Int", FoxIntType),
-    KwLong("Long", FoxLongType),
-    KwFloat("Float", FoxFloatType),
-    KwDouble("Double", FoxDoubleType),
-    KwChar("Char", FoxCharType),
-    KwString("String", FoxStringType),
+enum class FoxPrimitiveTypeKeywordSymbol(val text: String, val type: PrimitiveTypeEnum) : FoxGrammarSymbol<SyntaxUnit> {
+    KwVoid("Void", PrimitiveTypeEnum.Void),
+    KwUnit("Unit", PrimitiveTypeEnum.Unit),
+    KwBool("Bool", PrimitiveTypeEnum.Bool),
+    KwByte("Byte", PrimitiveTypeEnum.Byte),
+    KwShort("Short", PrimitiveTypeEnum.Short),
+    KwInt("Int", PrimitiveTypeEnum.Int),
+    KwLong("Long", PrimitiveTypeEnum.Long),
+    KwFloat("Float", PrimitiveTypeEnum.Float),
+    KwDouble("Double", PrimitiveTypeEnum.Double),
+    KwChar("Char", PrimitiveTypeEnum.Char),
+    KwString("String", PrimitiveTypeEnum.String),
 }
 
-enum class FoxSyntheticTypeKeywordSymbol(val text: String) : FoxGrammarSymbol<ParsedUnit> {
+enum class FoxSyntheticTypeKeywordSymbol(val text: String) : FoxGrammarSymbol<SyntaxUnit> {
     KwTuple("Tuple"),
     KwStruct("Struct"),
     KwObject("Object"),
@@ -223,87 +221,84 @@ enum class FoxSyntheticTypeKeywordSymbol(val text: String) : FoxGrammarSymbol<Pa
 }
 
 sealed interface FoxLiteralSymbol<N> : FoxGrammarSymbol<N> {
-    data object LitUnit : FoxLiteralSymbol<ParsedUnit>
-    data object LitBool : FoxLiteralSymbol<ParsedBoolean>
-    data object LitInt : FoxLiteralSymbol<ParsedInt>
-    data object LitLong : FoxLiteralSymbol<ParsedLong>
-    data object LitFloat : FoxLiteralSymbol<ParsedFloat>
-    data object LitDouble : FoxLiteralSymbol<ParsedDouble>
-    data object LitChar : FoxLiteralSymbol<ParsedChar>
-    data object LitString : FoxLiteralSymbol<ParsedString>
+    data object LitUnit : FoxLiteralSymbol<SyntaxUnit>
+    data object LitBool : FoxLiteralSymbol<SyntaxBoolean>
+    data object LitInt : FoxLiteralSymbol<SyntaxInt>
+    data object LitLong : FoxLiteralSymbol<SyntaxLong>
+    data object LitFloat : FoxLiteralSymbol<SyntaxFloat>
+    data object LitDouble : FoxLiteralSymbol<SyntaxDouble>
+    data object LitChar : FoxLiteralSymbol<SyntaxChar>
+    data object LitString : FoxLiteralSymbol<SyntaxString>
 }
 
-enum class FoxLexicalSymbol : FoxGrammarSymbol<ParsedString> {
-    Identifier,
-    TypeName,
-    Label,
-}
+data object TypeName : FoxGrammarSymbol<SyntaxString>
+data object Identifier : FoxGrammarSymbol<SyntaxString>
 
-typealias ParsedStringTypePair = ParsedPair<ParsedString, ParsedFoxType<*>>
-typealias ParsedOptionalStringTypePair = ParsedPair<ParsedString?, ParsedFoxType<*>>
-typealias ParsedStringOptionalTypePair = ParsedPair<ParsedString, ParsedFoxType<*>?>
+typealias SyntaxStringTypePair = SyntaxPair<SyntaxString, SyntaxType<*>>
+typealias SyntaxOptionalStringTypePair = SyntaxPair<SyntaxString?, SyntaxType<*>>
+typealias SyntaxStringOptionalTypePair = SyntaxPair<SyntaxString, SyntaxType<*>?>
 
-data object Type : FoxGrammarSymbol<ParsedFoxType<*>>
+data object Type : FoxGrammarSymbol<SyntaxType<*>>
 
-data object TupleComponentParameter : FoxGrammarSymbol<ParsedFoxType<*>>
-data object TupleComponentParameterListHead : FoxGrammarSymbol<ParsedList<ParsedFoxType<*>>>
-data object TupleComponentParameterList : FoxGrammarSymbol<ParsedList<ParsedFoxType<*>>>
+data object TupleComponentParameter : FoxGrammarSymbol<SyntaxType<*>>
+data object TupleComponentParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxType<*>>>
+data object TupleComponentParameterList : FoxGrammarSymbol<SyntaxList<SyntaxType<*>>>
 
-data object StructFieldParameter : FoxGrammarSymbol<ParsedStringTypePair>
-data object StructFieldParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
-data object StructFieldParameterList : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
+data object StructFieldParameter : FoxGrammarSymbol<SyntaxStringTypePair>
+data object StructFieldParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
+data object StructFieldParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
 
-data object StructFieldName : FoxGrammarSymbol<ParsedString>
-data object StructFieldNameList : FoxGrammarSymbol<ParsedList<ParsedString>>
+data object StructFieldName : FoxGrammarSymbol<SyntaxString>
+data object StructFieldNameList : FoxGrammarSymbol<SyntaxList<SyntaxString>>
 
-data object ObjectMemberParameter : FoxGrammarSymbol<ParsedStringTypePair>
-data object ObjectMemberParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
-data object ObjectMemberParameterList : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
+data object ObjectMemberParameter : FoxGrammarSymbol<SyntaxStringTypePair>
+data object ObjectMemberParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
+data object ObjectMemberParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
 
-data object ObjectMemberName : FoxGrammarSymbol<ParsedString>
-data object ObjectMemberNameList : FoxGrammarSymbol<ParsedList<ParsedString>>
+data object ObjectMemberName : FoxGrammarSymbol<SyntaxString>
+data object ObjectMemberNameList : FoxGrammarSymbol<SyntaxList<SyntaxString>>
 
-data object EnumEntryParameter : FoxGrammarSymbol<ParsedStringTypePair>
-data object EnumEntryParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
-data object EnumEntryParameterList : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
+data object EnumEntryParameter : FoxGrammarSymbol<SyntaxStringTypePair>
+data object EnumEntryParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
+data object EnumEntryParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
 
-data object EnumEntryName : FoxGrammarSymbol<ParsedString>
-data object EnumEntryNameList : FoxGrammarSymbol<ParsedList<ParsedString>>
+data object EnumEntryName : FoxGrammarSymbol<SyntaxString>
+data object EnumEntryNameList : FoxGrammarSymbol<SyntaxList<SyntaxString>>
 
-data object MethodTypeParameter : FoxGrammarSymbol<ParsedStringTypePair>
-data object MethodTypeParameterListHead : FoxGrammarSymbol<ParsedFoxMethodTypeHead>
-data object MethodTypeParameterList : FoxGrammarSymbol<ParsedFoxMethodType>
+data object MethodTypeParameter : FoxGrammarSymbol<SyntaxStringTypePair>
+data object MethodTypeParameterListHead : FoxGrammarSymbol<SyntaxMethodTypeHead>
+data object MethodTypeParameterList : FoxGrammarSymbol<SyntaxMethodType>
 
-data object FormalParameter : FoxGrammarSymbol<ParsedStringTypePair>
-data object FormalParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
-data object FormalParameterList : FoxGrammarSymbol<ParsedList<ParsedStringTypePair>>
+data object FormalParameter : FoxGrammarSymbol<SyntaxStringTypePair>
+data object FormalParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
+data object FormalParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringTypePair>>
 
-data object ActualParameter : FoxGrammarSymbol<ParsedPair<ParsedString?, ParsedFoxStatement<*>>>
-data object ActualParameterListHead : FoxGrammarSymbol<ParsedList<ParsedPair<ParsedString?, ParsedFoxStatement<*>>>>
-data object ActualParameterList : FoxGrammarSymbol<ParsedList<ParsedPair<ParsedString?, ParsedFoxStatement<*>>>>
+data object ActualParameter : FoxGrammarSymbol<SyntaxPair<SyntaxString?, SyntaxStatement<*>>>
+data object ActualParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxPair<SyntaxString?, SyntaxStatement<*>>>>
+data object ActualParameterList : FoxGrammarSymbol<SyntaxList<SyntaxPair<SyntaxString?, SyntaxStatement<*>>>>
 
-data object FormalGenericParameter : FoxGrammarSymbol<ParsedStringOptionalTypePair>
-data object FormalGenericParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringOptionalTypePair>>
-data object FormalGenericParameterList : FoxGrammarSymbol<ParsedList<ParsedStringOptionalTypePair>>
+data object FormalGenericParameter : FoxGrammarSymbol<SyntaxStringOptionalTypePair>
+data object FormalGenericParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringOptionalTypePair>>
+data object FormalGenericParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringOptionalTypePair>>
 
-data object FormalGenericParameterNoConstraints : FoxGrammarSymbol<ParsedString>
-data object FormalGenericParameterNoConstraintsListHead : FoxGrammarSymbol<ParsedList<ParsedString>>
-data object FormalGenericParameterNoConstraintsList : FoxGrammarSymbol<ParsedList<ParsedString>>
+data object FormalGenericParameterNoConstraints : FoxGrammarSymbol<SyntaxString>
+data object FormalGenericParameterNoConstraintsListHead : FoxGrammarSymbol<SyntaxList<SyntaxString>>
+data object FormalGenericParameterNoConstraintsList : FoxGrammarSymbol<SyntaxList<SyntaxString>>
 
-data object ActualGenericParameter : FoxGrammarSymbol<ParsedOptionalStringTypePair>
-data object ActualGenericParameterListHead : FoxGrammarSymbol<ParsedList<ParsedOptionalStringTypePair>>
-data object ActualGenericParameterList : FoxGrammarSymbol<ParsedList<ParsedOptionalStringTypePair>>
+data object ActualGenericParameter : FoxGrammarSymbol<SyntaxOptionalStringTypePair>
+data object ActualGenericParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxOptionalStringTypePair>>
+data object ActualGenericParameterList : FoxGrammarSymbol<SyntaxList<SyntaxOptionalStringTypePair>>
 
-data object AnonymousActualGenericParameter : FoxGrammarSymbol<ParsedFoxType<*>>
-data object AnonymousActualGenericParameterListHead : FoxGrammarSymbol<ParsedList<ParsedFoxType<*>>>
-data object AnonymousActualGenericParameterList : FoxGrammarSymbol<ParsedList<ParsedFoxType<*>>>
-data object AnonymousActualGenericParameterSingleList : FoxGrammarSymbol<ParsedList<ParsedFoxType<*>>>
+data object AnonymousActualGenericParameter : FoxGrammarSymbol<SyntaxType<*>>
+data object AnonymousActualGenericParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxType<*>>>
+data object AnonymousActualGenericParameterList : FoxGrammarSymbol<SyntaxList<SyntaxType<*>>>
+data object AnonymousActualGenericParameterSingleList : FoxGrammarSymbol<SyntaxList<SyntaxType<*>>>
 
-data object ActualGenericIntParameterList : FoxGrammarSymbol<ParsedPair<ParsedFoxType<*>, ParsedInt>>
-data object IndexArgumentListHead : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
-data object IndexArgumentList : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
+data object ActualGenericIntParameterList : FoxGrammarSymbol<SyntaxPair<SyntaxType<*>, SyntaxInt>>
+data object IndexArgumentListHead : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
+data object IndexArgumentList : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
 
-enum class FoxExpressionSymbol : FoxGrammarSymbol<ParsedFoxStatement<*>> {
+enum class FoxExpressionSymbol : FoxGrammarSymbol<SyntaxStatement<*>> {
     ParenthesizedExpression,
     PrimaryExpression,
     PostfixExpression,
@@ -320,43 +315,45 @@ enum class FoxExpressionSymbol : FoxGrammarSymbol<ParsedFoxStatement<*>> {
     LogicalOrExpression,
 }
 
-data object FormattedStringPart : FoxGrammarSymbol<ParsedFoxFormattedStringPart>
-data object FormattedStringPartList : FoxGrammarSymbol<ParsedList<ParsedFoxFormattedStringPart>>
+data object FormattedStringPart : FoxGrammarSymbol<SyntaxFormattedStringPart>
+data object FormattedStringPartList : FoxGrammarSymbol<SyntaxList<SyntaxFormattedStringPart>>
 
-data object LambdaParameter : FoxGrammarSymbol<ParsedStringOptionalTypePair>
-data object LambdaParameterListHead : FoxGrammarSymbol<ParsedList<ParsedStringOptionalTypePair>>
-data object LambdaParameterList : FoxGrammarSymbol<ParsedList<ParsedStringOptionalTypePair>>
-data object LambdaStatementBlockHead : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
-data object LambdaBody : FoxGrammarSymbol<ParsedFoxStatement<*>>
-data object ExplicitLambdaLiteral : FoxGrammarSymbol<ParsedFoxLambda>
-data object InlineImplicitLambdaLiteral : FoxGrammarSymbol<ParsedFoxLambda>
-data object ImplicitLambdaLiteral : FoxGrammarSymbol<ParsedFoxLambda>
-data object LambdaLiteral : FoxGrammarSymbol<ParsedFoxLambda>
+data object LambdaParameter : FoxGrammarSymbol<SyntaxStringOptionalTypePair>
+data object LambdaParameterListHead : FoxGrammarSymbol<SyntaxList<SyntaxStringOptionalTypePair>>
+data object LambdaParameterList : FoxGrammarSymbol<SyntaxList<SyntaxStringOptionalTypePair>>
+data object LambdaStatementBlockHead : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
+data object LambdaBody : FoxGrammarSymbol<SyntaxStatement<*>>
+data object ExplicitLambdaLiteral : FoxGrammarSymbol<SyntaxLambda>
+data object InlineImplicitLambdaLiteral : FoxGrammarSymbol<SyntaxLambda>
+data object ImplicitLambdaLiteral : FoxGrammarSymbol<SyntaxLambda>
+data object LambdaLiteral : FoxGrammarSymbol<SyntaxLambda>
 
-data object Statement : FoxGrammarSymbol<ParsedFoxStatement<*>>
-data object StatementLine : FoxGrammarSymbol<ParsedFoxStatement<*>>
-data object StatementBlockHead : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
-data object StatementBlockCore : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
-data object StatementBlock : FoxGrammarSymbol<ParsedFoxBlock>
+data object Label : FoxGrammarSymbol<SyntaxString>
 
-data object WhenCaseConditionList : FoxGrammarSymbol<ParsedList<ParsedFoxStatement<*>>>
-data object WhenCase : FoxGrammarSymbol<ParsedFoxCase>
-data object WhenCaseLine : FoxGrammarSymbol<ParsedFoxCase>
-data object WhenCaseListHead : FoxGrammarSymbol<ParsedList<ParsedFoxCase>>
-data object WhenCaseList : FoxGrammarSymbol<ParsedList<ParsedFoxCase>>
-data object IfCore : FoxGrammarSymbol<ParsedFoxIf>
-data object WhileCore : FoxGrammarSymbol<ParsedFoxWhile>
-data object DoWhileCore : FoxGrammarSymbol<ParsedFoxDoWhile>
-data object WhenCore : FoxGrammarSymbol<ParsedFoxWhen>
-data object FileElementList : FoxGrammarSymbol<ParsedList<ParsedFoxFileElement<*>>>
+data object Statement : FoxGrammarSymbol<SyntaxStatement<*>>
+data object StatementLine : FoxGrammarSymbol<SyntaxStatement<*>>
+data object StatementBlockHead : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
+data object StatementBlockCore : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
+data object StatementBlock : FoxGrammarSymbol<SyntaxBlock>
 
-data object File : FoxGrammarSymbol<ParsedFoxFile>
-data object FileElement : FoxGrammarSymbol<ParsedFoxFileElement<*>>
-data object FileElementLine : FoxGrammarSymbol<ParsedFoxFileElement<*>>
-data object TypeAlias : FoxGrammarSymbol<ParsedFoxTypeAlias>
-data object MethodDefinition : FoxGrammarSymbol<ParsedFoxMethodDefinition>
+data object WhenCaseConditionList : FoxGrammarSymbol<SyntaxList<SyntaxStatement<*>>>
+data object WhenCase : FoxGrammarSymbol<SyntaxCase>
+data object WhenCaseLine : FoxGrammarSymbol<SyntaxCase>
+data object WhenCaseListHead : FoxGrammarSymbol<SyntaxList<SyntaxCase>>
+data object WhenCaseList : FoxGrammarSymbol<SyntaxList<SyntaxCase>>
+data object IfCore : FoxGrammarSymbol<SyntaxIf>
+data object WhileCore : FoxGrammarSymbol<SyntaxWhile>
+data object DoWhileCore : FoxGrammarSymbol<SyntaxDoWhile>
+data object WhenCore : FoxGrammarSymbol<SyntaxWhen>
+data object FileElementList : FoxGrammarSymbol<SyntaxList<SyntaxFileElement<*>>>
 
-internal val FoxKeywordsByText: Map<String, FoxGrammarSymbol<ParsedUnit>> = buildMap {
+data object File : FoxGrammarSymbol<SyntaxFile>
+data object FileElement : FoxGrammarSymbol<SyntaxFileElement<*>>
+data object FileElementLine : FoxGrammarSymbol<SyntaxFileElement<*>>
+data object TypeAlias : FoxGrammarSymbol<SyntaxTypeAlias>
+data object MethodDefinition : FoxGrammarSymbol<SyntaxMethodDefinition>
+
+internal val FoxKeywordsByText: Map<String, FoxGrammarSymbol<SyntaxUnit>> = buildMap {
     FoxKeywordSymbol.entries.forEach { put(it.text, it) }
     FoxPrimitiveTypeKeywordSymbol.entries.forEach { put(it.text, it) }
     FoxSyntheticTypeKeywordSymbol.entries.forEach { put(it.text, it) }
@@ -517,7 +514,10 @@ internal val FoxCommaListItemSymbols = FoxCommaListSpecs.map { it.item }.distinc
 
 internal val FoxCommaListSymbols = FoxCommaListSpecs.flatMap { listOf(it.head, it.list) }.distinct()
 
-internal val FoxLexicalSymbols = FoxLexicalSymbol.entries
+internal val FoxLexicalSymbols = listOf(
+    TypeName,
+    Identifier,
+)
 
 internal val FoxLiteralSymbols = listOf(
     LitUnit,

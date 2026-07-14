@@ -1,6 +1,6 @@
 package pers.hpcx.foxlang.pipeline.pass
 
-import pers.hpcx.foxlang.ast.*
+import pers.hpcx.foxlang.ir.*
 import pers.hpcx.foxlang.utils.OrderedMap
 import pers.hpcx.foxlang.utils.emptyOrderedMap
 import pers.hpcx.foxlang.utils.orderedMapOf
@@ -13,69 +13,69 @@ class MethodTypeNormalizationPassTest {
     @Test
     fun allowsWildcardTypeInGenericConstraint() {
         val method = method(generics = orderedMapOf("T" to FoxAnyType))
-        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(FoxFile(listOf(method))))
-        val newMethod = assertIs<FoxMethodDefinition>(result.newFile.elements.single())
+        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
+        val newMethod = assertIs<SurfaceMethodDefinition>(result.newFile.elements.single())
         
         assertEquals(FoxAnyType, newMethod.generics.getValue("T"))
     }
     
     @Test
     fun allowsTransformTypeInGenericConstraint() {
-        val transform = FoxTupleGetComponentType(FoxTupleType(listOf(FoxIntType)), 0)
+        val transform = SurfaceTupleGetComponentType(SurfaceTupleType(listOf(FoxIntType)), 0)
         val method = method(generics = orderedMapOf("T" to transform))
-        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(FoxFile(listOf(method))))
-        val newMethod = assertIs<FoxMethodDefinition>(result.newFile.elements.single())
+        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
+        val newMethod = assertIs<SurfaceMethodDefinition>(result.newFile.elements.single())
         
         assertEquals(transform, newMethod.generics.getValue("T"))
     }
     
     @Test
     fun allowsDeclaredGenericReferencesInMethodTypesAndStatements() {
-        val generic = FoxUnresolvedType("T", null)
+        val generic = SurfaceUnresolvedType("T", null)
         val method = method(
             generics = orderedMapOf(
                 "T" to FoxAnyType,
                 "R" to generic,
             ),
             thisType = generic,
-            parameters = orderedMapOf("value" to FoxArrayType(generic)),
-            returnType = FoxTupleType(listOf(generic)),
-            body = FoxBlock(
+            parameters = orderedMapOf("value" to SurfaceArrayType(generic)),
+            returnType = SurfaceTupleType(listOf(generic)),
+            body = SurfaceBlock(
                 null,
                 listOf(
-                    FoxTypeBinding("local", generic),
-                    FoxConstruct(generic, emptyList()),
-                    FoxCall(FoxUnresolvedSymbol("target"), "use", listOf(null to generic), emptyList()),
+                    SurfaceTypeBinding("local", generic),
+                    SurfaceConstruct(generic, emptyList()),
+                    SurfaceCall(SurfaceUnresolvedSymbol("target"), "use", listOf(null to generic), emptyList()),
                 ),
             ),
         )
         
-        assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
     }
     
     @Test
     fun detectsUnknownGenericReferencesInMethodTypesAndStatements() {
         val method = method(
             generics = orderedMapOf("T" to FoxAnyType),
-            thisType = FoxUnresolvedType("MissingThis", null),
-            parameters = orderedMapOf("value" to FoxUnresolvedType("MissingParameter", null)),
-            returnType = FoxUnresolvedType("MissingReturn", null),
-            body = FoxBlock(
+            thisType = SurfaceUnresolvedType("MissingThis", null),
+            parameters = orderedMapOf("value" to SurfaceUnresolvedType("MissingParameter", null)),
+            returnType = SurfaceUnresolvedType("MissingReturn", null),
+            body = SurfaceBlock(
                 null,
                 listOf(
-                    FoxTypeBinding("local", FoxUnresolvedType("MissingLocal", null)),
-                    FoxConstruct(FoxUnresolvedType("MissingConstruct", null), emptyList()),
-                    FoxCall(
-                        FoxUnresolvedSymbol("target"),
+                    SurfaceTypeBinding("local", SurfaceUnresolvedType("MissingLocal", null)),
+                    SurfaceConstruct(SurfaceUnresolvedType("MissingConstruct", null), emptyList()),
+                    SurfaceCall(
+                        SurfaceUnresolvedSymbol("target"),
                         "use",
-                        listOf(null to FoxUnresolvedType("MissingCallGeneric", null)),
+                        listOf(null to SurfaceUnresolvedType("MissingCallGeneric", null)),
                         emptyList(),
                     ),
                 ),
             ),
         )
         
-        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
         val names = result.errors.filterIsInstance<MethodTypeNormalizationUnknownGenericReference>().map { it.type.name }
         
         assertEquals(
@@ -93,23 +93,23 @@ class MethodTypeNormalizationPassTest {
     
     @Test
     fun normalizesTransformTypeInMethodTypesAndStatements() {
-        val thisTransform = FoxRefGetReferentTypeType(FoxRefType(FoxIntType))
-        val parameterTransform = FoxArrayGetElementTypeType(FoxArrayType(FoxStringType))
-        val returnTransform = FoxTupleGetComponentType(FoxTupleType(listOf(FoxBoolType)), 0)
-        val localTransform = FoxStructGetFieldTypeByNameType(FoxStructType(orderedMapOf("value" to FoxLongType)), "value")
-        val constructTransform = FoxMethodGetReturnTypeType(FoxMethodType(FoxUnitType, emptyOrderedMap(), FoxDoubleType))
-        val callGenericTransform = FoxTupleGetLastComponentsType(FoxTupleType(listOf(FoxIntType, FoxFloatType)), 1)
+        val thisTransform = SurfaceRefGetReferentTypeType(SurfaceRefType(FoxIntType))
+        val parameterTransform = SurfaceArrayGetElementTypeType(SurfaceArrayType(FoxStringType))
+        val returnTransform = SurfaceTupleGetComponentType(SurfaceTupleType(listOf(FoxBoolType)), 0)
+        val localTransform = SurfaceStructGetFieldTypeByNameType(SurfaceStructType(orderedMapOf("value" to FoxLongType)), "value")
+        val constructTransform = SurfaceMethodGetReturnTypeType(SurfaceMethodType(FoxUnitType, emptyOrderedMap(), FoxDoubleType))
+        val callGenericTransform = SurfaceTupleGetLastComponentsType(SurfaceTupleType(listOf(FoxIntType, FoxFloatType)), 1)
         val method = method(
             thisType = thisTransform,
             parameters = orderedMapOf("value" to parameterTransform),
             returnType = returnTransform,
-            body = FoxBlock(
+            body = SurfaceBlock(
                 null,
                 listOf(
-                    FoxTypeBinding("local", localTransform),
-                    FoxConstruct(constructTransform, emptyList()),
-                    FoxCall(
-                        FoxUnresolvedSymbol("target"),
+                    SurfaceTypeBinding("local", localTransform),
+                    SurfaceConstruct(constructTransform, emptyList()),
+                    SurfaceCall(
+                        SurfaceUnresolvedSymbol("target"),
                         "use",
                         listOf(null to callGenericTransform),
                         emptyList(),
@@ -118,20 +118,20 @@ class MethodTypeNormalizationPassTest {
             ),
         )
         
-        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(FoxFile(listOf(method))))
-        val newMethod = assertIs<FoxMethodDefinition>(result.newFile.elements.single())
-        val block = assertIs<FoxBlock>(newMethod.body)
+        val result = assertIs<MethodTypeNormalizationSuccess>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
+        val newMethod = assertIs<SurfaceMethodDefinition>(result.newFile.elements.single())
+        val block = assertIs<SurfaceBlock>(newMethod.body)
         
         assertEquals(FoxIntType, newMethod.thisType)
         assertEquals(orderedMapOf("value" to FoxStringType), newMethod.parameters)
         assertEquals(FoxBoolType, newMethod.returnType)
-        assertEquals(FoxTypeBinding("local", FoxLongType), block.statements[0])
-        assertEquals(FoxConstruct(FoxDoubleType, emptyList()), block.statements[1])
+        assertEquals(SurfaceTypeBinding("local", FoxLongType), block.statements[0])
+        assertEquals(SurfaceConstruct(FoxDoubleType, emptyList()), block.statements[1])
         assertEquals(
-            FoxCall(
-                FoxUnresolvedSymbol("target"),
+            SurfaceCall(
+                SurfaceUnresolvedSymbol("target"),
                 "use",
-                listOf(null to FoxTupleType(listOf(FoxFloatType))),
+                listOf(null to SurfaceTupleType(listOf(FoxFloatType))),
                 emptyList(),
             ),
             block.statements[2],
@@ -140,17 +140,17 @@ class MethodTypeNormalizationPassTest {
     
     @Test
     fun detectsUnnormalizedTransformTypeInMethodTypesAndStatements() {
-        val refGeneric = FoxUnresolvedType("R", null)
-        val arrayGeneric = FoxUnresolvedType("A", null)
-        val tupleGeneric = FoxUnresolvedType("T", null)
-        val structGeneric = FoxUnresolvedType("S", null)
-        val methodGeneric = FoxUnresolvedType("M", null)
-        val thisTransform = FoxRefGetReferentTypeType(refGeneric)
-        val parameterTransform = FoxArrayGetElementTypeType(arrayGeneric)
-        val returnTransform = FoxTupleGetComponentType(tupleGeneric, 0)
-        val localTransform = FoxStructGetFieldTypeByNameType(structGeneric, "value")
-        val constructTransform = FoxMethodGetReturnTypeType(methodGeneric)
-        val callGenericTransform = FoxTupleGetLastComponentsType(tupleGeneric, 1)
+        val refGeneric = SurfaceUnresolvedType("R", null)
+        val arrayGeneric = SurfaceUnresolvedType("A", null)
+        val tupleGeneric = SurfaceUnresolvedType("T", null)
+        val structGeneric = SurfaceUnresolvedType("S", null)
+        val methodGeneric = SurfaceUnresolvedType("M", null)
+        val thisTransform = SurfaceRefGetReferentTypeType(refGeneric)
+        val parameterTransform = SurfaceArrayGetElementTypeType(arrayGeneric)
+        val returnTransform = SurfaceTupleGetComponentType(tupleGeneric, 0)
+        val localTransform = SurfaceStructGetFieldTypeByNameType(structGeneric, "value")
+        val constructTransform = SurfaceMethodGetReturnTypeType(methodGeneric)
+        val callGenericTransform = SurfaceTupleGetLastComponentsType(tupleGeneric, 1)
         val method = method(
             generics = orderedMapOf(
                 "R" to FoxAnyType,
@@ -162,13 +162,13 @@ class MethodTypeNormalizationPassTest {
             thisType = thisTransform,
             parameters = orderedMapOf("value" to parameterTransform),
             returnType = returnTransform,
-            body = FoxBlock(
+            body = SurfaceBlock(
                 null,
                 listOf(
-                    FoxTypeBinding("local", localTransform),
-                    FoxConstruct(constructTransform, emptyList()),
-                    FoxCall(
-                        FoxUnresolvedSymbol("target"),
+                    SurfaceTypeBinding("local", localTransform),
+                    SurfaceConstruct(constructTransform, emptyList()),
+                    SurfaceCall(
+                        SurfaceUnresolvedSymbol("target"),
                         "use",
                         listOf(null to callGenericTransform),
                         emptyList(),
@@ -177,7 +177,7 @@ class MethodTypeNormalizationPassTest {
             ),
         )
         
-        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
         val types = result.errors.filterIsInstance<MethodTypeNormalizationTransformNotAllowed>().map { it.type }
         
         assertEquals(
@@ -196,7 +196,7 @@ class MethodTypeNormalizationPassTest {
     @Test
     fun detectsWildcardTypeInParameter() {
         val method = method(parameters = orderedMapOf("value" to FoxAnyType))
-        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
         val error = assertIs<MethodTypeNormalizationWildcardNotAllowed>(result.errors.single())
         
         assertEquals(FoxAnyType, error.type)
@@ -204,8 +204,8 @@ class MethodTypeNormalizationPassTest {
     
     @Test
     fun detectsWildcardTypeInReturnType() {
-        val method = method(returnType = FoxTupleType(listOf(FoxAnyTupleType)))
-        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        val method = method(returnType = SurfaceTupleType(listOf(FoxAnyTupleType)))
+        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
         val error = assertIs<MethodTypeNormalizationWildcardNotAllowed>(result.errors.single())
         
         assertEquals(FoxAnyTupleType, error.type)
@@ -213,20 +213,20 @@ class MethodTypeNormalizationPassTest {
     
     @Test
     fun detectsWildcardTypeInStatementType() {
-        val method = method(body = FoxBlock(null, listOf(FoxTypeBinding("value", FoxAnyOfType(listOf(FoxIntType))))))
-        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(FoxFile(listOf(method))))
+        val method = method(body = SurfaceBlock(null, listOf(SurfaceTypeBinding("value", SurfaceAnyOfType(listOf(FoxIntType))))))
+        val result = assertIs<MethodTypeNormalizationFailure>(runMethodTypeNormalization(SurfaceFile(listOf(method))))
         val error = assertIs<MethodTypeNormalizationWildcardNotAllowed>(result.errors.single())
         
-        assertEquals(FoxAnyOfType(listOf(FoxIntType)), error.type)
+        assertEquals(SurfaceAnyOfType(listOf(FoxIntType)), error.type)
     }
     
     private fun method(
-        generics: OrderedMap<String, FoxType> = emptyOrderedMap(),
-        thisType: FoxType = FoxUnitType,
-        parameters: OrderedMap<String, FoxType> = emptyOrderedMap(),
-        returnType: FoxType = FoxUnitType,
-        body: FoxStatement = FoxBlock(null, emptyList()),
-    ) = FoxMethodDefinition(
+        generics: OrderedMap<String, SurfaceType> = emptyOrderedMap(),
+        thisType: SurfaceType = FoxUnitType,
+        parameters: OrderedMap<String, SurfaceType> = emptyOrderedMap(),
+        returnType: SurfaceType = FoxUnitType,
+        body: SurfaceStatement = SurfaceBlock(null, emptyList()),
+    ) = SurfaceMethodDefinition(
         generics = generics,
         thisType = thisType,
         name = "test",
@@ -235,3 +235,14 @@ class MethodTypeNormalizationPassTest {
         body = body,
     )
 }
+
+private val FoxUnitType = SurfacePrimitiveType(PrimitiveTypeEnum.Unit)
+private val FoxBoolType = SurfacePrimitiveType(PrimitiveTypeEnum.Bool)
+private val FoxIntType = SurfacePrimitiveType(PrimitiveTypeEnum.Int)
+private val FoxLongType = SurfacePrimitiveType(PrimitiveTypeEnum.Long)
+private val FoxFloatType = SurfacePrimitiveType(PrimitiveTypeEnum.Float)
+private val FoxDoubleType = SurfacePrimitiveType(PrimitiveTypeEnum.Double)
+private val FoxStringType = SurfacePrimitiveType(PrimitiveTypeEnum.String)
+private val FoxAnyType = SurfaceAnyType()
+private val FoxAnyTupleType = SurfaceAnyTupleType()
+private val FoxAnyStructType = SurfaceAnyStructType()

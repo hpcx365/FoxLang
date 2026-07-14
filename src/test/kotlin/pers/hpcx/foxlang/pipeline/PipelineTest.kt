@@ -1,15 +1,26 @@
 package pers.hpcx.foxlang.pipeline
 
-import pers.hpcx.foxlang.ast.ParsedFoxFile
 import pers.hpcx.foxlang.frontend.fox.SourceFragmentationSuccess
 import pers.hpcx.foxlang.frontend.fox.parseFox
 import pers.hpcx.foxlang.frontend.fox.sourceFox
+import pers.hpcx.foxlang.ir.SyntaxFile
 import pers.hpcx.foxlang.pipeline.pass.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class PipelineTest {
+    
+    @Test
+    fun succeedsWithCoreProgram() {
+        val file = """
+            def emptyBody() {}
+        """.trimIndent().parseFoxFileOrThrow()
+        
+        val result = assertIs<PipelineSuccess>(runPipeline(file))
+        
+        assertEquals(listOf("emptyBody"), result.program.methods.map { it.name })
+    }
     
     @Test
     fun stopsAtCompileConstraintStage() {
@@ -80,7 +91,7 @@ class PipelineTest {
     }
 }
 
-private fun String.parseFoxFileOrThrow(): ParsedFoxFile {
+private fun String.parseFoxFileOrThrow(): SyntaxFile {
     val source = assertIs<SourceFragmentationSuccess>((if (endsWith("\n")) this else "$this\n").sourceFox()).value
     return source.parseFox().value()
 }
